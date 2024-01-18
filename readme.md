@@ -25,3 +25,4 @@ This repository will contain the inference pipelines for some 3D segmentation mo
 
 [Universeg](https://github.com/JJGO/UniverSeg) (To do)
 
+Checkpoint from SAM-Med3D obtained on the relevant repository
