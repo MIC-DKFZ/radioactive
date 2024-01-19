@@ -227,7 +227,7 @@ def finetune_model_predict2D(img3D, gt3D, sam_model_tune, target_size=256, click
     return pred_list, click_points, click_labels, iou_list, dice_list
 
 
-def finetune_model_predict3D(img3D, gt3D, sam_model_tune, device='cuda', click_method='random', num_clicks=10, prev_masks=None):
+def finetune_model_predict3D(img3D, gt3D, sam_model_tune, device='cuda', click_method='random', num_clicks=5, prev_masks=None):
     img3D = norm_transform(img3D.squeeze(dim=1)) # (N, C, W, H, D)
     img3D = img3D.unsqueeze(dim=1)
 
@@ -286,18 +286,19 @@ def finetune_model_predict3D(img3D, gt3D, sam_model_tune, device='cuda', click_m
 #endregion
 
 if __name__ == "__main__":
-
+    # Obtain dataloaders
     infer_transform = [
         tio.ToCanonical(),
-        tio.CropOrPad(mask_name='label', target_shape=(args.crop_size,args.crop_size,args.crop_size)),
+        tio.CropOrPad(mask_name='points_mask', target_shape=(args.crop_size,args.crop_size,args.crop_size)), # Will center the cropping/padding at the center of the bounding box of the clicks supplied.
     ]
 
     test_dataset = Dataset_Union_ALL_Val(
         paths=args.test_data_path, 
+        points_path=os.path.join(args.eval_dir, 'prompts.pkl'),
+        dim=args.dim,
         mode="Val", 
         data_type=args.data_type, 
         transform=tio.Compose(infer_transform),
-        threshold=0,
         split_num=args.split_num,
         split_idx=args.split_idx,
         pcc=False,
@@ -310,6 +311,7 @@ if __name__ == "__main__":
         shuffle=True
     )
 
+    # Load in model
     checkpoint_path = args.checkpoint_path
 
     device = args.device
@@ -325,48 +327,47 @@ if __name__ == "__main__":
         args.sam_checkpoint = args.checkpoint_path
         sam_model_tune = sam_model_registry[args.model_type](args).to(device)
 
-
     sam_trans = ResizeLongestSide3D(sam_model_tune.image_encoder.img_size)
 
+    # Initialise results storage variables and directories
     out_dice_all = OrderedDict()
 
+    vis_root = args.vis_path
+    os.makedirs(vis_root, exist_ok=True)
+
+    # Perform inference
     for batch_data in tqdm(test_dataloader):
         image3D, gt3D, img_name = batch_data
         sz = image3D.size()
         if(sz[2]<args.crop_size or sz[3]<args.crop_size or sz[4]<args.crop_size):
             print("[ERROR] wrong size", sz, "for", img_name)
 
-        vis_root = args.vis_path 
+        norm_transform = tio.ZNormalization(masking_method=lambda x: x > 0)
+        if(args.dim==3):
+            seg_mask_list, points, labels, iou_list, dice_list = finetune_model_predict3D(
+                image3D, gt3D, sam_model_tune, device=device, 
+                click_method=args.point_method, num_clicks=args.num_clicks, 
+                prev_masks=None)
+        elif(args.dim==2):
+            seg_mask_list, points, labels, iou_list, dice_list = finetune_model_predict2D(
+                image3D, gt3D, sam_model_tune, device=device, target_size=args.image_size,
+                click_method=args.point_method, num_clicks=args.num_clicks, 
+                prev_masks=None)
 
-        pred_path = os.path.join(vis_root, os.path.basename(img_name[0]).replace(".nii.gz", f"_pred{args.num_clicks-1}.nii.gz"))
-        if(os.path.exists(pred_path)):
-            dice_list = []
-            for iter in range(args.num_clicks):
-                curr_pred_path = os.path.join(vis_root, os.path.basename(img_name[0]).replace(".nii.gz", f"_pred{iter}.nii.gz"))
-                medsam_seg = sitk.GetArrayFromImage(sitk.ReadImage(curr_pred_path))
-                dice_list.append(round(compute_dice(gt3D[0][0].detach().cpu().numpy().astype(np.uint8), medsam_seg), 4))
-        else:
-            norm_transform = tio.ZNormalization(masking_method=lambda x: x > 0)
-            if(args.dim==3):
-                seg_mask_list, points, labels, iou_list, dice_list = finetune_model_predict3D(
-                    image3D, gt3D, sam_model_tune, device=device, 
-                    click_method=args.point_method, num_clicks=args.num_clicks, 
-                    prev_masks=None)
-            elif(args.dim==2):
-                seg_mask_list, points, labels, iou_list, dice_list = finetune_model_predict2D(
-                    image3D, gt3D, sam_model_tune, device=device, target_size=args.image_size,
-                    click_method=args.point_method, num_clicks=args.num_clicks, 
-                    prev_masks=None)
-            os.makedirs(vis_root, exist_ok=True)
-            points = [p.cpu().numpy() for p in points]
-            labels = [l.cpu().numpy() for l in labels]
-            pt_info = dict(points=points, labels=labels)
-            pt_path=os.path.join(vis_root, os.path.basename(img_name[0]).replace(".nii.gz", "_pt.pkl"))
-            pickle.dump(pt_info, open(pt_path, "wb"))
-            for idx, pred3D in enumerate(seg_mask_list):
-                out = sitk.GetImageFromArray(pred3D)
-                sitk.WriteImage(out, os.path.join(vis_root, os.path.basename(img_name[0]).replace(".nii.gz", f"_pred{idx}.nii.gz")))
+        # Not needed in current iteration where points to be used are read from a file
+        # # Store points used
+        # points = [p.cpu().numpy() for p in points]
+        # labels = [l.cpu().numpy() for l in labels]
+        # pt_info = dict(points=points, labels=labels)
+        # pt_path=os.path.join(vis_root, os.path.basename(img_name[0]).replace(".nii.gz", "_pt.pkl"))
+        # pickle.dump(pt_info, open(pt_path, "wb"))
 
+        # Write segmentation masks to disk
+        for idx, pred3D in enumerate(seg_mask_list):
+            out = sitk.GetImageFromArray(pred3D)
+            sitk.WriteImage(out, os.path.join(vis_root, os.path.basename(img_name[0]).replace(".nii.gz", f"_pred{idx}.nii.gz")))
+
+        # Store Dice for later access
         print(f'Dice list by number of clicks: {dice_list}')
         cur_dice_dict = OrderedDict()
         for i, dice in enumerate(dice_list):
@@ -374,7 +375,7 @@ if __name__ == "__main__":
         out_dice_all[img_name[0]] = cur_dice_dict
 
 
-    # Store results
+    # Write results
     os.makedirs(args.eval_dir, exist_ok = True)
     results_file = os.path.abspath(os.path.join(args.eval_dir, 'eval_res.json'))
 
