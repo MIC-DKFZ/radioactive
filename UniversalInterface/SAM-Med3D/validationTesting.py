@@ -31,7 +31,7 @@ parser.add_argument('--crop_size', type=int, default=128)
 parser.add_argument('--device', type=str, default='cuda')
 parser.add_argument('-mt', '--model_type', type=str, default='vit_b_ori')
 parser.add_argument('-nc', '--num_clicks', type=int, default=5)
-parser.add_argument('-pm', '--point_method', type=str, default='default')
+parser.add_argument('-i', '--interactive', action='store_true')
 parser.add_argument('-dt', '--data_type', type=str, default='Ts')
 
 parser.add_argument('--threshold', type=int, default=0)
@@ -160,7 +160,7 @@ def random_point_sampling(mask, get_point = 1):
         return coords, labels
 
 
-def finetune_model_predict2D(img3D, gt3D, sam_model_tune, target_size=256, click_method='random', device='cuda', num_clicks=1, prev_masks=None):
+def finetune_model_predict2D(img3D, gt3D, sam_model_tune, target_size=256, device='cuda', num_clicks=1, prev_masks=None):
     pred_list = []
     iou_list = []
     dice_list = []
@@ -227,7 +227,8 @@ def finetune_model_predict2D(img3D, gt3D, sam_model_tune, target_size=256, click
     return pred_list, click_points, click_labels, iou_list, dice_list
 
 
-def finetune_model_predict3D(img3D, gt3D, sam_model_tune, device='cuda', click_method='random', num_clicks=5, prev_masks=None):
+def finetune_model_predict3D(img3D, gt3D, sam_model_tune, device='cuda', interactive=True, points_list = None, num_clicks=5, prev_masks=None):
+    norm_transform = tio.ZNormalization(masking_method=lambda x: x > 0)
     img3D = norm_transform(img3D.squeeze(dim=1)) # (N, C, W, H, D)
     img3D = img3D.unsqueeze(dim=1)
 
@@ -244,23 +245,24 @@ def finetune_model_predict3D(img3D, gt3D, sam_model_tune, device='cuda', click_m
 
     with torch.no_grad():
         image_embedding = sam_model_tune.image_encoder(img3D.to(device)) # (1, 384, 16, 16, 16)
+
     for num_click in range(num_clicks):
         with torch.no_grad():
-            if(num_click>1):
-                click_method = "random"
-            batch_points, batch_labels = click_methods[click_method](prev_masks.to(device), gt3D.to(device))
+            # Modified by Tim
+            if(num_click==0 or interactive == False):
+                batch_points, batch_labels = points_list[num_click], torch.tensor(1)
+                batch_points, batch_labels = batch_points.reshape(1,1,3), batch_labels.reshape(1,1) # Required format: The first tensor must have three dimensions and the second must have two; I'm not sure why.
+            else:
+                batch_points, batch_labels = get_next_click3D_torch_ritm(prev_masks.to(device), gt3D.to(device))
 
-            points_co = torch.cat(batch_points, dim=0).to(device)  
-            points_la = torch.cat(batch_labels, dim=0).to(device)  
+            batch_points = batch_points.to(device)
+            batch_labels = batch_labels.to(device)  
 
-            click_points.append(points_co)
-            click_labels.append(points_la)
-
-            points_input = points_co
-            labels_input = points_la
+            click_points.append(batch_points) # Return these in case interactive == True so that we can keep track of which points were used.
+            click_labels.append(batch_labels)
 
             sparse_embeddings, dense_embeddings = sam_model_tune.prompt_encoder(
-                points=[points_input, labels_input],
+                points=[batch_points, batch_labels],
                 boxes=None,
                 masks=low_res_masks.to(device),
             )
@@ -337,16 +339,16 @@ if __name__ == "__main__":
 
     # Perform inference
     for batch_data in tqdm(test_dataloader):
-        image3D, gt3D, img_name = batch_data
+        image3D, gt3D, points_list, img_name = batch_data
+        points_list = points_list.squeeze(0) # Remove the batch dimension since we're working with batch size 1.
         sz = image3D.size()
         if(sz[2]<args.crop_size or sz[3]<args.crop_size or sz[4]<args.crop_size):
             print("[ERROR] wrong size", sz, "for", img_name)
-
-        norm_transform = tio.ZNormalization(masking_method=lambda x: x > 0)
+        
         if(args.dim==3):
             seg_mask_list, points, labels, iou_list, dice_list = finetune_model_predict3D(
                 image3D, gt3D, sam_model_tune, device=device, 
-                click_method=args.point_method, num_clicks=args.num_clicks, 
+                interactive=args.interactive, points_list = points_list, num_clicks=args.num_clicks, 
                 prev_masks=None)
         elif(args.dim==2):
             seg_mask_list, points, labels, iou_list, dice_list = finetune_model_predict2D(

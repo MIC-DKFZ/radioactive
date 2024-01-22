@@ -45,7 +45,7 @@ def get_next_click3D_torch(prev_seg, gt_semantic_seg):
         batch_points.append(bp)
         batch_labels.append(bl)
 
-    return batch_points, batch_labels # , (sum(dice_list)/len(dice_list)).item()    
+    return batch_points, batch_labels 
 
 
 import edt
@@ -73,7 +73,7 @@ def get_next_click3D_torch_ritm(prev_seg, gt_semantic_seg):
     to_point_mask = to_point_mask[None, None]
     # import pdb; pdb.set_trace()
 
-    for i in range(gt_semantic_seg.shape[0]):
+    for i in range(gt_semantic_seg.shape[0]): # For now, this will always be a batch of size 1, so this loop will only iterate once.
         points = torch.argwhere(to_point_mask[i])
         point = points[np.random.randint(len(points))]
         if fn_masks[i, 0, point[1], point[2], point[3]]:
@@ -83,10 +83,10 @@ def get_next_click3D_torch_ritm(prev_seg, gt_semantic_seg):
 
         bp = point[1:].clone().detach().reshape(1,1,3) 
         bl = torch.tensor([int(is_positive),]).reshape(1,1)
-        batch_points.append(bp)
-        batch_labels.append(bl)
+        # batch_points.append(bp) If the loop iterates multiple times, can concatenate these and return them instead
+        # batch_labels.append(bl)
 
-    return batch_points, batch_labels # , (sum(dice_list)/len(dice_list)).item()    
+    return bp, bl 
 
 
 
@@ -120,7 +120,7 @@ def get_next_click3D_torch_2(prev_seg, gt_semantic_seg):
         batch_points.append(bp)
         batch_labels.append(bl)
 
-    return batch_points, batch_labels # , (sum(dice_list)/len(dice_list)).item()    
+    return batch_points, batch_labels 
 
 
 def get_next_click3D_torch_with_dice(prev_seg, gt_semantic_seg):

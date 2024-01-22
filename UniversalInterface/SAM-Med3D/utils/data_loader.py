@@ -28,7 +28,7 @@ class Dataset_Union_ALL(Dataset):
         self.pcc = pcc
 
         # Added by Tim:
-        self.label = label # Current implementation will need a different dataset/dataloader per foreground region since the patch we're taking crops based upon the foreground points selected, which in turn depend on the label.
+        self.label = label # Future implementation will need a different dataset/dataloader per foreground label since the patch we're taking crops based upon the foreground points selected, which in turn depend on the label.
         self.dim = dim
 
         with open(points_path, 'rb') as f:
@@ -42,10 +42,10 @@ class Dataset_Union_ALL(Dataset):
         sitk_label = sitk.ReadImage(self.label_paths[index]) # REMOVE later; use for DICE calculation for now
         tio_image = tio.ScalarImage.from_sitk(sitk.ReadImage(self.image_paths[index]))
         
-        # Load in points for this image and change to a mask to be usable by torchio
-        points = self.points_dict[os.path.basename(self.image_paths[index])][self.label][str(self.dim) + 'D']
+        # Load in points for this image and change to a mask to be usable by torchio for cropping/padding
+        points_list = self.points_dict[os.path.basename(self.image_paths[index])][self.label][str(self.dim) + 'D']
         points_mask = np.zeros(shape = (tio_image.shape[3], tio_image.shape[2], tio_image.shape[1])) # Skip the color channel for now; reintroduce in label_map definition. Reverse order since sitk uses WHD while numpy uses DHW 
-        points_mask[*points.T] = 1
+        points_mask[*points_list.T] = 1
         points_mask = E.rearrange(points_mask, pattern = 'x y z -> z y x') # Rearrange back to sitk WHD
         points_mask = tio.LabelMap(tensor = torch.from_numpy(points_mask).float().unsqueeze(0), affine = tio_image.affine)
 
@@ -64,7 +64,7 @@ class Dataset_Union_ALL(Dataset):
             except:
                 print(self.image_paths[index])
  
-        return subject.image.data.clone().detach(), subject.label.data.clone().detach(), self.image_paths[index] # Later don't return label data
+        return subject.image.data.clone().detach(), subject.label.data.clone().detach(), torch.tensor(points_list), self.image_paths[index] # Later don't return label data
 
     def _set_file_paths(self, paths):
         self.image_paths = []
