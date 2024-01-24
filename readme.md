@@ -21,13 +21,29 @@ This repository will contain a universal interface for a few segmentation models
 Checkpoint from SAM-Med3D obtained on the relevant repository
 
 ## Directory Structure
-List requirements on directory strucutre (ie Ts, nifti files, and in line with AMOS that x is the superior axis. Hopefully can change that)
+Please store your volumes and labels like
+data
+  ├── imagesTs
+  │ ├── word_0025.nii.gz
+  │ ├── ...
+  ├── labelsTs
+  │ ├── word_0025.nii.gz
+  │ ├── ...
+  ├── ...
+  ├── dataset.json
+
+In particular:
+* Images are only drawn from the TEST folders, so imagesTr and LabelsTr will be ignored
+* Only nifti files are supported currently
+* dataset.json file must be included, and is used to find the foreground labels and what they correspond to.
 
 ## Use
+### Prompt Generation
+
 Point prompts are generated first to permit using the same prompts for each model. Generate them with `generate_points.py` taking flags
 - -tdp, or --test_data_path: Where the query images are stored (in the directory structure specified in Directory Strucutre)
-- -rp, or --results_path: Where the prompts file is to be stored. Use the same directory in `validation.py` for the segmentation maps
-- -nc, or --n_clicks [default = 5]: The number of clicks to generate per volume per foreground label (for 3D models) or per slice containing foreground per foreground label (for 2D models). (to implement: allow the first click to be used as a seed prompt and use cleverer interactive point generation methods than just the random generation.)
+- -rp, or --results_path: Where the prompts file should be stored. Use the same directory in `validation.py` for the segmentation maps.
+- -nc, or --n_clicks [default = 5]: The number of clicks to generate per volume per foreground label (for 3D models) or per slice containing foreground per foreground label (for 2D models). 
 
 For example:
 ```
@@ -35,4 +51,20 @@ python generate_points.py \
     -tdp /home/t722s/Desktop/Datasets/BratsTestData/ \
     -rp /home/t722s/Desktop/Sam-Med3DTest/evalBrats/ \
     -nc 5
+```
+
+### Inference
+Perform inference with `validation_interface.py` (in progress. Use validation_interface.ipynb for now)
+
+### Evaluation
+Obtain evaluation results with `evaluate_folder.py`. Requires flags
+- -tdp, or --test_data_path: Where the test data are stored (format as in Directory Structure)
+- -rp, or --results_path: Where the segmentations are stored. Use the same directory in `validation.py` 
+
+Evaluation results will be stored in the `-rp` folder as `evaluation_dice.json`
+
+```
+python evaluate_folder.py \
+    -tdp /home/t722s/Desktop/Datasets/BratsTestData/ \
+    -rp /home/t722s/Desktop/Sam-Med3DTest/segmentation_maps
 ```

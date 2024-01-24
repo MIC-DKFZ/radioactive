@@ -226,16 +226,42 @@ def finetune_model_predict2D(img3D, gt3D, sam_model_tune, target_size=256, devic
 
     return pred_list, click_points, click_labels, iou_list, dice_list
 
+def _crop(image, cropping_params):
 
-def finetune_model_predict3D(img3D, gt3D, sam_model_tune, device='cuda', interactive=True, points_list = None, num_clicks=5, prev_masks=None):
+    low = cropping_params[::2]
+    high = cropping_params[1::2]
+    index_ini = low
+    index_fin = np.array(image.shape) - high 
+    i0, j0, k0 = index_ini
+    i1, j1, k1 = index_fin
+    image_cropped = image[i0:i1, j0:j1, k0:k1]
+
+    return(image_cropped)
+
+def _pad(image, padding_params):
+    paddings = padding_params[:2], padding_params[2:4], padding_params[4:]
+    image_padded = np.pad(image, paddings, mode = 'constant', constant_values = 0)  
+
+    return(image_padded)
+
+def invertCropOrPad(image, padding_params, cropping_params):
+    im_inv = _crop(image, padding_params)
+    im_inv = _pad(im_inv, cropping_params)
+
+    return(im_inv)
+
+def finetune_model_predict3D(img3D, gt3D, sam_model_tune, device='cuda', interactive=True, points_list = None, num_clicks=5, pad_crop_params = None, prev_masks=None):
     norm_transform = tio.ZNormalization(masking_method=lambda x: x > 0)
     img3D = norm_transform(img3D.squeeze(dim=1)) # (N, C, W, H, D)
     img3D = img3D.unsqueeze(dim=1)
+
+    pad_crop_params = pad_crop_params.squeeze(0).numpy() # Squeeze since we're working with size 1 batches.
 
     click_points = []
     click_labels = []
 
     pred_list = []
+    pred_list_inverse_transformed = []
 
     iou_list = []
     dice_list = []
@@ -258,7 +284,7 @@ def finetune_model_predict3D(img3D, gt3D, sam_model_tune, device='cuda', interac
             batch_points = batch_points.to(device)
             batch_labels = batch_labels.to(device)  
 
-            click_points.append(batch_points) # Return these in case interactive == True so that we can keep track of which points were used.
+            click_points.append(batch_points) # Return these so that we can keep track of which points were used in case interactive == True 
             click_labels.append(batch_labels)
 
             sparse_embeddings, dense_embeddings = sam_model_tune.prompt_encoder(
@@ -279,12 +305,16 @@ def finetune_model_predict3D(img3D, gt3D, sam_model_tune, device='cuda', interac
             # convert prob to mask
             medsam_seg_prob = medsam_seg_prob.cpu().numpy().squeeze()
             medsam_seg = (medsam_seg_prob > 0.5).astype(np.uint8)
-            pred_list.append(medsam_seg)
 
             iou_list.append(round(compute_iou(medsam_seg, gt3D[0][0].detach().cpu().numpy()), 4))
             dice_list.append(round(compute_dice(gt3D[0][0].detach().cpu().numpy().astype(np.uint8), medsam_seg), 4))
 
-    return pred_list, click_points, click_labels, iou_list, dice_list
+            # Undo crop/pad transform to get back to original size.
+            medsam_seg_inv = invertCropOrPad(medsam_seg, pad_crop_params[0], pad_crop_params[1])
+            pred_list_inverse_transformed.append(medsam_seg_inv)
+            pred_list.append(medsam_seg)
+
+    return pred_list, pred_list_inverse_transformed, click_points, click_labels, iou_list, dice_list
 #endregion
 
 if __name__ == "__main__":
@@ -339,17 +369,17 @@ if __name__ == "__main__":
 
     # Perform inference
     for batch_data in tqdm(test_dataloader):
-        image3D, gt3D, points_list, img_name = batch_data
+        image3D, gt3D, points_list, pad_crop_params, img_name = batch_data
         points_list = points_list.squeeze(0) # Remove the batch dimension since we're working with batch size 1.
         sz = image3D.size()
         if(sz[2]<args.crop_size or sz[3]<args.crop_size or sz[4]<args.crop_size):
             print("[ERROR] wrong size", sz, "for", img_name)
         
         if(args.dim==3):
-            seg_mask_list, points, labels, iou_list, dice_list = finetune_model_predict3D(
+            seg_mask_list, pred_list_inverse_transformed, points, labels, iou_list, dice_list = finetune_model_predict3D(
                 image3D, gt3D, sam_model_tune, device=device, 
                 interactive=args.interactive, points_list = points_list, num_clicks=args.num_clicks, 
-                prev_masks=None)
+                pad_crop_params = pad_crop_params, prev_masks=None)
         elif(args.dim==2):
             seg_mask_list, points, labels, iou_list, dice_list = finetune_model_predict2D(
                 image3D, gt3D, sam_model_tune, device=device, target_size=args.image_size,
@@ -367,7 +397,13 @@ if __name__ == "__main__":
         # Write segmentation masks to disk
         for idx, pred3D in enumerate(seg_mask_list):
             out = sitk.GetImageFromArray(pred3D)
-            sitk.WriteImage(out, os.path.join(vis_root, os.path.basename(img_name[0]).replace(".nii.gz", f"_pred{idx}.nii.gz")))
+            sitk.WriteImage(out, os.path.join(vis_root, os.path.basename(img_name[0]).replace(".nii.gz", f"_pred_old{idx}.nii.gz")))
+
+        # Testing: Write new ones too to compare with
+        for idx, pred3D in enumerate(pred_list_inverse_transformed):
+            out = sitk.GetImageFromArray(pred3D.transpose(2,1,0)) # change from numpy zyx to sitk xyz
+            sitk.WriteImage(out, os.path.join(vis_root, os.path.basename(img_name[0]).replace(".nii.gz", f"_pred_trans{idx}.nii.gz")))
+
 
         # Store Dice for later access
         print(f'Dice list by number of clicks: {dice_list}')

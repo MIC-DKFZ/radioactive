@@ -10,6 +10,81 @@ import SimpleITK as sitk
 from prefetch_generator import BackgroundGenerator
 import einops as E
 
+def _bbox_mask(mask_volume: np.ndarray):
+        """Return 6 coordinates of a 3D bounding box from a given mask.
+
+        Taken from `this SO question <https://stackoverflow.com/questions/31400769/bounding-box-of-numpy-array>`_.
+
+        Args:
+            mask_volume: 3D NumPy array.
+        """  # noqa: B950
+        i_any = np.any(mask_volume, axis=(1, 2))
+        j_any = np.any(mask_volume, axis=(0, 2))
+        k_any = np.any(mask_volume, axis=(0, 1))
+        i_min, i_max = np.where(i_any)[0][[0, -1]]
+        j_min, j_max = np.where(j_any)[0][[0, -1]]
+        k_min, k_max = np.where(k_any)[0][[0, -1]]
+        bb_min = np.array([i_min, j_min, k_min])
+        bb_max = np.array([i_max, j_max, k_max]) + 1
+        return bb_min, bb_max
+
+def getCroppingParams(subject, mask_name, target_shape):
+    '''Function to get the cropping and padding parameters used in an apply_transform call of torchio.CropOrPad, which can then be used to invert the transformation later on'''
+
+    mask_data = subject[mask_name].data.bool().numpy()
+
+    subject_shape = subject.spatial_shape
+    bb_min, bb_max = _bbox_mask(mask_data[0])
+    center_mask = np.mean((bb_min, bb_max), axis=0)
+    padding = []
+    cropping = []
+
+    for dim in range(3):
+        target_dim = target_shape[dim]
+        center_dim = center_mask[dim]
+        subject_dim = subject_shape[dim]
+
+        center_on_index = not (center_dim % 1)
+        target_even = not (target_dim % 2)
+
+        # Approximation when the center cannot be computed exactly
+        # The output will be off by half a voxel, but this is just an
+        # implementation detail
+        if target_even ^ center_on_index:
+            center_dim -= 0.5
+
+        begin = center_dim - target_dim / 2
+        if begin >= 0:
+            crop_ini = begin
+            pad_ini = 0
+        else:
+            crop_ini = 0
+            pad_ini = -begin
+
+        end = center_dim + target_dim / 2
+        if end <= subject_dim:
+            crop_fin = subject_dim - end
+            pad_fin = 0
+        else:
+            crop_fin = 0
+            pad_fin = end - subject_dim
+
+        padding.extend([pad_ini, pad_fin])
+        cropping.extend([crop_ini, crop_fin])
+    
+    # Conversion for SimpleITK compatibility
+    padding_array = np.asarray(padding, dtype=int)
+    cropping_array = np.asarray(cropping, dtype=int)
+    if padding_array.any():
+        padding_params = tuple(padding_array.tolist())
+    else:
+        padding_params = None
+    if cropping_array.any():
+        cropping_params = tuple(cropping_array.tolist())
+    else:
+        cropping_params = None
+    return padding_params, cropping_params  # type: ignore[return-value]
+
 
 class Dataset_Union_ALL(Dataset): 
     def __init__(self, paths, points_path, dim, label = 1, mode='train', data_type='Tr', image_size=128, 
@@ -55,6 +130,11 @@ class Dataset_Union_ALL(Dataset):
             label = tio.LabelMap.from_sitk(sitk_label)
         )
 
+        # obtain cropping and padding parameters to permit later inversion of the transform
+        target_shape = self.transform[1].target_shape # could provide error checking to check that self.transform[1] is indeed a croporpad. 
+        
+        pad_crop_params = getCroppingParams(subject, 'points_mask', target_shape)
+
         if '/ct_' in self.image_paths[index]:
             subject = tio.Clamp(-1000,1000)(subject)
 
@@ -64,7 +144,7 @@ class Dataset_Union_ALL(Dataset):
             except:
                 print(self.image_paths[index])
  
-        return subject.image.data.clone().detach(), subject.label.data.clone().detach(), torch.tensor(points_list), self.image_paths[index] # Later don't return label data
+        return subject.image.data.clone().detach(), subject.label.data.clone().detach(), torch.tensor(points_list), torch.tensor(pad_crop_params), self.image_paths[index] # Later don't return label data
 
     def _set_file_paths(self, paths):
         self.image_paths = []
