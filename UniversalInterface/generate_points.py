@@ -31,7 +31,7 @@ with open(dataset_metadata_file, 'r') as f:
     dataset_metadata = json.load(f)
 
 labels_dict = dataset_metadata['labels']
-fg_labels_dict = {v:k for k, v in labels_dict.items() if v != 0} # Reverse order since it's name -> int in the dataset.json
+fg_labels_dict = {k:int(v) for k, v in labels_dict.items() if int(v) != 0} # Reverse order since it's name -> int in the dataset.json
 
 # Create (point) prompts to use for each image and each fg label. 
 # Two types: 2D: n_clicks points sampled uniformly at random per slice with foreground, 0 clicks per slice with no foreground; 3D: n_clicks sampled uniformly at random from the foreground region of the volume
@@ -42,7 +42,7 @@ for gt_mask_path in tqdm(test_label_paths):
     prompt_dict = defaultdict(dict) # For storing the prompts (per label and for 2D and 3D) for this particular image
 
     # proceed through labels
-    for label, organ in tqdm(fg_labels_dict.items()):
+    for organ, label in tqdm(fg_labels_dict.items()):
         volume_fg = np.where(gt_mask == label) # Get foreground indices as three lists
         volume_fg = tuple(arr.astype(int) for arr in volume_fg) 
 
