@@ -16,7 +16,7 @@ parser.add_argument('-nc', '--n_clicks', type=int, default=5)
 args = parser.parse_args()
 
 test_data_path = args.test_data_path
-res_dir = args.results_path
+res_path = args.results_path
 n_clicks = args.n_clicks
 
 # Obtain test image and label paths. Only take those test images that have a label given
@@ -94,6 +94,7 @@ for gt_mask_path in tqdm(test_label_paths):
 
     full_prompt_dict[os.path.basename(gt_mask_path)] = dict(prompt_dict)
 
-os.makedirs(res_dir, exist_ok = True)
-with open(os.path.join(res_dir, 'prompts.pkl'), 'wb') as f:
+print(f'Saving prompts to {os.path.join(res_path, "prompts.pkl")}')
+os.makedirs(res_path, exist_ok = True)
+with open(os.path.join(res_path, 'prompts.pkl'), 'wb') as f:
     pickle.dump(full_prompt_dict, f)

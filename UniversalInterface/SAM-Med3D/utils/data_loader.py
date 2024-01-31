@@ -114,26 +114,41 @@ class Dataset_Union_ALL(Dataset):
 
     def __getitem__(self, index):
         # Added by Tim
-        sitk_label = sitk.ReadImage(self.label_paths[index]) # REMOVE later; use for DICE calculation for now
-        tio_image = tio.ScalarImage.from_sitk(sitk.ReadImage(self.image_paths[index]))
+        # sitk_label = sitk.ReadImage(self.label_paths[index]) # REMOVE later; use for DICE calculation for now
+        # tio_image = tio.ScalarImage.from_sitk(sitk.ReadImage(self.image_paths[index]))
         
-        # Load in points for this image and change to a mask to be usable by torchio for cropping/padding
-        points_list = self.points_dict[os.path.basename(self.image_paths[index])][self.label][str(self.dim) + 'D']
-        points_mask = np.zeros(shape = (tio_image.shape[3], tio_image.shape[2], tio_image.shape[1])) # Skip the color channel for now; reintroduce in label_map definition. Reverse order since sitk uses WHD while numpy uses DHW 
-        points_mask[*points_list.T] = 1
-        points_mask = E.rearrange(points_mask, pattern = 'x y z -> z y x') # Rearrange back to sitk WHD
-        points_mask = tio.LabelMap(tensor = torch.from_numpy(points_mask).float().unsqueeze(0), affine = tio_image.affine)
+        # # Load in points for this image and change to a mask to be usable by torchio for cropping/padding
+        # points_list = self.points_dict[os.path.basename(self.image_paths[index])][self.label][str(self.dim) + 'D']
+        # points_mask = np.zeros(shape = (tio_image.shape[3], tio_image.shape[2], tio_image.shape[1])) # Skip the color channel for now; reintroduce in label_map definition. Reverse order since sitk uses WHD while numpy uses DHW 
+        # points_mask[*points_list.T] = 1
+        # points_mask = E.rearrange(points_mask, pattern = 'x y z -> z y x') # Rearrange back to sitk WHD
+        # points_mask = tio.LabelMap(tensor = torch.from_numpy(points_mask).float().unsqueeze(0), affine = tio_image.affine)
 
-        subject = tio.Subject(
-            image = tio_image,
-            points_mask = points_mask,
-            label = tio.LabelMap.from_sitk(sitk_label)
-        )
+        # subject = tio.Subject(
+        #     image = tio_image,
+        #     points_mask = points_mask,
+        #     label = tio.LabelMap.from_sitk(sitk_label)
+        # )
 
         # obtain cropping and padding parameters to permit later inversion of the transform
         target_shape = self.transform[1].target_shape # could provide error checking to check that self.transform[1] is indeed a croporpad. 
+
+        label = sitk.GetArrayFromImage(sitk.ReadImage(self.label_paths[index])) # REMOVE later; use for DICE calculation for now
+        image = sitk.GetArrayFromImage(sitk.ReadImage(self.image_paths[index]))
         
-        pad_crop_params = getCroppingParams(subject, 'points_mask', target_shape)
+        # Load in points for this image and change to a mask to be usable by torchio for cropping/padding
+        points_list = self.points_dict[os.path.basename(self.image_paths[index])][self.label][str(self.dim) + 'D']
+        points_mask = np.zeros(shape = image.shape) 
+        points_mask[*points_list.T] = 1
+
+        subject = tio.Subject(
+            image = tio.ScalarImage(tensor = torch.from_numpy(image).permute(2,1,0).unsqueeze(0)), # add channel dimension to everything, and permute to x,y,z orientation
+            points_mask = tio.LabelMap(tensor = torch.from_numpy(points_mask).permute(2,1,0).float().unsqueeze(0)),
+            label = tio.LabelMap(tensor = torch.from_numpy(label).permute(2,1,0).unsqueeze(0))
+        )
+        
+        pad_crop_params = getCroppingParams(subject, 'label', target_shape)
+        print('Undoing crop/pad with label')
 
         if '/ct_' in self.image_paths[index]:
             subject = tio.Clamp(-1000,1000)(subject)
@@ -144,7 +159,7 @@ class Dataset_Union_ALL(Dataset):
             except:
                 print(self.image_paths[index])
  
-        return subject.image.data.clone().detach(), subject.label.data.clone().detach(), torch.tensor(points_list), torch.tensor(pad_crop_params), self.image_paths[index] # Later don't return label data
+        return subject.image.data.clone().detach(), subject.label.data.clone().detach(), subject.points_mask.data.squeeze(0), torch.tensor(pad_crop_params), self.image_paths[index] # Later don't return label data. Remove channel dimension from points_mask
 
     def _set_file_paths(self, paths):
         self.image_paths = []

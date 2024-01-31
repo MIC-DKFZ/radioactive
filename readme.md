@@ -48,7 +48,7 @@ Point prompts are generated first to permit using the same prompts for each mode
 For example:
 ```
 python generate_points.py \
-    -tdp /home/t722s/Desktop/Datasets/BratsTestData/ \
+    -tdp /home/t722s/Desktop/Datasets/BratsMini/ \
     -rp /home/t722s/Desktop/Sam-Med3DTest/evalBrats/ \
     -nc 5
 ```
@@ -65,6 +65,6 @@ Evaluation results will be stored in the `-rp` folder as `evaluation_dice.json`
 
 ```
 python evaluate_folder.py \
-    -tdp /home/t722s/Desktop/Datasets/BratsTestData/ \
-    -rp /home/t722s/Desktop/Sam-Med3DTest/segmentation_maps
+    -tdp /home/t722s/Desktop/Datasets/BratsMini/ \
+    -rp /home/t722s/Desktop/Sam-Med3DTest/evalBrats
 ```

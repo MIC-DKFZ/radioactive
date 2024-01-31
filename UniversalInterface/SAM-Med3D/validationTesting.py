@@ -245,17 +245,19 @@ def _pad(image, padding_params):
     return(image_padded)
 
 def invertCropOrPad(image, padding_params, cropping_params):
-    im_inv = _crop(image, padding_params)
-    im_inv = _pad(im_inv, cropping_params)
+    if padding_params is not None:
+        image = _crop(image, padding_params)
+    if cropping_params is not None:
+        image = _pad(image, cropping_params)
 
-    return(im_inv)
+    return(image)
 
 def finetune_model_predict3D(img3D, gt3D, sam_model_tune, device='cuda', interactive=True, points_list = None, num_clicks=5, pad_crop_params = None, prev_masks=None):
     norm_transform = tio.ZNormalization(masking_method=lambda x: x > 0)
     img3D = norm_transform(img3D.squeeze(dim=1)) # (N, C, W, H, D)
     img3D = img3D.unsqueeze(dim=1)
 
-    pad_crop_params = pad_crop_params.squeeze(0).numpy() # Squeeze since we're working with size 1 batches.
+    pad_crop_params = pad_crop_params.squeeze(0).numpy() # Remove channel dimension
 
     click_points = []
     click_labels = []
@@ -276,10 +278,12 @@ def finetune_model_predict3D(img3D, gt3D, sam_model_tune, device='cuda', interac
         with torch.no_grad():
             # Modified by Tim
             if(num_click==0 or interactive == False):
-                batch_points, batch_labels = points_list[num_click], torch.tensor(1)
-                batch_points, batch_labels = batch_points.reshape(1,1,3), batch_labels.reshape(1,1) # Required format: The first tensor must have three dimensions and the second must have two; I'm not sure why.
+                batch_points, batch_labels = points_list[:num_click+1], torch.ones((1, num_click+1))
+                batch_points = batch_points.unsqueeze(0) # Add batch dimension 
             else:
                 batch_points, batch_labels = get_next_click3D_torch_ritm(prev_masks.to(device), gt3D.to(device))
+
+            print(f'TESTING: is fg and label {gt3D[0,0][*batch_points[0].T], batch_labels}')
 
             batch_points = batch_points.to(device)
             batch_labels = batch_labels.to(device)  
@@ -292,14 +296,25 @@ def finetune_model_predict3D(img3D, gt3D, sam_model_tune, device='cuda', interac
                 boxes=None,
                 masks=low_res_masks.to(device),
             )
-            low_res_masks, _ = sam_model_tune.mask_decoder(
+            # low_res_masks, _ = sam_model_tune.mask_decoder(
+            #     image_embeddings=image_embedding.to(device), # (B, 384, 64, 64, 64)
+            #     image_pe=sam_model_tune.prompt_encoder.get_dense_pe(), # (1, 384, 64, 64, 64)
+            #     sparse_prompt_embeddings=sparse_embeddings, # (B, 2, 384)
+            #     dense_prompt_embeddings=dense_embeddings, # (B, 384, 64, 64, 64)
+            #     multimask_output=False,
+            #     )
+            mask_out, _ = sam_model_tune.mask_decoder(
                 image_embeddings=image_embedding.to(device), # (B, 384, 64, 64, 64)
                 image_pe=sam_model_tune.prompt_encoder.get_dense_pe(), # (1, 384, 64, 64, 64)
                 sparse_prompt_embeddings=sparse_embeddings, # (B, 2, 384)
                 dense_prompt_embeddings=dense_embeddings, # (B, 384, 64, 64, 64)
                 multimask_output=False,
                 )
-            prev_masks = F.interpolate(low_res_masks, size=gt3D.shape[-3:], mode='trilinear', align_corners=False)
+            
+            if interactive == True: # Pass previous low res masks only if interactive is true
+                low_res_masks = mask_out
+
+            prev_masks = F.interpolate(mask_out, size=gt3D.shape[-3:], mode='trilinear', align_corners=False)
 
             medsam_seg_prob = torch.sigmoid(prev_masks)  # (B, 1, 64, 64, 64)
             # convert prob to mask
@@ -321,8 +336,9 @@ if __name__ == "__main__":
     # Obtain dataloaders
     infer_transform = [
         tio.ToCanonical(),
-        tio.CropOrPad(mask_name='points_mask', target_shape=(args.crop_size,args.crop_size,args.crop_size)), # Will center the cropping/padding at the center of the bounding box of the clicks supplied.
+        tio.CropOrPad(mask_name='label', target_shape=(args.crop_size,args.crop_size,args.crop_size)), # Will center the cropping/padding at the center of the bounding box of the clicks supplied.
     ]
+    print('Performing crop/pad with label')
 
     test_dataset = Dataset_Union_ALL_Val(
         paths=args.test_data_path, 
@@ -369,8 +385,13 @@ if __name__ == "__main__":
 
     # Perform inference
     for batch_data in tqdm(test_dataloader):
-        image3D, gt3D, points_list, pad_crop_params, img_name = batch_data
-        points_list = points_list.squeeze(0) # Remove the batch dimension since we're working with batch size 1.
+        # image3D, gt3D, points_list, pad_crop_params, img_name = batch_data
+        # points_list = points_list.squeeze(0) # Remove the batch dimension since we're working with batch size 1.
+
+        image3D, gt3D, points_mask, pad_crop_params, img_name = batch_data
+        points_mask = points_mask.squeeze(0) # remove batch dimension
+        points_list = torch.argwhere(points_mask == 1)
+
         sz = image3D.size()
         if(sz[2]<args.crop_size or sz[3]<args.crop_size or sz[4]<args.crop_size):
             print("[ERROR] wrong size", sz, "for", img_name)
@@ -411,7 +432,6 @@ if __name__ == "__main__":
         for i, dice in enumerate(dice_list):
             cur_dice_dict[f'{i}'] = dice
         out_dice_all[img_name[0]] = cur_dice_dict
-
 
     # Write results
     os.makedirs(args.eval_dir, exist_ok = True)
