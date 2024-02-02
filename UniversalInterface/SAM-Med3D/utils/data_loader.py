@@ -113,7 +113,6 @@ class Dataset_Union_ALL(Dataset):
         return len(self.label_paths)
 
     def __getitem__(self, index):
-        # Added by Tim
         # sitk_label = sitk.ReadImage(self.label_paths[index]) # REMOVE later; use for DICE calculation for now
         # tio_image = tio.ScalarImage.from_sitk(sitk.ReadImage(self.image_paths[index]))
         
@@ -148,7 +147,6 @@ class Dataset_Union_ALL(Dataset):
         )
         
         pad_crop_params = getCroppingParams(subject, 'label', target_shape)
-        print('Undoing crop/pad with label')
 
         if '/ct_' in self.image_paths[index]:
             subject = tio.Clamp(-1000,1000)(subject)

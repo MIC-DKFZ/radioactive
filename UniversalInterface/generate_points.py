@@ -12,12 +12,18 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-tdp', '--test_data_path', type=str)
 parser.add_argument('-rp', '--results_path', type=str)
 parser.add_argument('-nc', '--n_clicks', type=int, default=5)
+parser.add_argument('--seed', type=int)
 
 args = parser.parse_args()
 
 test_data_path = args.test_data_path
 res_path = args.results_path
 n_clicks = args.n_clicks
+seed = args.seed
+
+if seed is not None:
+    print(f'Set seed {seed}')
+    np.random.seed(seed)
 
 # Obtain test image and label paths. Only take those test images that have a label given
 labels_dir = os.path.join(test_data_path, 'labelsTs')

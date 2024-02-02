@@ -25,6 +25,7 @@ parser.add_argument('-tdp', '--test_data_path', type=str, default='./data/valida
 parser.add_argument('-vp', '--vis_path', type=str, default='./visualization')
 parser.add_argument('-cp', '--checkpoint_path', type=str, default='./ckpt/sam_med3d.pth')
 parser.add_argument('--eval_dir', type=str, default='eval_results')
+parser.add_argument('-mrn', '--multi_results_name', type=str, default=None)
 
 parser.add_argument('--image_size', type=int, default=256)
 parser.add_argument('--crop_size', type=int, default=128)
@@ -32,6 +33,7 @@ parser.add_argument('--device', type=str, default='cuda')
 parser.add_argument('-mt', '--model_type', type=str, default='vit_b_ori')
 parser.add_argument('-nc', '--num_clicks', type=int, default=5)
 parser.add_argument('-i', '--interactive', action='store_true')
+parser.add_argument('-l', '--label_crop', action='store_true') # Crop around ground truth
 parser.add_argument('-dt', '--data_type', type=str, default='Ts')
 
 parser.add_argument('--threshold', type=int, default=0)
@@ -252,7 +254,8 @@ def invertCropOrPad(image, padding_params, cropping_params):
 
     return(image)
 
-def finetune_model_predict3D(img3D, gt3D, sam_model_tune, device='cuda', interactive=True, points_list = None, num_clicks=5, pad_crop_params = None, prev_masks=None):
+def finetune_model_predict3D(img3D, gt3D, sam_model_tune, device='cuda', interactive=True, points_list = None, points_labels = torch.tensor([1,1,1,1,1]), num_clicks=5, pad_crop_params = None, prev_masks=None):
+    print(f'TESTING: points_list {points_list}')
     norm_transform = tio.ZNormalization(masking_method=lambda x: x > 0)
     img3D = norm_transform(img3D.squeeze(dim=1)) # (N, C, W, H, D)
     img3D = img3D.unsqueeze(dim=1)
@@ -276,33 +279,26 @@ def finetune_model_predict3D(img3D, gt3D, sam_model_tune, device='cuda', interac
 
     for num_click in range(num_clicks):
         with torch.no_grad():
-            # Modified by Tim
             if(num_click==0 or interactive == False):
-                batch_points, batch_labels = points_list[:num_click+1], torch.ones((1, num_click+1))
+                batch_points, batch_labels = points_list[:num_click+1], points_labels[:num_click+1].unsqueeze(0) 
                 batch_points = batch_points.unsqueeze(0) # Add batch dimension 
             else:
                 batch_points, batch_labels = get_next_click3D_torch_ritm(prev_masks.to(device), gt3D.to(device))
+            # print(f'TESTING: batch points: {batch_points}')
+            # print(f'TESTING: is fg and label {gt3D[0,0][*batch_points[0].T], batch_labels}')
 
-            print(f'TESTING: is fg and label {gt3D[0,0][*batch_points[0].T], batch_labels}')
+            click_points.append(batch_points[0][-1].tolist())
+            click_labels.append(batch_labels[0][-1].tolist())
 
             batch_points = batch_points.to(device)
             batch_labels = batch_labels.to(device)  
-
-            click_points.append(batch_points) # Return these so that we can keep track of which points were used in case interactive == True 
-            click_labels.append(batch_labels)
 
             sparse_embeddings, dense_embeddings = sam_model_tune.prompt_encoder(
                 points=[batch_points, batch_labels],
                 boxes=None,
                 masks=low_res_masks.to(device),
             )
-            # low_res_masks, _ = sam_model_tune.mask_decoder(
-            #     image_embeddings=image_embedding.to(device), # (B, 384, 64, 64, 64)
-            #     image_pe=sam_model_tune.prompt_encoder.get_dense_pe(), # (1, 384, 64, 64, 64)
-            #     sparse_prompt_embeddings=sparse_embeddings, # (B, 2, 384)
-            #     dense_prompt_embeddings=dense_embeddings, # (B, 384, 64, 64, 64)
-            #     multimask_output=False,
-            #     )
+
             mask_out, _ = sam_model_tune.mask_decoder(
                 image_embeddings=image_embedding.to(device), # (B, 384, 64, 64, 64)
                 image_pe=sam_model_tune.prompt_encoder.get_dense_pe(), # (1, 384, 64, 64, 64)
@@ -310,7 +306,7 @@ def finetune_model_predict3D(img3D, gt3D, sam_model_tune, device='cuda', interac
                 dense_prompt_embeddings=dense_embeddings, # (B, 384, 64, 64, 64)
                 multimask_output=False,
                 )
-            
+
             if interactive == True: # Pass previous low res masks only if interactive is true
                 low_res_masks = mask_out
 
@@ -334,11 +330,15 @@ def finetune_model_predict3D(img3D, gt3D, sam_model_tune, device='cuda', interac
 
 if __name__ == "__main__":
     # Obtain dataloaders
+    if args.label_crop:
+        mask_name = 'label'
+        print('Cheating! Cropping around ground truth')
+    else:
+        mask_name = 'points_mask'
     infer_transform = [
         tio.ToCanonical(),
-        tio.CropOrPad(mask_name='label', target_shape=(args.crop_size,args.crop_size,args.crop_size)), # Will center the cropping/padding at the center of the bounding box of the clicks supplied.
+        tio.CropOrPad(mask_name=mask_name, target_shape=(args.crop_size,args.crop_size,args.crop_size)), # Will center the cropping/padding at the center of the bounding box of the clicks supplied.
     ]
-    print('Performing crop/pad with label')
 
     test_dataset = Dataset_Union_ALL_Val(
         paths=args.test_data_path, 
@@ -391,6 +391,8 @@ if __name__ == "__main__":
         image3D, gt3D, points_mask, pad_crop_params, img_name = batch_data
         points_mask = points_mask.squeeze(0) # remove batch dimension
         points_list = torch.argwhere(points_mask == 1)
+        inds = torch.randperm(points_list.shape[0])# Randomly shuffle list: torch.argwhere returns in row major order, so shuffle to prevent bias towards origin
+        points_list = points_list[inds]
 
         sz = image3D.size()
         if(sz[2]<args.crop_size or sz[3]<args.crop_size or sz[4]<args.crop_size):
@@ -408,12 +410,10 @@ if __name__ == "__main__":
                 prev_masks=None)
 
         # Not needed in current iteration where points to be used are read from a file
-        # # Store points used
-        # points = [p.cpu().numpy() for p in points]
-        # labels = [l.cpu().numpy() for l in labels]
-        # pt_info = dict(points=points, labels=labels)
-        # pt_path=os.path.join(vis_root, os.path.basename(img_name[0]).replace(".nii.gz", "_pt.pkl"))
-        # pickle.dump(pt_info, open(pt_path, "wb"))
+        # Store points used
+        pt_info = dict(points=points, labels=labels)
+        pt_path=os.path.join(vis_root, os.path.basename(img_name[0]).replace(".nii.gz", "_pt.pkl"))
+        pickle.dump(pt_info, open(pt_path, "wb"))
 
         # Write segmentation masks to disk
         for idx, pred3D in enumerate(seg_mask_list):
@@ -440,5 +440,34 @@ if __name__ == "__main__":
     print("Save results to", results_file)
     with open(results_file, 'w') as f:
         json.dump(out_dice_all, f, indent=4)
+
+    # TESTING: Added to track DICE scores for presentation. Sorry for ugly script, I wanted the json file to be human readable
+    if args.multi_results_name:
+        out = {args.seed:{
+                'points': pt_info['points'],
+                'labels': pt_info['labels'],
+                'dice': dice_list
+            }
+        }
+
+        multi_run_file = os.path.join(args.eval_dir, args.multi_results_name + '.json')
+
+        # Read in existing data,
+        if os.path.exists(multi_run_file):
+            with open(multi_run_file, 'r') as file:
+                file_content = file.read().rstrip()
+
+            file_content = file_content[:-1].rstrip()
+            file_content += ','
+            
+            out_string = json.dumps(out)[1:-1]
+            file_content += f"\n\t{out_string}\n}}"
+
+            with open(multi_run_file, 'w') as file:
+                file.write(file_content)
+
+        else: 
+            with open(multi_run_file, 'w') as file:
+                json.dump(out, file)
 
     print("Done")
