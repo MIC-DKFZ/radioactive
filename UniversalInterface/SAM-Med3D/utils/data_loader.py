@@ -86,6 +86,22 @@ def getCroppingParams(subject, mask_name, target_shape):
     return padding_params, cropping_params  # type: ignore[return-value]
 
 
+def transformPoints(pts, padding_params, cropping_params):
+    if type(pts) is torch.Tensor:
+        pts = pts.numpy()
+    pts = pts[:,::-1]   
+    # Handle none types. Could have been handled in getCroppingParams but it's kept there for consistency with torchio
+    if padding_params is None:
+        padding_params = np.zeros(6)
+    if cropping_params is None:
+        cropping_params = np.zeros(6)
+
+    axis_add, axis_sub = padding_params[::2], cropping_params[::2]
+
+    pts = pts + axis_add - axis_sub # same as pts_trans[:,i] = pts_trans[:,i] + axis_add[i] - axis_sub[i] iterating over i
+
+    return(pts)
+
 class Dataset_Union_ALL(Dataset): 
     def __init__(self, paths, points_path, dim, label = 1, mode='train', data_type='Tr', image_size=128, 
                  transform=None, threshold=500,
@@ -136,7 +152,7 @@ class Dataset_Union_ALL(Dataset):
         image = sitk.GetArrayFromImage(sitk.ReadImage(self.image_paths[index]))
         
         # Load in points for this image and change to a mask to be usable by torchio for cropping/padding
-        points_list = self.points_dict[os.path.basename(self.image_paths[index])][self.label][str(self.dim) + 'D']
+        points_list, points_labels = self.points_dict[os.path.basename(self.image_paths[index])][self.label][str(self.dim) + 'D']
         points_mask = np.zeros(shape = image.shape) 
         points_mask[*points_list.T] = 1
 
@@ -156,8 +172,10 @@ class Dataset_Union_ALL(Dataset):
                 subject = self.transform(subject)
             except:
                 print(self.image_paths[index])
- 
-        return subject.image.data.clone().detach(), subject.label.data.clone().detach(), subject.points_mask.data.squeeze(0), torch.tensor(pad_crop_params), self.image_paths[index] # Later don't return label data. Remove channel dimension from points_mask
+
+        points_cropped = transformPoints(points_list, pad_crop_params[0], pad_crop_params[1])
+        
+        return subject.image.data.clone().detach(), subject.label.data.clone().detach(), torch.tensor(points_cropped), torch.tensor(points_labels), torch.tensor(pad_crop_params), self.image_paths[index] # Later don't return label data. Remove channel dimension from points_mask
 
     def _set_file_paths(self, paths):
         self.image_paths = []
