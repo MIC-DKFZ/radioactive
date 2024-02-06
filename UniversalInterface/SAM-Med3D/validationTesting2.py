@@ -18,7 +18,7 @@ from collections import OrderedDict, defaultdict
 import json
 import pickle
 from utils.click_method import get_next_click3D_torch_ritm, get_next_click3D_torch_2
-from utils.data_loader import Dataset_Union_ALL_Val
+from utils.data_loader2 import Dataset_Union_ALL_Val
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-tdp', '--test_data_path', type=str, default='./data/validation')
@@ -253,6 +253,97 @@ def invertCropOrPad(image, padding_params, cropping_params):
 
     return(image)
 
+def _bbox_mask(mask_volume: np.ndarray):
+        """Return 6 coordinates of a 3D bounding box from a given mask.
+
+        Taken from `this SO question <https://stackoverflow.com/questions/31400769/bounding-box-of-numpy-array>`_.
+
+        Args:
+            mask_volume: 3D NumPy array.
+        """  # noqa: B950
+        i_any = np.any(mask_volume, axis=(1, 2))
+        j_any = np.any(mask_volume, axis=(0, 2))
+        k_any = np.any(mask_volume, axis=(0, 1))
+        i_min, i_max = np.where(i_any)[0][[0, -1]]
+        j_min, j_max = np.where(j_any)[0][[0, -1]]
+        k_min, k_max = np.where(k_any)[0][[0, -1]]
+        bb_min = np.array([i_min, j_min, k_min])
+        bb_max = np.array([i_max, j_max, k_max]) + 1
+        return bb_min, bb_max
+
+def getCroppingParams(subject, mask_name, target_shape):
+    '''Function to get the cropping and padding parameters used in an apply_transform call of torchio.CropOrPad, which can then be used to invert the transformation later on'''
+
+    mask_data = subject[mask_name].data.bool().numpy()
+
+    subject_shape = subject.spatial_shape
+    bb_min, bb_max = _bbox_mask(mask_data[0])
+    center_mask = np.mean((bb_min, bb_max), axis=0)
+    padding = []
+    cropping = []
+
+    for dim in range(3):
+        target_dim = target_shape[dim]
+        center_dim = center_mask[dim]
+        subject_dim = subject_shape[dim]
+
+        center_on_index = not (center_dim % 1)
+        target_even = not (target_dim % 2)
+
+        # Approximation when the center cannot be computed exactly
+        # The output will be off by half a voxel, but this is just an
+        # implementation detail
+        if target_even ^ center_on_index:
+            center_dim -= 0.5
+
+        begin = center_dim - target_dim / 2
+        if begin >= 0:
+            crop_ini = begin
+            pad_ini = 0
+        else:
+            crop_ini = 0
+            pad_ini = -begin
+
+        end = center_dim + target_dim / 2
+        if end <= subject_dim:
+            crop_fin = subject_dim - end
+            pad_fin = 0
+        else:
+            crop_fin = 0
+            pad_fin = end - subject_dim
+
+        padding.extend([pad_ini, pad_fin])
+        cropping.extend([crop_ini, crop_fin])
+    
+    # Conversion for SimpleITK compatibility
+    padding_array = np.asarray(padding, dtype=int)
+    cropping_array = np.asarray(cropping, dtype=int)
+    if padding_array.any():
+        padding_params = tuple(padding_array.tolist())
+    else:
+        padding_params = None
+    if cropping_array.any():
+        cropping_params = tuple(cropping_array.tolist())
+    else:
+        cropping_params = None
+    return padding_params, cropping_params  # type: ignore[return-value]
+
+def transformPoints(pts, padding_params, cropping_params):
+    if type(pts) is torch.Tensor:
+        pts = pts.numpy()
+    pts = pts[:,::-1]   
+    # Handle none types. Could have been handled in getCroppingParams but it's kept there for consistency with torchio
+    if padding_params is None:
+        padding_params = np.zeros(6)
+    if cropping_params is None:
+        cropping_params = np.zeros(6)
+
+    axis_add, axis_sub = padding_params[::2], cropping_params[::2]
+
+    pts = pts + axis_add - axis_sub # same as pts_trans[:,i] = pts_trans[:,i] + axis_add[i] - axis_sub[i] iterating over i
+
+    return(pts)
+
 def detransformPoints(pts, padding_params, cropping_params):
     
     # Handle none types. Could have been handled in getCroppingParams but it's kept there for consistency with torchio
@@ -346,7 +437,7 @@ if __name__ == "__main__":
     else:
         mask_name = 'points_mask'
     infer_transform = [
-        tio.ToCanonical(),
+        #tio.ToCanonical(),
         tio.CropOrPad(mask_name=mask_name, target_shape=(args.crop_size,args.crop_size,args.crop_size)), # Will center the cropping/padding at the center of the bounding box of the clicks supplied.
     ]
 
@@ -397,8 +488,34 @@ if __name__ == "__main__":
     for batch_data in tqdm(test_dataloader):
         # image3D, gt3D, points_list, pad_crop_params, img_name = batch_data
         
-        image3D, gt3D, points_list, points_labels, pad_crop_params, img_name = batch_data
-        points_list, pad_crop_params = points_list.squeeze(0), pad_crop_params.squeeze(0) # Remove the batch dimension since we're working with batch size 1.
+        # image3D, gt3D, points_list, points_labels, pad_crop_params, img_name = batch_data
+        # points_list, pad_crop_params = points_list.squeeze(0), pad_crop_params.squeeze(0) # Remove the batch dimension since we're working with batch size 1.
+
+        image_uncropped, gt3D_uncropped, points_dict, img_name = batch_data
+
+        # for label in ... !!
+        label = 1
+
+        # Prepare image for this label: crop around center of points supplied
+        # Load in points for this image and change to a mask to be usable by torchio for cropping/padding
+        points_list_uncropped, points_labels = points_dict[img_name][label][args.dim + 'D']
+        points_mask = np.zeros(shape = image_uncropped.shape) 
+        points_mask[*points_list_uncropped.T] = 1
+
+        subject = tio.Subject(
+            image = tio.ScalarImage(tensor = torch.from_numpy(image_uncropped).permute(2,1,0).unsqueeze(0)), # add channel dimension to everything, and permute to x,y,z orientation
+            points_mask = tio.LabelMap(tensor = torch.from_numpy(points_mask).permute(2,1,0).float().unsqueeze(0)),
+            label = tio.LabelMap(tensor = torch.from_numpy(label).permute(2,1,0).unsqueeze(0))
+        )
+        
+        pad_crop_params = getCroppingParams(subject, 'label', (args.crop_size, args.crop_size, args.crop_size))
+
+        transform=tio.Compose(infer_transform)
+        subject = transform(subject)
+
+        image3D, gt3D = subject.image.data, subject.label.data
+
+        points_list = transformPoints(points_list, pad_crop_params[0], pad_crop_params[1])
 
         sz = image3D.size()
         if(sz[2]<args.crop_size or sz[3]<args.crop_size or sz[4]<args.crop_size):
@@ -417,8 +534,6 @@ if __name__ == "__main__":
 
 
         points_restored = detransformPoints(np.array(points), pad_crop_params[0].numpy(), pad_crop_params[1].numpy())
-
-        print(f'TESTING: points restored: {points_restored}')
 
         # Store points used
         pt_info = dict(points=points_restored.tolist(), labels=labels)
