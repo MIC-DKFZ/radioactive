@@ -71,7 +71,7 @@ for gt_mask_path in tqdm(test_label_paths):
 
 
         points3D = [(volume_fg[0][idx], volume_fg[1][idx], volume_fg[2][idx]) for idx in point_indices] # change from triple of arrays format to list of triples format
-        prompt_dict[label]['3D'] = np.array(points3D)
+        prompt_dict[label]['3D'] = (np.array(points3D), [1]*n_clicks)
 
 
         # 2D point generation:
@@ -96,7 +96,7 @@ for gt_mask_path in tqdm(test_label_paths):
         if warning_zs:
             tqdm.write(f'WARNING: some slices in {gt_mask_path} had fewer than n_clicks = {n_clicks} foreground pixels. Specifically: {warning_zs}')
 
-        prompt_dict[label]['2D'] = np.array(points2D)
+        prompt_dict[label]['2D'] = (np.array(points2D), [1]* len(np.array(points2D)))
 
     full_prompt_dict[os.path.basename(gt_mask_path)] = dict(prompt_dict)
 

@@ -161,7 +161,6 @@ def random_point_sampling(mask, get_point = 1):
         coords, labels = torch.as_tensor(coords[indices], dtype=torch.float), torch.as_tensor(labels[indices], dtype=torch.int)
         return coords, labels
 
-
 def finetune_model_predict2D(img3D, gt3D, sam_model_tune, target_size=256, device='cuda', num_clicks=1, prev_masks=None):
     pred_list = []
     iou_list = []
@@ -254,18 +253,26 @@ def invertCropOrPad(image, padding_params, cropping_params):
 
     return(image)
 
-def finetune_model_predict3D(img3D, gt3D, sam_model_tune, device='cuda', interactive=True, points_list = None, points_labels = torch.tensor([1,1,1,1,1]), num_clicks=5, pad_crop_params = None, prev_masks=None):
+def detransformPoints(pts, padding_params, cropping_params):
+    
+    # Handle none types. Could have been handled in getCroppingParams but it's kept there for consistency with torchio
+    if padding_params is None:
+        padding_params = np.zeros(6)
+    if cropping_params is None:
+        cropping_params = np.zeros(6)
+
+    axis_add, axis_sub = cropping_params[::2], padding_params[::2]
+
+    pts = pts + axis_add - axis_sub # same as pts_trans[:,i] = pts_trans[:,i] + axis_add[i] - axis_sub[i] iterating over i
+    pts = pts[:,::-1]
+    return(pts)
+
+def finetune_model_predict3D(img3D, gt3D, sam_model_tune, device='cuda', interactive=True, points_list = None, points_labels = None, num_clicks=5, pad_crop_params = None, prev_masks=None):
     norm_transform = tio.ZNormalization(masking_method=lambda x: x > 0)
     img3D = norm_transform(img3D.squeeze(dim=1)) # (N, C, W, H, D)
     img3D = img3D.unsqueeze(dim=1)
 
     pad_crop_params = pad_crop_params.squeeze(0).numpy() # Remove channel dimension
-
-    # if args.interactive == False:
-    #     points_list = [[70, 48, 59], [65, 37, 52], [64, 63, 73], [68, 47, 75], [67, 91, 62]]
-    #     points_labels = torch.tensor([1, 1, 0, 1, 1])
-
-    print(f'TESTING: points_list {points_list, points_labels}')
 
     click_points = []
     click_labels = []
@@ -285,12 +292,10 @@ def finetune_model_predict3D(img3D, gt3D, sam_model_tune, device='cuda', interac
     for num_click in range(num_clicks):
         with torch.no_grad():
             if(num_click==0 or interactive == False):
-                batch_points, batch_labels = points_list[:num_click+1], points_labels[:num_click+1].unsqueeze(0) 
-                batch_points = batch_points.unsqueeze(0) # Add batch dimension 
+                batch_points, batch_labels = points_list[:num_click+1], points_labels[0][:num_click+1]
+                batch_points, batch_labels = batch_points.unsqueeze(0), batch_labels.unsqueeze(0)
             else:
                 batch_points, batch_labels = get_next_click3D_torch_ritm(prev_masks.to(device), gt3D.to(device))
-            # print(f'TESTING: batch points: {batch_points}')
-            # print(f'TESTING: is fg and label {gt3D[0,0][*batch_points[0].T], batch_labels}')
 
             click_points.append(batch_points[0][-1].tolist())
             click_labels.append(batch_labels[0][-1].tolist())
@@ -391,13 +396,9 @@ if __name__ == "__main__":
     # Perform inference
     for batch_data in tqdm(test_dataloader):
         # image3D, gt3D, points_list, pad_crop_params, img_name = batch_data
-        # points_list = points_list.squeeze(0) # Remove the batch dimension since we're working with batch size 1.
-
-        image3D, gt3D, points_mask, pad_crop_params, img_name = batch_data
-        points_mask = points_mask.squeeze(0) # remove batch dimension
-        points_list = torch.argwhere(points_mask == 1)
-        inds = torch.randperm(points_list.shape[0])# Randomly shuffle list: torch.argwhere returns in row major order, so shuffle to prevent bias towards origin
-        points_list = points_list[inds]
+        
+        image3D, gt3D, points_list, points_labels, pad_crop_params, img_name = batch_data
+        points_list, pad_crop_params = points_list.squeeze(0), pad_crop_params.squeeze(0) # Remove the batch dimension since we're working with batch size 1.
 
         sz = image3D.size()
         if(sz[2]<args.crop_size or sz[3]<args.crop_size or sz[4]<args.crop_size):
@@ -406,7 +407,7 @@ if __name__ == "__main__":
         if(args.dim==3):
             seg_mask_list, pred_list_inverse_transformed, points, labels, iou_list, dice_list = finetune_model_predict3D(
                 image3D, gt3D, sam_model_tune, device=device, 
-                interactive=args.interactive, points_list = points_list, num_clicks=args.num_clicks, 
+                interactive=args.interactive, points_list = points_list, points_labels=points_labels, num_clicks=args.num_clicks, 
                 pad_crop_params = pad_crop_params, prev_masks=None)
         elif(args.dim==2):
             seg_mask_list, points, labels, iou_list, dice_list = finetune_model_predict2D(
@@ -414,9 +415,11 @@ if __name__ == "__main__":
                 click_method=args.point_method, num_clicks=args.num_clicks, 
                 prev_masks=None)
 
-        # Not needed in current iteration where points to be used are read from a file
+
+        points_restored = detransformPoints(np.array(points), pad_crop_params[0].numpy(), pad_crop_params[1].numpy())
+
         # Store points used
-        pt_info = dict(points=points, labels=labels)
+        pt_info = dict(points=points_restored.tolist(), labels=labels)
         pt_path=os.path.join(vis_root, os.path.basename(img_name[0]).replace(".nii.gz", "_pt.pkl"))
         pickle.dump(pt_info, open(pt_path, "wb"))
 
