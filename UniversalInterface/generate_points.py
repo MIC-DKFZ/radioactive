@@ -37,7 +37,12 @@ with open(dataset_metadata_file, 'r') as f:
     dataset_metadata = json.load(f)
 
 labels_dict = dataset_metadata['labels']
-fg_labels_dict = {k:int(v) for k, v in labels_dict.items() if int(v) != 0} # Reverse order since it's name -> int in the dataset.json
+
+try: 
+    fg_labels_dict = {k:int(v) for k, v in labels_dict.items() if k != 'background'} # apply int(v) since it's often serialised as a string
+except ValueError:
+    raise RuntimeError("Couldn't extract foreground label numbers; is the dataset json labels entry not in the expected name -> number format?")
+
 
 # Create (point) prompts to use for each image and each fg label. 
 # Two types: 2D: n_clicks points sampled uniformly at random per slice with foreground, 0 clicks per slice with no foreground; 3D: n_clicks sampled uniformly at random from the foreground region of the volume

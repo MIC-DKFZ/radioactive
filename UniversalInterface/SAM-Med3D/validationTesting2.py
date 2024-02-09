@@ -22,9 +22,8 @@ from utils.data_loader2 import Dataset_Union_ALL_Val
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-tdp', '--test_data_path', type=str, default='./data/validation')
-parser.add_argument('-vp', '--vis_path', type=str, default='./visualization')
+parser.add_argument('-rp', '--results_path', type=str, default='./visualization')
 parser.add_argument('-cp', '--checkpoint_path', type=str, default='./ckpt/sam_med3d.pth')
-parser.add_argument('--eval_dir', type=str, default='eval_results')
 parser.add_argument('-mrn', '--multi_results_name', type=str, default=None)
 
 parser.add_argument('--image_size', type=int, default=256)
@@ -314,18 +313,10 @@ def getCroppingParams(subject, mask_name, target_shape):
 
         padding.extend([pad_ini, pad_fin])
         cropping.extend([crop_ini, crop_fin])
-    
-    # Conversion for SimpleITK compatibility
-    padding_array = np.asarray(padding, dtype=int)
-    cropping_array = np.asarray(cropping, dtype=int)
-    if padding_array.any():
-        padding_params = tuple(padding_array.tolist())
-    else:
-        padding_params = None
-    if cropping_array.any():
-        cropping_params = tuple(cropping_array.tolist())
-    else:
-        cropping_params = None
+
+    padding_params = np.asarray(padding, dtype=int)
+    cropping_params = np.asarray(cropping, dtype=int)
+
     return padding_params, cropping_params  # type: ignore[return-value]
 
 def transformPoints(pts, padding_params, cropping_params):
@@ -333,25 +324,13 @@ def transformPoints(pts, padding_params, cropping_params):
         pts = pts.numpy()
     pts = pts[:,::-1]   
     # Handle none types. Could have been handled in getCroppingParams but it's kept there for consistency with torchio
-    if padding_params is None:
-        padding_params = np.zeros(6)
-    if cropping_params is None:
-        cropping_params = np.zeros(6)
 
     axis_add, axis_sub = padding_params[::2], cropping_params[::2]
-
     pts = pts + axis_add - axis_sub # same as pts_trans[:,i] = pts_trans[:,i] + axis_add[i] - axis_sub[i] iterating over i
 
     return(pts)
 
 def detransformPoints(pts, padding_params, cropping_params):
-    
-    # Handle none types. Could have been handled in getCroppingParams but it's kept there for consistency with torchio
-    if padding_params is None:
-        padding_params = np.zeros(6)
-    if cropping_params is None:
-        cropping_params = np.zeros(6)
-
     axis_add, axis_sub = cropping_params[::2], padding_params[::2]
 
     pts = pts + axis_add - axis_sub # same as pts_trans[:,i] = pts_trans[:,i] + axis_add[i] - axis_sub[i] iterating over i
@@ -363,7 +342,8 @@ def finetune_model_predict3D(img3D, gt3D, sam_model_tune, device='cuda', interac
     img3D = norm_transform(img3D.squeeze(dim=1)) # (N, C, W, H, D)
     img3D = img3D.unsqueeze(dim=1)
 
-    pad_crop_params = pad_crop_params.squeeze(0).numpy() # Remove channel dimension
+    pad_crop_params = np.array(pad_crop_params) # For nicer indexing
+
 
     click_points = []
     click_labels = []
@@ -383,7 +363,7 @@ def finetune_model_predict3D(img3D, gt3D, sam_model_tune, device='cuda', interac
     for num_click in range(num_clicks):
         with torch.no_grad():
             if(num_click==0 or interactive == False):
-                batch_points, batch_labels = points_list[:num_click+1], points_labels[0][:num_click+1]
+                batch_points, batch_labels = torch.tensor(points_list[:num_click+1]), torch.tensor(points_labels[:num_click+1])
                 batch_points, batch_labels = batch_points.unsqueeze(0), batch_labels.unsqueeze(0)
             else:
                 batch_points, batch_labels = get_next_click3D_torch_ritm(prev_masks.to(device), gt3D.to(device))
@@ -443,7 +423,6 @@ if __name__ == "__main__":
 
     test_dataset = Dataset_Union_ALL_Val(
         paths=args.test_data_path, 
-        points_path=os.path.join(args.eval_dir, 'prompts.pkl'),
         dim=args.dim,
         mode="Val", 
         data_type=args.data_type, 
@@ -459,6 +438,15 @@ if __name__ == "__main__":
         batch_size=1, 
         shuffle=True
     )
+    results_path = args.results_path
+
+    with open(os.path.join(results_path, 'prompts.pkl'), 'rb') as f:
+        points_dict = pickle.load(f)
+
+    with open(os.path.join(args.test_data_path, 'dataset.json'), 'rb') as f:
+        dataset_metadata = json.load(f)
+    
+    fg_labels_dict = dataset_metadata['labels']
 
     # Load in model
     checkpoint_path = args.checkpoint_path
@@ -479,94 +467,95 @@ if __name__ == "__main__":
     sam_trans = ResizeLongestSide3D(sam_model_tune.image_encoder.img_size)
 
     # Initialise results storage variables and directories
-    out_dice_all = OrderedDict()
+    out_dice_all = defaultdict(dict)
 
-    vis_root = args.vis_path
-    os.makedirs(vis_root, exist_ok=True)
+    for organ in fg_labels_dict.keys():
+        os.makedirs(os.path.join(results_path, organ), exist_ok = True)
 
     # Perform inference
     for batch_data in tqdm(test_dataloader):
-        # image3D, gt3D, points_list, pad_crop_params, img_name = batch_data
+        image_uncropped, gt3D_uncropped, img_name = batch_data
+        img_name = img_name[0] # Since we're dealing with batch size 0
         
-        # image3D, gt3D, points_list, points_labels, pad_crop_params, img_name = batch_data
-        # points_list, pad_crop_params = points_list.squeeze(0), pad_crop_params.squeeze(0) # Remove the batch dimension since we're working with batch size 1.
+        for organ, label in fg_labels_dict.items():
+            if organ == 'background':
+                continue
 
-        image_uncropped, gt3D_uncropped, points_dict, img_name = batch_data
+            label = int(label)
 
-        # for label in ... !!
-        label = 1
+            gt3D_binary = torch.where(gt3D_uncropped ==label, 1, torch.zeros_like(gt3D_uncropped))
 
-        # Prepare image for this label: crop around center of points supplied
-        # Load in points for this image and change to a mask to be usable by torchio for cropping/padding
-        points_list_uncropped, points_labels = points_dict[img_name][label][args.dim + 'D']
-        points_mask = np.zeros(shape = image_uncropped.shape) 
-        points_mask[*points_list_uncropped.T] = 1
+            if torch.any(gt3D_binary) == False:
+                raise RuntimeError(f'Image {img_name} has an empty ground truth segmentation for {organ}')
 
-        subject = tio.Subject(
-            image = tio.ScalarImage(tensor = torch.from_numpy(image_uncropped).permute(2,1,0).unsqueeze(0)), # add channel dimension to everything, and permute to x,y,z orientation
-            points_mask = tio.LabelMap(tensor = torch.from_numpy(points_mask).permute(2,1,0).float().unsqueeze(0)),
-            label = tio.LabelMap(tensor = torch.from_numpy(label).permute(2,1,0).unsqueeze(0))
-        )
-        
-        pad_crop_params = getCroppingParams(subject, 'label', (args.crop_size, args.crop_size, args.crop_size))
+            # Prepare image for this label: crop around center of points supplied
+            # Load in points for this image and change to a mask to be usable by torchio for cropping/padding
+            points_list_uncropped, points_labels = points_dict[img_name][label][str(args.dim) + 'D']
+            points_mask = np.zeros(shape = image_uncropped.shape[1:]) # skip batch dimension
+            points_mask[*points_list_uncropped.T] = 1
 
-        transform=tio.Compose(infer_transform)
-        subject = transform(subject)
+            subject = tio.Subject(
+                image = tio.ScalarImage(tensor = image_uncropped.permute(0,3,2,1)), # permute to x,y,z orientation
+                points_mask = tio.LabelMap(tensor = torch.from_numpy(points_mask).unsqueeze(0).permute(0,3,2,1).float()), # add batch dimension for points mask. The others have it from the data loader.
+                label = tio.LabelMap(tensor = gt3D_binary.permute(0,3,2,1))
+            )
+            
+            pad_crop_params = getCroppingParams(subject, mask_name, (args.crop_size, args.crop_size, args.crop_size))
 
-        image3D, gt3D = subject.image.data, subject.label.data
+            transform = tio.Compose(infer_transform)
+            subject = transform(subject)
 
-        points_list = transformPoints(points_list, pad_crop_params[0], pad_crop_params[1])
+            image3D, gt3D = subject.image.data.unsqueeze(1), subject.label.data.unsqueeze(1) # Add channel dimension
+            points_list = transformPoints(points_list_uncropped, pad_crop_params[0], pad_crop_params[1])
 
-        sz = image3D.size()
-        if(sz[2]<args.crop_size or sz[3]<args.crop_size or sz[4]<args.crop_size):
-            print("[ERROR] wrong size", sz, "for", img_name)
-        
-        if(args.dim==3):
-            seg_mask_list, pred_list_inverse_transformed, points, labels, iou_list, dice_list = finetune_model_predict3D(
-                image3D, gt3D, sam_model_tune, device=device, 
-                interactive=args.interactive, points_list = points_list, points_labels=points_labels, num_clicks=args.num_clicks, 
-                pad_crop_params = pad_crop_params, prev_masks=None)
-        elif(args.dim==2):
-            seg_mask_list, points, labels, iou_list, dice_list = finetune_model_predict2D(
-                image3D, gt3D, sam_model_tune, device=device, target_size=args.image_size,
-                click_method=args.point_method, num_clicks=args.num_clicks, 
-                prev_masks=None)
+            sz = image3D.size()
+            if(sz[2]<args.crop_size or sz[3]<args.crop_size or sz[4]<args.crop_size):
+                print("[ERROR] wrong size", sz, "for", img_name)
+            
+            if(args.dim==3):
+                seg_mask_list, pred_list_inverse_transformed, points, labels, iou_list, dice_list = finetune_model_predict3D(
+                    image3D, gt3D, sam_model_tune, device=device, 
+                    interactive=args.interactive, points_list = points_list, points_labels=points_labels, num_clicks=args.num_clicks, 
+                    pad_crop_params = pad_crop_params, prev_masks=None)
+            elif(args.dim==2):
+                seg_mask_list, points, labels, iou_list, dice_list = finetune_model_predict2D(
+                    image3D, gt3D, sam_model_tune, device=device, target_size=args.image_size,
+                    click_method=args.point_method, num_clicks=args.num_clicks, 
+                    prev_masks=None)
+
+            points_restored = detransformPoints(np.array(points), pad_crop_params[0], pad_crop_params[1])
+
+            # Store points used
+            pt_info = dict(points=points_restored.tolist(), labels=labels)
+            pt_path = os.path.join(results_path, organ, img_name).replace(".nii.gz", f"_{organ}_pt.pkl")
+            pickle.dump(pt_info, open(pt_path, "wb"))
+
+            # Write segmentation masks to disk
+            for idx, pred3D in enumerate(seg_mask_list):
+                out = sitk.GetImageFromArray(pred3D)
+                sitk.WriteImage(out, os.path.join(results_path, organ, img_name.replace(".nii.gz", f"_pred_{organ}_old{idx}.nii.gz")))
+
+            # Testing: Write new ones too to compare with
+            for idx, pred3D in enumerate(pred_list_inverse_transformed):
+                out = sitk.GetImageFromArray(pred3D.transpose(2,1,0)) # change from numpy zyx to sitk xyz
+                sitk.WriteImage(out, os.path.join(results_path, organ, img_name).replace(".nii.gz", f"_pred_{organ}_trans{idx}.nii.gz"))
 
 
-        points_restored = detransformPoints(np.array(points), pad_crop_params[0].numpy(), pad_crop_params[1].numpy())
-
-        # Store points used
-        pt_info = dict(points=points_restored.tolist(), labels=labels)
-        pt_path=os.path.join(vis_root, os.path.basename(img_name[0]).replace(".nii.gz", "_pt.pkl"))
-        pickle.dump(pt_info, open(pt_path, "wb"))
-
-        # Write segmentation masks to disk
-        for idx, pred3D in enumerate(seg_mask_list):
-            out = sitk.GetImageFromArray(pred3D)
-            sitk.WriteImage(out, os.path.join(vis_root, os.path.basename(img_name[0]).replace(".nii.gz", f"_pred_old{idx}.nii.gz")))
-
-        # Testing: Write new ones too to compare with
-        for idx, pred3D in enumerate(pred_list_inverse_transformed):
-            out = sitk.GetImageFromArray(pred3D.transpose(2,1,0)) # change from numpy zyx to sitk xyz
-            sitk.WriteImage(out, os.path.join(vis_root, os.path.basename(img_name[0]).replace(".nii.gz", f"_pred_trans{idx}.nii.gz")))
-
-
-        # Store Dice for later access
-        print(f'Dice list by number of clicks: {dice_list}')
-        cur_dice_dict = OrderedDict()
-        for i, dice in enumerate(dice_list):
-            cur_dice_dict[f'{i}'] = dice
-        out_dice_all[img_name[0]] = cur_dice_dict
+            # Store Dice for later access
+            print(f'{img_name} Dice list by number of clicks ({organ}): {dice_list}')
+            cur_dice_dict = OrderedDict()
+            for i, dice in enumerate(dice_list):
+                cur_dice_dict[f'{i}'] = dice
+            out_dice_all[img_name][organ] = cur_dice_dict
 
     # Write results
-    os.makedirs(args.eval_dir, exist_ok = True)
-    results_file = os.path.abspath(os.path.join(args.eval_dir, 'eval_res.json'))
+    results_file = os.path.abspath(os.path.join(results_path, 'eval_res_from_inference.json'))
 
     print("Save results to", results_file)
     with open(results_file, 'w') as f:
         json.dump(out_dice_all, f, indent=4)
 
-    # TESTING: Added to track DICE scores for presentation. Sorry for ugly script, I wanted the json file to be human readable
+    # TESTING: Added to track DICE scores for presentation. Sorry for ugly script, I wanted the json file to be human readable. Only works for datasets with one entry for now (pt_info accessed)
     if args.multi_results_name:
         out = {args.seed:{
                 'points': pt_info['points'],
@@ -575,7 +564,7 @@ if __name__ == "__main__":
             }
         }
 
-        multi_run_file = os.path.join(args.eval_dir, args.multi_results_name + '.json')
+        multi_run_file = os.path.join(results_path, args.multi_results_name + '.json')
 
         # Read in existing data,
         if os.path.exists(multi_run_file):
