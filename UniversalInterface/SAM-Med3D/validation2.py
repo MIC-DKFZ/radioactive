@@ -31,10 +31,11 @@ parser.add_argument('--crop_size', type=int, default=128)
 parser.add_argument('--device', type=str, default='cuda')
 parser.add_argument('-mt', '--model_type', type=str, default='vit_b_ori')
 parser.add_argument('-nc', '--num_clicks', type=int, default=5)
-parser.add_argument('-i', '--interactive', action='store_true')
+parser.add_argument('-i', '--interactive', action='store_true') # Use interactive points
 parser.add_argument('-l', '--label_crop', action='store_true') # Crop around ground truth
 parser.add_argument('-dt', '--data_type', type=str, default='Ts')
 
+parser.add_argument('-pm', '--point_method', type=str, default='default')
 parser.add_argument('--threshold', type=int, default=0)
 parser.add_argument('--dim', type=int, default=3)
 parser.add_argument('--split_idx', type=int, default=0)
@@ -43,6 +44,9 @@ parser.add_argument('--ft2d', action='store_true', default=False)
 parser.add_argument('--seed', type=int, default=2023)
 
 args = parser.parse_args()
+
+def round_user(x):
+    return(int(np.ceil(x)) if x%0.5 == 0 else int(np.round(x))) # Need this for manual downsampling
 
 SEED = args.seed
 print("set seed as", SEED)
@@ -128,48 +132,36 @@ def repixel_value(arr, is_seg=False):
         new_arr = (arr - min_val) / (max_val - min_val + 1e-10) * 255.
     return new_arr
 
-def random_point_sampling(mask, get_point = 1):
-    if isinstance(mask, torch.Tensor):
-        mask = mask.numpy()
-    fg_coords = np.argwhere(mask == 1)[:,::-1]
-    bg_coords = np.argwhere(mask == 0)[:,::-1]
+#endregion
+    
+def get_next_click2D_interactive(true_masks, pred_masks):
+    fn_masks = torch.logical_and(true_masks, torch.logical_not(pred_masks))
+    fp_masks = torch.logical_and(torch.logical_not(true_masks), pred_masks)
+    mask_to_sample = torch.logical_or(fn_masks, fp_masks).cpu().numpy()
 
-    fg_size = len(fg_coords)
-    bg_size = len(bg_coords)
+    misclassed_points = np.argwhere(mask_to_sample == 1)[:,::-1]
+    index = np.random.randint(len(misclassed_points))
+    pt = misclassed_points[index]
+    la = torch.Tensor([1]).to(torch.int64) if(true_masks[pt[1], pt[0]]) else torch.Tensor([0]).to(torch.int64)
+    pt, la = torch.as_tensor([pt.tolist()], dtype=torch.float), torch.as_tensor([la], dtype=torch.int)
+    pt, la = pt[None].to(device), la[None].to(device)
 
-    if get_point == 1:
-        if fg_size > 0:
-            index = np.random.randint(fg_size)
-            fg_coord = fg_coords[index]
-            label = 1
-        else:
-            index = np.random.randint(bg_size)
-            fg_coord = bg_coords[index]
-            label = 0
-        return torch.as_tensor([fg_coord.tolist()], dtype=torch.float), torch.as_tensor([label], dtype=torch.int)
-    else:
-        num_fg = get_point // 2
-        num_bg = get_point - num_fg
-        fg_indices = np.random.choice(fg_size, size=num_fg, replace=True)
-        bg_indices = np.random.choice(bg_size, size=num_bg, replace=True)
-        fg_coords = fg_coords[fg_indices]
-        bg_coords = bg_coords[bg_indices]
-        coords = np.concatenate([fg_coords, bg_coords], axis=0)
-        labels = np.concatenate([np.ones(num_fg), np.zeros(num_bg)]).astype(int)
-        indices = np.random.permutation(get_point)
-        coords, labels = torch.as_tensor(coords[indices], dtype=torch.float), torch.as_tensor(labels[indices], dtype=torch.int)
-        return coords, labels
+    return(pt, la)
 
-def finetune_model_predict2D(img3D, gt3D, sam_model_tune, target_size=256, device='cuda', num_clicks=1, prev_masks=None):
+def finetune_model_predict2D(img3D, gt3D, sam_model_tune, device='cuda', interactive = True, points_list = None, points_labels = None, target_size=256, click_method='random',  num_clicks=1, prev_masks=None):
     pred_list = []
+    pred_list_inverse_transformed = []
     iou_list = []
     dice_list = []
 
     slice_mask_list = defaultdict(list)
 
+    orig_width, orig_height = img3D.shape[2], img3D.shape[3]
+
     img3D = torch.repeat_interleave(img3D, repeats=3, dim=1) # 1 channel -> 3 channel (align to RGB)
     
     click_points = []
+    click_points_recovered = [] # TESTING
     click_labels = []
     for slice_idx in tqdm(range(img3D.size(-1)), desc="transverse slices", leave=False):
         img2D, gt2D = repixel_value(img3D[..., slice_idx]), gt3D[..., slice_idx]
@@ -180,51 +172,86 @@ def finetune_model_predict2D(img3D, gt3D, sam_model_tune, target_size=256, devic
                 slice_mask_list[iter].append(empty_result)
             continue
 
+        prompt_idxs = [idx for (idx, [x,y,z]) in enumerate(points_list) if z == slice_idx]
+        slice_points = [points_list[i][:-1] for i in prompt_idxs] # omit z coordinate: not necessary in 2D
+        slice_labels = [points_labels[i] for i in prompt_idxs]
+
         img2D = F.interpolate(img2D, (target_size, target_size), mode="bilinear", align_corners=False)
         gt2D = F.interpolate(gt2D.float(), (target_size, target_size), mode="nearest").int()
-        
+        slice_points_resized = [[round_user((p[0]+0.5)/orig_width * target_size), 
+                                 round_user((p[1]+0.5)/orig_height * target_size)] for p in slice_points] # Is this an acceptable way to do this?
+
         img2D, gt2D = img2D.to(device), gt2D.to(device)
         img2D = (img2D - img2D.mean()) / img2D.std()
 
         with torch.no_grad():
             image_embeddings = sam_model_tune.image_encoder(img2D.float())
 
-        points_co, points_la = torch.zeros(1,0,2).to(device), torch.zeros(1,0).to(device)
+        points_co, points_la = torch.zeros(1,0,2).to(device), torch.zeros(1,0).to(device) # Creates empty tensors to later append points to
         low_res_masks = None
         gt_semantic_seg = gt2D[0, 0].to(device)
         true_masks = (gt_semantic_seg > 0)
-        for iter in range(num_clicks):
+        for num_click in range(num_clicks):
             if(low_res_masks==None):
                 pred_masks = torch.zeros_like(true_masks).to(device)
             else:
                 pred_masks = (prev_masks[0, 0] > 0.0).to(device) 
-            fn_masks = torch.logical_and(true_masks, torch.logical_not(pred_masks))
-            fp_masks = torch.logical_and(torch.logical_not(true_masks), pred_masks)
-            mask_to_sample = torch.logical_or(fn_masks, fp_masks)
-            new_points_co, _ = random_point_sampling(mask_to_sample.cpu(), get_point=1)
-            new_points_la = torch.Tensor([1]).to(torch.int64) if(true_masks[new_points_co[0,1].int(), new_points_co[0,0].int()]) else torch.Tensor([0]).to(torch.int64)
-            new_points_co, new_points_la = new_points_co[None].to(device), new_points_la[None].to(device)
-            points_co = torch.cat([points_co, new_points_co],dim=1)
-            points_la = torch.cat([points_la, new_points_la],dim=1)
+            
+            if(num_click==0 or interactive == False):
+                new_pt, new_lab = torch.tensor(slice_points_resized[num_click]).flip(dims=[0]), torch.tensor(slice_labels[num_click]) 
+                lab_check = torch.Tensor([1]).to(torch.int64) if(true_masks[new_pt[1].int().item(), new_pt[0].int().item()]) else torch.Tensor([0]).to(torch.int64)
+                if lab_check != new_lab: 
+                    print(f'TESTING labels: {new_pt, lab_check, new_lab}')
+                new_pt, new_lab = new_pt.unsqueeze(0).unsqueeze(0).to(device), new_lab.unsqueeze(0).unsqueeze(0).to(device) # add batch and number of points dimensions
+            else:
+                new_pt, new_lab = get_next_click2D_interactive(true_masks, pred_masks)
+            
+            points_co = torch.cat([points_co, new_pt],dim=1)
+            points_la = torch.cat([points_la, new_lab],dim=1)
+
             prev_masks, low_res_masks, iou_predictions = sam_decoder_inference(
                 target_size, points_co, points_la, sam_model_tune, image_embeddings, 
                 mask_inputs = low_res_masks, multimask = True)
-            click_points.append(new_points_co)
-            click_labels.append(new_points_la)
+            
+            # Obtain list of points as triples with slice index
+            new_pt, new_lab = new_pt[0,0].int().tolist(), new_lab[0,0].item()
+            new_pt_recovered = new_pt.copy()
+            new_pt_recovered.reverse()
+            click_points_recovered.append([ round_user((new_pt_recovered[0])/target_size * orig_width - 0.5), 
+                                            round_user((new_pt_recovered[1])/target_size * orig_height - 0.5), 
+                                            slice_idx]) # transform back to (x,y,z) in 128x128x128 coords. Subtract instead of add to invert the prior slice_points_resized transform
+
+            new_pt.append(slice_idx)
+            click_points.append(new_pt)
+            click_labels.append(new_lab)
             
             slice_mask, _ = postprocess_masks(low_res_masks, target_size, (gt3D.size(2), gt3D.size(3)))
-            slice_mask_list[iter].append(slice_mask[..., None]) # append (B, C, H, W, 1)
+            slice_mask_list[num_click].append(slice_mask[..., None]) # append (B, C, H, W, 1)
         
+        #print(f'TESTING: pts, /recovered {slice_points}\n {click_points_recovered}')
+
+        # gt2D = gt3D[..., slice_idx]
+        # lab_check = [1 if gt2D[0,0][p[0], p[1]] else 0 for p in click_points_recovered][-5:]
+        # lab_truths = click_labels[-5:]
+        # pts = click_points[-5:]
+        # pts_recov = click_points_recovered[-5:]
+        # if lab_truths != lab_check:
+        #     print(f'TESTING labs: \norig res{lab_check, pts_recov}\nhigh res{lab_truths, pts}')
+
+
     for iter in range(num_clicks):
         medsam_seg = torch.cat(slice_mask_list[iter], dim=-1).cpu().numpy().squeeze()
         medsam_seg = medsam_seg > sam_model_tune.mask_threshold
         medsam_seg = medsam_seg.astype(np.uint8)
+        # Undo crop/pad transform to get back to original size.
+        medsam_seg_inv = invertCropOrPad(medsam_seg, pad_crop_params[0], pad_crop_params[1])
+        pred_list_inverse_transformed.append(medsam_seg_inv)
 
         pred_list.append(medsam_seg) 
         iou_list.append(round(compute_iou(medsam_seg, gt3D[0][0].detach().cpu().numpy()), 4))
         dice_list.append(round(compute_dice(gt3D[0][0].detach().cpu().numpy().astype(np.uint8), medsam_seg), 4))
 
-    return pred_list, click_points, click_labels, iou_list, dice_list
+    return pred_list, pred_list_inverse_transformed, click_points_recovered, click_labels, iou_list, dice_list
 
 def _crop(image, cropping_params):
 
@@ -506,7 +533,9 @@ if __name__ == "__main__":
             subject = transform(subject)
 
             image3D, gt3D = subject.image.data.unsqueeze(1), subject.label.data.unsqueeze(1) # Add channel dimension
+            points_list2 = np.argwhere(subject.points_mask.data == 1)
             points_list = transformPoints(points_list_uncropped, pad_crop_params[0], pad_crop_params[1])
+
 
             sz = image3D.size()
             if(sz[2]<args.crop_size or sz[3]<args.crop_size or sz[4]<args.crop_size):
@@ -518,24 +547,28 @@ if __name__ == "__main__":
                     interactive=args.interactive, points_list = points_list, points_labels=points_labels, num_clicks=args.num_clicks, 
                     pad_crop_params = pad_crop_params, prev_masks=None)
             elif(args.dim==2):
-                seg_mask_list, points, labels, iou_list, dice_list = finetune_model_predict2D(
-                    image3D, gt3D, sam_model_tune, device=device, target_size=args.image_size,
+                seg_mask_list, pred_list_inverse_transformed, points, labels, iou_list, dice_list = finetune_model_predict2D(
+                    image3D, gt3D, sam_model_tune, device=device, 
+                    interactive=args.interactive, points_list = points_list, points_labels = points_labels, target_size=args.image_size,
                     click_method=args.point_method, num_clicks=args.num_clicks, 
                     prev_masks=None)
 
-            points_restored = detransformPoints(np.array(points), pad_crop_params[0], pad_crop_params[1])
+            points_recovered = detransformPoints(np.array(points), pad_crop_params[0], pad_crop_params[1])
+            points_recovered = points_recovered.tolist()
+
+            
 
             # Store points used
-            pt_info = dict(points=points_restored.tolist(), labels=labels)
+            pt_info = dict(points=points, labels=labels)
             pt_path = os.path.join(results_path, organ, img_name).replace(".nii.gz", f"_{organ}_pt.pkl")
             pickle.dump(pt_info, open(pt_path, "wb"))
 
-            # Write segmentation masks to disk
+            # Write segmentation masks to disk. Outdated, can be removed
             for idx, pred3D in enumerate(seg_mask_list):
                 out = sitk.GetImageFromArray(pred3D)
                 sitk.WriteImage(out, os.path.join(results_path, organ, img_name.replace(".nii.gz", f"_pred_{organ}_old{idx}.nii.gz")))
 
-            # Testing: Write new ones too to compare with
+            # Write segmentation masks to disk
             for idx, pred3D in enumerate(pred_list_inverse_transformed):
                 out = sitk.GetImageFromArray(pred3D.transpose(2,1,0)) # change from numpy zyx to sitk xyz
                 sitk.WriteImage(out, os.path.join(results_path, organ, img_name).replace(".nii.gz", f"_pred_{organ}_trans{idx}.nii.gz"))
@@ -555,7 +588,7 @@ if __name__ == "__main__":
     with open(results_file, 'w') as f:
         json.dump(out_dice_all, f, indent=4)
 
-    # TESTING: Added to track DICE scores for presentation. Sorry for ugly script, I wanted the json file to be human readable. Only works for datasets with one entry for now (pt_info accessed)
+    # TESTING: Added to track Dice scores for presentation. Sorry for ugly script, I wanted the json file to be human readable. Only works for datasets with one entry for now (pt_info accessed)
     if args.multi_results_name:
         out = {args.seed:{
                 'points': pt_info['points'],

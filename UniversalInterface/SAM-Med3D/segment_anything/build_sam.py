@@ -51,6 +51,7 @@ sam_model_registry = {
     "vit_h": build_sam_vit_h,
     "vit_l": build_sam_vit_l,
     "vit_b": build_sam_vit_b,
+    "vit_b_ori": build_sam_vit_b, # Needed to be added to fix the code
 }
 
 
