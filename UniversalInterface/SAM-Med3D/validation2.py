@@ -383,6 +383,7 @@ def finetune_model_predict3D(img3D, gt3D, sam_model_tune, device='cuda', interac
     if prev_masks is None:
         prev_masks = torch.zeros_like(gt3D).to(device)
     low_res_masks = F.interpolate(prev_masks.float(), size=(args.crop_size//4,args.crop_size//4,args.crop_size//4))
+    print(f'TESTING: not in loop {low_res_masks.shape}')
 
     with torch.no_grad():
         image_embedding = sam_model_tune.image_encoder(img3D.to(device)) # (1, 384, 16, 16, 16)
@@ -400,6 +401,8 @@ def finetune_model_predict3D(img3D, gt3D, sam_model_tune, device='cuda', interac
 
             batch_points = batch_points.to(device)
             batch_labels = batch_labels.to(device)  
+
+            print(low_res_masks.shape)
 
             sparse_embeddings, dense_embeddings = sam_model_tune.prompt_encoder(
                 points=[batch_points, batch_labels],
@@ -533,7 +536,7 @@ if __name__ == "__main__":
             subject = transform(subject)
 
             image3D, gt3D = subject.image.data.unsqueeze(1), subject.label.data.unsqueeze(1) # Add channel dimension
-            points_list2 = np.argwhere(subject.points_mask.data == 1)
+            # points_list2 = np.argwhere(subject.points_mask.data == 1) Testing old Method
             points_list = transformPoints(points_list_uncropped, pad_crop_params[0], pad_crop_params[1])
 
 
