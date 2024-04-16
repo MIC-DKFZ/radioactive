@@ -22,7 +22,7 @@ class Boxes2d(Prompt):
         '''
         self.value must be a dictionary with items {slice_number:bounding box for slice}
         '''
-        self.name = 'boundingBox'
+        self.name = 'Boxes2d'
         self.value = value
 
     def get_slices_to_infer(self):
@@ -34,6 +34,9 @@ class Inferer(ABC):
 
     def preprocess_img(self, img):
         '''Any necessary preprocessing steps'''
+        pass
+
+    def preprocess_prompt(self, prompt):
         pass
 
     def postprocess_mask(self, mask):
