@@ -75,3 +75,31 @@ def show_seg(slice_idx, img, gt, segmentation, pts_prompt = None, box_prompt = N
         show_box(box, ax[0])
     plt.show()
     return(compute_dice(seg_2d, gt_2d))
+
+def show_seg_row_major(slice_idx, img, gt, segmentation, pts_prompt = None, box_prompt = None):
+    img_2d = img[slice_idx, ...]
+    gt_2d = gt[slice_idx, ...]
+    seg_2d = segmentation[slice_idx, ...]
+
+    img_2d = (img_2d-img_2d.min())/(img_2d.max()-img_2d.min())
+
+    fig, ax = plt.subplots(1, 2, figsize=(10, 5))
+    ax[0].imshow(img_2d, cmap = 'gray')
+    ax[1].imshow(gt_2d, cmap = 'gray')
+    show_mask(seg_2d, ax[1])
+    ax[1].set_title("Segmentation")
+    ax[0].set_title("Input Image and slice prompts")
+
+    if pts_prompt is not None:
+        coords, _ = pts_prompt.value.values()
+        slice_inds = coords[:,0] == slice_idx
+        slice_coords = coords[slice_inds,1:].T
+        ax[0].plot(slice_coords[1], slice_coords[0], 'ro')
+        ax[1].plot(slice_coords[1], slice_coords[0], 'ro')
+        
+    if box_prompt is not None:
+        box = box_prompt.value[slice_idx]
+        show_box(box, ax[0])
+        show_box(box, ax[1])
+    plt.show()
+    return(compute_dice(seg_2d, gt_2d))

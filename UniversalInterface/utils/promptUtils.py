@@ -85,6 +85,38 @@ def get_pos_clicks2D(gt, n_clicks):
     pos_coords = Points({'coords': pos_coords, 'labels': [1]*len(pos_coords)})
     return(pos_coords)
 
+def get_pos_clicks2D_row_major(gt, n_clicks):
+    volume_fg = np.where(gt==1) # Get foreground indices (formatted as triple of arrays)
+    volume_fg = np.array(volume_fg).T # Reformat to numpy array of shape n_fg_voxels x 3
+    
+    fg_slices = np.unique(volume_fg[:,0]) # Obtain superior axis slices which have foreground before reformating indices
+
+    pos_coords = np.empty(shape = (0,3), dtype = int)
+    warning_zs = [] # track slices without enough foreground/border, if any should exist
+
+    for slice_index in fg_slices:
+        ## Foreground points
+        slice = gt[slice_index,:,:]
+        slice_fg = np.where(slice)
+        slice_fg = np.array(slice_fg).T
+
+        n_fg_pixels = len(slice_fg)
+        if n_fg_pixels >= n_clicks:
+            point_indices = np.random.choice(n_fg_pixels, size = n_clicks, replace = False)
+        else:
+            # In this case, take all foreground pixels and then obtain some duplicate points by sampling with replacement additionally
+            warning_zs.append(f'z = {slice_index}, n foreground = n_fg_pixels')
+            point_indices = np.concatenate([np.arange(n_fg_pixels),
+                                        np.random.choice(n_fg_pixels, size = n_clicks-n_fg_pixels, replace = True)])
+            
+        pos_clicks_slice = slice_fg[point_indices]
+        z_col = np.full((n_clicks,1), slice_index) # create z column to add
+        pos_clicks_slice = np.hstack([z_col, pos_clicks_slice])
+        pos_coords = np.vstack([pos_coords, pos_clicks_slice])
+
+    pos_coords = Points({'coords': pos_coords, 'labels': [1]*len(pos_coords)})
+    return(pos_coords)
+
 def get_bbox3d(mask_volume: np.ndarray):
     """Return 6 coordinates of a 3D bounding box from a given mask.
 
@@ -124,12 +156,39 @@ def get_minimal_boxes(gt, delta_x, delta_y):
     box_dict = {slice_idx: box + np.array([-delta_x, -delta_y, delta_x, delta_y]) for slice_idx, box in box_dict.items()}
     return(Boxes2d(box_dict))
 
-def get_3d_box_for_2d(gt, delta_x, delta_y):
+def get_bbox2d_row_major(mask):
     '''
-    Finds 3d bounding box over the volume and returns it in a 2d prompt
+    Mask must be in row major roder
     '''
-    box_3d = get_bbox3d(gt.transpose(2,1,0)) # Permute to get coords in row major format
-    box_2d = np.concatenate([box_3d[0][-2:], box_3d[1][-2:]])
-    box_2d = box_2d + np.array([-delta_x, -delta_y, delta_x, delta_y])
-    box_dict = {slice_idx: box_2d for slice_idx in range(box_3d[0][2], box_3d[1][2])}
+    i_any = np.any(mask, axis=1)
+    j_any = np.any(mask, axis=(0))
+    i_min, i_max = np.where(i_any)[0][[0, -1]]
+    j_min, j_max = np.where(j_any)[0][[0, -1]]
+    bb_min = np.array([j_min, i_min])
+    bb_max = np.array([j_max, i_max]) + 1
+
+    coord_list = np.concatenate([bb_min, bb_max]) 
+    return coord_list
+
+def get_minimal_boxes_row_major(gt, delta_x, delta_y):
+    '''
+    gt must be in row-major ZYX order.
+    Get bounding boxes of the foreground per slice. delta_x, delta_y enlargen the box
+    in the respective dimensions
+    '''
+    slices_to_infer = np.where(np.any(gt, axis=(1,2))) # index 0 since a tuple of length 1 is returned
+    slices_to_infer = slices_to_infer[0]
+    box_dict = {slice_idx: get_bbox2d_row_major(gt[slice_idx,:,:]) for slice_idx in slices_to_infer} # Transpose to get coords in row-major format
+    box_dict = {slice_idx: box + np.array([-delta_x, -delta_y, delta_x, delta_y]) for slice_idx, box in box_dict.items()}
     return(Boxes2d(box_dict))
+
+# Rework for new row-major order
+# def get_3d_box_for_2d(gt, delta_x, delta_y):
+#     '''
+#     Finds 3d bounding box over the volume and returns it in a 2d prompt
+#     '''
+#     box_3d = get_bbox3d(gt.transpose(2,1,0)) # Permute to get coords in row major format
+#     box_2d = np.concatenate([box_3d[0][-2:], box_3d[1][-2:]])
+#     box_2d = box_2d + np.array([-delta_x, -delta_y, delta_x, delta_y])
+#     box_dict = {slice_idx: box_2d for slice_idx in range(box_3d[0][2], box_3d[1][2])}
+#     return(Boxes2d(box_dict))

@@ -1,13 +1,9 @@
 import torch
 import numpy as np
-import SimpleITK as sitk
-import pickle
-import os
-import SimpleITK as sitk
-import json
 import torch.nn.functional as F
 from tqdm import tqdm
 from typing import TypeVar
+from copy import deepcopy
 
 from utils.base_classes import Points, Inferer, SegmenterWrapper
 
@@ -83,42 +79,44 @@ class SAMInferer(Inferer):
         # Perform slicewise processing and collect back into a volume at the end
         slices_processed = {}
         for slice_idx in slices_to_infer:
-            slice = img[...,slice_idx]
+            slice = img[:, :, slice_idx, ...]
             slice = (slice - slice.min()) / (slice.max() - slice.min() + 1e-10) * 255.
             slice = F.interpolate(slice, (self.target_slice_shape, self.target_slice_shape), mode = 'bilinear', align_corners=False)
             slices_processed[slice_idx] = slice.float()
         
         return(slices_processed)
     
-    def preprocess_points(self, points):
+    def preprocess_points(self, prompt):
         '''
         Preprocessing steps:
             - Modify in line with the volume cropping
             - Modify in line with the interpolation
             - Collect into a dictionary of slice:slice prompt
         '''
-        coords, labs = points.value['coords'], points.value['labels']
-        coords, labs = np.array(coords), np.array(labs)
-
-        # Bring coordinates from native coordinate system to post-crop coordinate system
+        coords = prompt.value['coords']
+        labs = prompt.value['labels']
+        # Bring coordinates from original coordinate system to cropped coordinate system
         coords = prUt.crop_pad_coords(coords, self.crop_params, self.pad_params)
-        slices_to_infer = set(coords[:,2]) # zeroth element of batch (of size one), all triples, z coordinate # Can't use the usual get_slices_to_infer since we've changed the points. Should just modify the prompt and uset he method.
+
+        slices_to_infer = set(coords[:,0]) # zeroth element of batch (of size one), all triples, z coordinate # Can't use the usual get_slices_to_infer since we've changed the points. Should just modify the prompt and uset he method.
 
         # Bring coordinates from post-crop coordinate system to post interpolation coordinate system
-        coords_resized = np.array([[np.round((p[0]+0.5)/self.target_volume_shape * self.target_slice_shape), 
+        coords_resized = np.array([[p[0],
                                     np.round((p[1]+0.5)/self.target_volume_shape * self.target_slice_shape),
-                                    p[2]] for p in coords])
-        
-        coords_resized = coords_resized[:,[1,0,2]] # Transpose x and y for row-major order per slice
-        
-        # add batch dimension
+                                    np.round((p[2]+0.5)/self.target_volume_shape * self.target_slice_shape), 
+                                    ] for p in coords])
+
+        coords_resized = coords_resized[:,[0,2,1]] # Transpose x and y 
+
+        # Convert to torch tensor 
         coords_resized = torch.from_numpy(coords_resized).int()
         labs = torch.tensor(labs)
 
+        # Collate
         preprocessed_points_dict = {}
         for slice_idx in slices_to_infer:
-            slice_coords_mask = (coords_resized[:,-1] == slice_idx)
-            slice_coords, slice_labs = coords_resized[slice_coords_mask, :-1], labs[slice_coords_mask] # Leave out z coordinate in slice_coords
+            slice_coords_mask = (coords_resized[:,0] == slice_idx)
+            slice_coords, slice_labs = coords_resized[slice_coords_mask, 1:], labs[slice_coords_mask] # Leave out z coordinate in slice_coords
             preprocessed_points_dict[slice_idx] = (slice_coords, slice_labs)
 
         return(preprocessed_points_dict, slices_to_infer)
@@ -132,10 +130,11 @@ class SAMInferer(Inferer):
         '''
         # Combine segmented slices into a volume with 0s for non-segmented slices
         segmentation = torch.zeros((self.target_volume_shape, self.target_volume_shape, self.target_volume_shape))
+
         for (z,low_res_mask) in slice_mask_dict.items():
             low_res_mask = low_res_mask.unsqueeze(0).unsqueeze(0) # Include batch and channel dimensions
             slice_mask = F.interpolate(low_res_mask, (self.target_volume_shape, self.target_volume_shape), mode="bilinear", align_corners=False)
-            segmentation[:,:,z] = slice_mask
+            segmentation[z,:,:] = slice_mask
 
         segmentation = (segmentation > self.mask_threshold).numpy()
         segmentation = segmentation.astype(np.uint8)
@@ -148,17 +147,30 @@ class SAMInferer(Inferer):
     def predict(self, img, prompt):
         if not isinstance(prompt, Points):
             raise RuntimeError('Currently only points are supported')
-        
-        self.crop_pad_center = prUt.get_crop_pad_center_from_points(prompt)
-        self.crop_params, self.pad_params = imUt.get_crop_pad_params(img, self.crop_pad_center, (self.target_volume_shape, self.target_volume_shape, self.target_volume_shape))
 
+        prompt = deepcopy(prompt)
+        #prompt.value['coords']=prompt.value['coords'][:,::-1]
+
+        self.crop_pad_center = prUt.get_crop_pad_center_from_points(prompt)
+        
+        #self.crop_pad_center = self.crop_pad_center[::-1]
+        
+        self.crop_params, self.pad_params = imUt.get_crop_pad_params(img, self.crop_pad_center, (self.target_volume_shape, self.target_volume_shape, self.target_volume_shape))
+        
+        
         preprocessed_points_dict, slices_to_infer = self.preprocess_points(prompt)
+        self.preprocessed_points_dict = preprocessed_points_dict
         slices_processed = self.preprocess_img(img, slices_to_infer)
+        self.slices_processed = slices_processed
         
         slice_mask_dict = {}
         for slice_idx in tqdm(slices_to_infer, desc = 'Performing inference on slices'):
             slice = slices_processed[slice_idx]
+            
             slice_coords, slice_labs = preprocessed_points_dict[slice_idx]
+
+            # slice = slice.permute(0,1,3,2)
+            #slice_coords = slice_coords[:,[1,0]]
 
             # Infer
             slice_raw_outputs = self.segmenter(slice = slice.to(self.device), coords = slice_coords.unsqueeze(0).to(self.device), labs = slice_labs.unsqueeze(0).to(self.device)) # Add batch dimensions

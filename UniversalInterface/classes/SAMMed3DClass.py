@@ -100,6 +100,7 @@ class SAMMed3DInferer(Inferer):
         prompt = deepcopy(prompt)
 
         self.crop_pad_center = prUt.get_crop_pad_center_from_points(prompt)
+        self.crop_pad_center = self.crop_pad_center[::-1]
         self.crop_params, self.pad_params = imUt.get_crop_pad_params(img, self.crop_pad_center, self.required_shape)
         prompt = self.preprocess_prompt(prompt, self.crop_params, self.pad_params)
         img = self.preprocess_img(img, self.crop_params, self.pad_params)

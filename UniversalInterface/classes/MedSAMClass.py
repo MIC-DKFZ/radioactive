@@ -7,7 +7,6 @@ from utils.base_classes import SegmenterWrapper, Inferer, Boxes2d, Points
 from tqdm import tqdm
 
 class MedSAMWrapper(SegmenterWrapper):
-    accepted_prompts = [Points]
     def __init__(self, model, device):
         self.device = device
         self.model = model.to(self.device)
@@ -44,7 +43,7 @@ class MedSAMInferer(Inferer):
     def __init__(self, segmenter_wrapper: MedSAMWrapper, device = 'cuda'):
         self.segmenter = segmenter_wrapper
         self.inputs = None
-        self.logit_threshold = 0.5 # Hardcoded
+        self.logit_threshold = 0.5 
         self.device = device
 
     def preprocess_img(self, img, slices_to_infer):
@@ -54,6 +53,7 @@ class MedSAMInferer(Inferer):
         slices_processed = {}
         for slice_idx in slices_to_infer:
             slice = img_new[...,slice_idx]
+            slice = img_new[:, :, slice_idx, :, :]
             slice = (slice - slice.min()) / (slice.max() - slice.min() + 1e-10)
             slice = F.interpolate(slice, (1024,1024), mode = 'bicubic', align_corners=False).clamp(0,1)
             slices_processed[slice_idx] = slice.float()
@@ -73,6 +73,31 @@ class MedSAMInferer(Inferer):
 
             return(slices_to_infer, boxes_processed_dict)
 
+    # def postprocess_slices(self, slice_mask_dict):
+    #     '''
+    #     Postprocessing steps:
+    #         - Combine inferred slices into one volume, interpolating back to the original volume size
+    #         - Turn logits into binary mask
+    #     '''
+    #     # Combine segmented slices into a volume with 0s for non-segmented slices
+        
+    #     segmentation = torch.zeros((self.W, self.H, self.D))
+    #     for (z,low_res_mask) in slice_mask_dict.items():
+
+    #         low_res_mask = low_res_mask.unsqueeze(0).unsqueeze(0) # Include batch and channel dimensions
+    #         low_res_mask = F.interpolate(
+    #             low_res_mask,
+    #             size=(self.H, self.W),
+    #             mode="bilinear",
+    #             align_corners=False,
+    #         )  # (1, 1, gt.shape)
+    #         segmentation[:,:,z] = low_res_mask
+
+    #     segmentation = (segmentation > self.logit_threshold).numpy()
+    #     segmentation = segmentation.astype(np.uint8)
+
+    #     return(segmentation)
+    
     def postprocess_slices(self, slice_mask_dict):
         '''
         Postprocessing steps:
@@ -80,8 +105,7 @@ class MedSAMInferer(Inferer):
             - Turn logits into binary mask
         '''
         # Combine segmented slices into a volume with 0s for non-segmented slices
-        
-        segmentation = torch.zeros((self.W, self.H, self.D))
+        segmentation = torch.zeros((self.D, self.H, self.W))
         for (z,low_res_mask) in slice_mask_dict.items():
 
             low_res_mask = low_res_mask.unsqueeze(0).unsqueeze(0) # Include batch and channel dimensions
@@ -91,7 +115,7 @@ class MedSAMInferer(Inferer):
                 mode="bilinear",
                 align_corners=False,
             )  # (1, 1, gt.shape)
-            segmentation[:,:,z] = low_res_mask
+            segmentation[z,:,:] = low_res_mask
 
         segmentation = (segmentation > self.logit_threshold).numpy()
         segmentation = segmentation.astype(np.uint8)
@@ -101,8 +125,9 @@ class MedSAMInferer(Inferer):
     def predict(self, img, prompt):
         if not isinstance(prompt, Boxes2d):
             raise RuntimeError('Currently only 2d bboxes are supported')
-        
-        self.W, self.H, self.D = img.shape
+         
+        # self.W, self.H, self.D = img.shape
+        self.D, self.H, self.W = img.shape
 
         slices_to_infer, boxes_processed = self.preprocess_prompt(prompt)
         slices_processed = self.preprocess_img(img, slices_to_infer)
@@ -112,6 +137,8 @@ class MedSAMInferer(Inferer):
 
         for slice_idx in tqdm(slices_to_infer, desc = 'Performing inference on slices'):
             slice, box = slices_processed[slice_idx], boxes_processed[slice_idx]
+            #slice = slice.transpose(-1,-2)
+            #box[:,:] = box[:,:,[1,0,3,2]]
             
             with torch.no_grad():
                 slice_logits = self.segmenter(slice.to(self.device), box.to(self.device))
