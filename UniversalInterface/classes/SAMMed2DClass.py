@@ -1,10 +1,12 @@
 import torch
 import numpy as np
 import torch.nn.functional as F
+from copy import deepcopy
+from tqdm import tqdm
 
 from utils.base_classes import SegmenterWrapper, Inferer, Points
 
-from tqdm import tqdm
+
 
 class SAMMed2DWrapper(SegmenterWrapper):
     def __init__(self, model, device):
@@ -65,17 +67,13 @@ class SAMMed2DInferer(Inferer):
         #self.pixel_mean, self.pixel_std = torch.from_numpy(self.pixel_mean), torch.from_numpy(self.pixel_std)
 
     def preprocess_img(self, img, slices_to_infer):
-        img_new = ((img - img.min())/(img.max()-img.min())*255).astype(np.uint8)
-        img_new = torch.from_numpy(img_new).unsqueeze(0).unsqueeze(0) # add batch and channel dimensions
-        img_new = torch.repeat_interleave(img_new, repeats=3, dim=1) # 1 channel -> 3 channels (align to RGB)
-
 
         pixel_mean, pixel_std = self.segmenter.model.pixel_mean.cpu().unsqueeze(0), self.segmenter.model.pixel_std.cpu().unsqueeze(0) # Reshape to include batch dimension for broadcasting
 
 
         slices_processed = {}
         for slice_idx in slices_to_infer:
-            slice = img[...,slice_idx]
+            slice = img[slice_idx, ...]
             slice = torch.from_numpy(slice)
             # Get slice into [0,255] rgb scale
             slice = ((slice-slice.min())/(slice.max()-slice.min() + 1e-6)*255).to(torch.uint8)
@@ -97,26 +95,25 @@ class SAMMed2DInferer(Inferer):
         if isinstance(prompt, Points):
             coords, labs = prompt.value['coords'], prompt.value['labels']
             coords, labs = np.array(coords).astype(float), np.array(labs).astype(float)
+            
 
             # Resize for interpolation
             old_h, old_w = self.original_size
             new_h, new_w = self.new_size
-            coords[:, 0] = coords[:, 0] * (new_w / old_w)
+            coords[:, 2] = coords[:, 2] * (new_w / old_w)
             coords[:, 1] = coords[:, 1] * (new_h / old_h)
 
-            slices_to_infer = set(coords[:,2].astype(int)) # zeroth element of batch (of size one), all triples, z coordinate # Can't use the usual get_slices_to_infer since we've changed the points. Should just modify the prompt and uset he method.
+            slices_to_infer = set(coords[:,0].astype(int)) # zeroth element of batch (of size one), all triples, z coordinate 
+            
+            coords = coords[:,[0,2,1]] # Transpose x and y (image is in row major, so transpose so it's zxy)
 
-            
-            coords = coords[:,[1,0,2]] # Transpose x and y for row-major order per slice
-            
-            # add batch dimension
             coords = torch.from_numpy(coords)
             labs = torch.tensor(labs)
 
             preprocessed_prompts_dict = {}
             for slice_idx in slices_to_infer:
-                slice_coords_mask = (coords[:,-1] == slice_idx)
-                slice_coords, slice_labs = coords[slice_coords_mask, :-1], labs[slice_coords_mask] # Leave out z coordinate in slice_coords
+                slice_coords_mask = (coords[:,0] == slice_idx)
+                slice_coords, slice_labs = coords[slice_coords_mask, 1:], labs[slice_coords_mask] # Leave out z coordinate in slice_coords
                 preprocessed_prompts_dict[slice_idx] = (slice_coords, slice_labs)
 
             return(preprocessed_prompts_dict, slices_to_infer)
@@ -129,8 +126,9 @@ class SAMMed2DInferer(Inferer):
             - Invert crop/pad to get back to original image dimensions
         '''
         # Combine segmented slices into a volume with 0s for non-segmented slices
-        
-        segmentation = torch.zeros((self.W, self.H, self.D))
+    
+
+        segmentation = torch.zeros((self.D, self.H, self.W))
         for (z,low_res_mask) in slice_mask_dict.items():
 
             low_res_mask = low_res_mask # Add batch and channel dimensions
@@ -140,7 +138,7 @@ class SAMMed2DInferer(Inferer):
                 mode="bilinear",
                 align_corners=False,
             )  # (1, 1, gt.shape)
-            segmentation[:,:,z] = low_res_mask
+            segmentation[z,:,:] = low_res_mask
 
         segmentation = (torch.sigmoid(segmentation) > 0.5).numpy()
         segmentation = segmentation.astype(np.uint8)
@@ -151,15 +149,18 @@ class SAMMed2DInferer(Inferer):
         if not isinstance(prompt, Points):
             raise RuntimeError('Currently only points are supported')
         
-        self.W, self.H, self.D = img.shape
+        self.D, self.H, self.W = img.shape
         self.original_size = (self.W, self.H)
         
+        
         preprocessed_prompts_dict, slices_to_infer = self.preprocess_prompt(prompt)
+        
         slices_processed = self.preprocess_img(img, slices_to_infer)
         
         slice_mask_dict = {}
         for slice_idx in tqdm(slices_to_infer, desc = 'Performing inference on slices'):
             slice = slices_processed[slice_idx]
+            
             slice_coords, slice_labs = preprocessed_prompts_dict[slice_idx]
 
             # Infer
@@ -170,3 +171,5 @@ class SAMMed2DInferer(Inferer):
         segmentation = self.postprocess_slices(slice_mask_dict)
 
         return(segmentation)
+    
+

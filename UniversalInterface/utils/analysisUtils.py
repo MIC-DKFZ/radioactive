@@ -88,7 +88,7 @@ def show_seg_row_major(slice_idx, img, gt, segmentation, pts_prompt = None, box_
     ax[1].imshow(gt_2d, cmap = 'gray')
     show_mask(seg_2d, ax[1])
     ax[1].set_title("Segmentation")
-    ax[0].set_title("Input Image and slice prompts")
+    ax[0].set_title("Input Image and Slice Prompts")
 
     if pts_prompt is not None:
         coords, _ = pts_prompt.value.values()
