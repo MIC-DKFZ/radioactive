@@ -1,5 +1,33 @@
 import numpy as np
-import torch
+import nibabel as nib
+
+def read_im_gt(img_path, gt_path, organ_label = None, RAS = False):
+    img, gt = nib.load(img_path), nib.load(gt_path)
+    img_ras, gt_ras = img, gt  # Initialize variables to hold potentially reoriented images
+
+    # Check if gt, image are already in RAS+ 
+    if nib.aff2axcodes(img.affine) != ('R', 'A', 'S'):
+        img_ras = nib.as_closest_canonical(img)
+
+    if nib.aff2axcodes(gt.affine) != ('R', 'A', 'S'):
+        gt_ras = nib.as_closest_canonical(gt)
+
+    img_data = img_ras.get_fdata().astype(np.float32)
+    gt_data = gt_ras.get_fdata().astype(int)
+
+    # Ensure organ is binary
+    if organ_label is None:
+        flat_data = gt_data.ravel()
+        if not np.all( (flat_data == 0) | (flat_data == 1)):
+            raise ValueError('Ground truth is not binary and no foreground label to subset to is specified')
+        
+    else:
+        gt_data = (gt_data == organ_label).astype(int)
+
+    if not RAS:
+        img_data, gt_data = img_data.transpose(2,1,0), gt_data.transpose(2,1,0) # change from RAS to row-major ie xyz to zyx
+    
+    return(img_data, gt_data)
 
 def get_crop_pad_params(img, crop_pad_center, target_shape): # Modified from TorchIO cropOrPad
     subject_shape = img.shape
@@ -43,11 +71,6 @@ def get_crop_pad_params(img, crop_pad_center, target_shape): # Modified from Tor
     cropping_params = np.asarray(cropping, dtype=int)
 
     return cropping_params, padding_params  # type: ignore[return-value]
-
-def binarize(gt, organ, metadata): # TODO: Raise errors for metadata not having labels, labels in the wrong k,v order, and organ not being present
-    organ_label = int(metadata['labels'][organ])
-    gt_binary = torch.where(gt == organ_label, 1, torch.zeros_like(gt))
-    return(gt_binary)
 
 def crop_im(img, cropping_params): # Modified from TorchIO cropOrPad
         low = cropping_params[::2]
