@@ -150,7 +150,8 @@ class SAMMed2DInferer(Inferer):
             raise RuntimeError('Currently only points are supported')
         
         self.D, self.H, self.W = img.shape
-        self.original_size = (self.W, self.H)
+        #self.original_size = (self.W, self.H)
+        self.original_size = (self.H, self.W)
         
         
         preprocessed_prompts_dict, slices_to_infer = self.preprocess_prompt(prompt)

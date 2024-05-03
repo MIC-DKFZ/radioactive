@@ -98,7 +98,13 @@ class SAMInferer(Inferer):
         # Bring coordinates from original coordinate system to cropped coordinate system
         coords = prUt.crop_pad_coords(coords, self.crop_params, self.pad_params)
 
-        slices_to_infer = set(coords[:,0]) # zeroth element of batch (of size one), all triples, z coordinate # Can't use the usual get_slices_to_infer since we've changed the points. Should just modify the prompt and uset he method.
+        keep_inds = [i for i, c in enumerate(coords) if 0 <= c[0] < 128]
+        if len(keep_inds) != len(coords):
+            print('Warning: foreground does not fit into crop') # Perhaps raise more formally
+            coords = coords[keep_inds]
+            labs = [labs[i] for i in keep_inds]
+
+        slices_to_infer = set(coords[:,0].astype(int)) # zeroth element of batch (of size one), all triples, z coordinate # Can't use the usual get_slices_to_infer since we've changed the points. Should just modify the prompt and use the method.
 
         # Bring coordinates from post-crop coordinate system to post interpolation coordinate system
         coords_resized = np.array([[p[0],

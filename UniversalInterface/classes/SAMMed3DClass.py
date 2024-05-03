@@ -60,6 +60,7 @@ class SAMMed3DInferer(Inferer):
 
     required_shape = (128, 128, 128) # Hard code to match training
     logit_threshold = 0.5
+
     def __init__(self, segmenter_wrapper: SAMMed3DWrapper, device = 'cuda'):
         self.segmenter = segmenter_wrapper
         self.device = device

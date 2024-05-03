@@ -1,5 +1,5 @@
 # Universal Models
-This repository will contain a universal interface for a few segmentation models (listed below) to assess and compare their performances.
+This repository will contain a baselining framework and implementations for a few models to usef or baselining
 
 ## Models
 ### SAM-Adapted

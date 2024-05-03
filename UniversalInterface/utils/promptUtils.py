@@ -225,7 +225,6 @@ def get_nearest_fg_point(point, binary_mask):
 
     return tuple(nearest_fg_point)
   
-    
 def get_largest_CC(segmentation):
     labels = label(segmentation)
     assert( labels.max() != 0 ) # assume at least 1 CC
