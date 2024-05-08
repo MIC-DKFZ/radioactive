@@ -120,13 +120,13 @@ class SAMInferer(Inferer):
         labs = torch.as_tensor(labs, dtype = int)
 
         # Collate
-        preprocessed_points_dict = {}
+        preprocessed_prompts_dict = {}
         for slice_idx in slices_to_infer:
             slice_coords_mask = (coords_resized[:,2] == slice_idx)
             slice_coords, slice_labs = coords_resized[slice_coords_mask, :2], labs[slice_coords_mask] # Leave out z coordinate in slice_coords
-            preprocessed_points_dict[slice_idx] = (slice_coords, slice_labs)
+            preprocessed_prompts_dict[slice_idx] = (slice_coords, slice_labs)
 
-        return(preprocessed_points_dict, slices_to_infer)
+        return(preprocessed_prompts_dict, slices_to_infer)
     
     def postprocess_slices(self, slice_mask_dict):
         '''
@@ -157,8 +157,8 @@ class SAMInferer(Inferer):
     def predict(self, img, prompt):
         if not isinstance(prompt, Points):
             raise RuntimeError('Currently only points are supported')
-
-        prompt = deepcopy(prompt)
+        img, prompt = deepcopy(img), deepcopy(prompt)
+        
         self.D, self.H, self.W = img.shape
         self.original_size = (self.H, self.W) # Used for the transform class, which is taken from the original SAM code, hence the 2D size
         

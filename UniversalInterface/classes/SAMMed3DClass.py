@@ -98,7 +98,7 @@ class SAMMed3DInferer(Inferer):
     def predict(self, img, prompt):
         if not isinstance(prompt, SAMMed3DInferer.supported_prompts):
             raise ValueError(f'Unsupported prompt type: got {type(prompt)}')
-        prompt = deepcopy(prompt)
+        img, prompt = deepcopy(img), deepcopy(prompt)
 
         self.crop_pad_center = prUt.get_crop_pad_center_from_points(prompt)
         self.crop_params, self.pad_params = imUt.get_crop_pad_params(img, self.crop_pad_center, self.required_shape)

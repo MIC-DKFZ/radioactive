@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import torch.nn.functional as F
+from copy import deepcopy
 
 from utils.base_classes import SegmenterWrapper, Inferer, Boxes2d, Points
 
@@ -125,7 +126,7 @@ class MedSAMInferer(Inferer):
     def predict(self, img, prompt):
         if not isinstance(prompt, Boxes2d):
             raise RuntimeError('Currently only 2d bboxes are supported')
-         
+        img, prompt = deepcopy(img), deepcopy(prompt)
         # self.W, self.H, self.D = img.shape
         self.D, self.H, self.W = img.shape
 
