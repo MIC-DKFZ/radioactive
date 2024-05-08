@@ -35,7 +35,7 @@ class MedSAMWrapper(SegmenterWrapper):
             )
 
         low_res_pred = torch.sigmoid(low_res_logits)  # (1, 1, 256, 256)
-        low_res_pred = low_res_pred.squeeze().cpu()  # (256, 256)
+        # low_res_pred = low_res_pred.squeeze().cpu()  # (256, 256)
         return low_res_pred
     
 class MedSAMInferer(Inferer):
@@ -73,31 +73,6 @@ class MedSAMInferer(Inferer):
                 boxes_processed_dict[slice_idx] = box_torch
 
             return(slices_to_infer, boxes_processed_dict)
-
-    # def postprocess_slices(self, slice_mask_dict):
-    #     '''
-    #     Postprocessing steps:
-    #         - Combine inferred slices into one volume, interpolating back to the original volume size
-    #         - Turn logits into binary mask
-    #     '''
-    #     # Combine segmented slices into a volume with 0s for non-segmented slices
-        
-    #     segmentation = torch.zeros((self.W, self.H, self.D))
-    #     for (z,low_res_mask) in slice_mask_dict.items():
-
-    #         low_res_mask = low_res_mask.unsqueeze(0).unsqueeze(0) # Include batch and channel dimensions
-    #         low_res_mask = F.interpolate(
-    #             low_res_mask,
-    #             size=(self.H, self.W),
-    #             mode="bilinear",
-    #             align_corners=False,
-    #         )  # (1, 1, gt.shape)
-    #         segmentation[:,:,z] = low_res_mask
-
-    #     segmentation = (segmentation > self.logit_threshold).numpy()
-    #     segmentation = segmentation.astype(np.uint8)
-
-    #     return(segmentation)
     
     def postprocess_slices(self, slice_mask_dict):
         '''
@@ -109,7 +84,6 @@ class MedSAMInferer(Inferer):
         segmentation = torch.zeros((self.D, self.H, self.W))
         for (z,low_res_mask) in slice_mask_dict.items():
 
-            low_res_mask = low_res_mask.unsqueeze(0).unsqueeze(0) # Include batch and channel dimensions
             low_res_mask = F.interpolate(
                 low_res_mask,
                 size=(self.H, self.W),
