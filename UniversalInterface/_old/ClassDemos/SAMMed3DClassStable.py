@@ -63,14 +63,12 @@ class SAMMed3DInferer(Inferer):
         self.offset_mode = 'center'
 
     def preprocess_into_patches(self, img3D, prompt = None, cheat = False, gt = None):
-        img3D = torch.from_numpy(img3D)
-
         subject = tio.Subject(
-            image = tio.ScalarImage(tensor=img3D.unsqueeze(0))
+            image = tio.ScalarImage(tensor=img3D)
         )
         
         if cheat:
-            subject.add_image(tio.LabelMap(tensor = gt.unsqueeze(0),
+            subject.add_image(tio.LabelMap(tensor = gt,
                                         affine = subject.image.affine,),
                             image_name = 'label')
             crop_transform = tio.CropOrPad(mask_name='label', 
@@ -78,7 +76,7 @@ class SAMMed3DInferer(Inferer):
         else:
             coords = prompt.value['coords']
             crop_mask = torch.zeros_like(subject.image.data)
-            crop_mask[0, *coords.T] = 1 # Include initial 0 for the additional N axis
+            crop_mask[*coords.T] = 1 # Include initial 0 for the additional N axis
             subject.add_image(tio.LabelMap(tensor = crop_mask,
                                             affine = subject.image.affine),
                                 image_name="crop_mask")
@@ -92,7 +90,7 @@ class SAMMed3DInferer(Inferer):
         if(cropping_params is None): cropping_params = (0,0,0,0,0,0)
         if(padding_params is None): padding_params = (0,0,0,0,0,0)
         roi_shape = crop_transform.target_shape
-        vol_bound = (0, img3D.shape[0], 0, img3D.shape[1], 0, img3D.shape[2])
+        vol_bound = (0, img3D.shape[1], 0, img3D.shape[2], 0, img3D.shape[3])
         center_oob_ori_roi=(
             cropping_params[0]-padding_params[0], cropping_params[0]+roi_shape[0]-padding_params[0],
             cropping_params[2]-padding_params[2], cropping_params[2]+roi_shape[1]-padding_params[2],
@@ -168,7 +166,7 @@ class SAMMed3DInferer(Inferer):
         labels = pts_prompt.value['labels']
 
         point_offset = np.array([self.padding_params[0]-self.cropping_params[0], self.padding_params[2]-self.cropping_params[2], self.padding_params[4]-self.cropping_params[4]])
-        coords = coords + point_offset
+        coords = coords[...,1:] + point_offset
         
         batch_points = torch.from_numpy(coords).unsqueeze(0).to(self.device)
         batch_labels = torch.tensor(labels).unsqueeze(0).to(self.device)
@@ -189,7 +187,7 @@ class SAMMed3DInferer(Inferer):
 
         prompt = self.preprocess_prompt(prompt)
 
-        pred  = np.zeros_like(img, dtype=np.uint8)
+        pred  = torch.zeros_like(img).numpy()
         for (image3D_patch, pos3D) in patch_list:
             image3D_patch = image3D_patch.to(self.device)
             logits = self.segmenter(image3D_patch, prompt)
@@ -199,4 +197,4 @@ class SAMMed3DInferer(Inferer):
             seg_mask_roi = seg_mask[..., pred_roi[0]:pred_roi[1], pred_roi[2]:pred_roi[3], pred_roi[4]:pred_roi[5]]
             pred[..., ori_roi[0]:ori_roi[1], ori_roi[2]:ori_roi[3], ori_roi[4]:ori_roi[5]] = seg_mask_roi
         
-        return(pred)
+        return(pred.astype(np.uint8))

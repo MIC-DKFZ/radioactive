@@ -15,14 +15,12 @@ def load_sam(checkpoint_path, device, image_size = 1024):
     return(model)
 
 def load_medsam(checkpoint_path, device = 'cuda'):
-    device = 'cuda'
     medsam_model = registry_medsam['vit_b'](checkpoint=checkpoint_path)
     medsam_model = medsam_model.to(device)
     medsam_model.eval()
     return(medsam_model)
 
 def load_sammed2d(checkpoint_path, device = 'cuda'):
-    device = 'cuda'
     args = Namespace()
     args.image_size = 256
     args.encoder_adapter = True
@@ -32,13 +30,12 @@ def load_sammed2d(checkpoint_path, device = 'cuda'):
     return(model)
 
 def load_sammed3d(checkpoint_path, device = 'cuda'):
-    device = 'cuda'
-    checkpoint_path = '/home/t722s/Desktop/UniversalModels/TrainedModels/sam_med3d.pth'
 
     sam_model_tune = build_sam3D_vit_b_ori(checkpoint=None)
     if checkpoint_path is not None:
         model_dict = torch.load(checkpoint_path, map_location=device)
         state_dict = model_dict['model_state_dict']
         sam_model_tune.load_state_dict(state_dict)
+        sam_model_tune.to(device)
 
     return (sam_model_tune)
