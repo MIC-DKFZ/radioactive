@@ -9,6 +9,7 @@ from utils.base_classes import Points, Inferer, SegmenterWrapper
 
 import utils.promptUtils as prUt
 import utils.imageUtils as imUt
+from utils.transforms import ResizeLongestSide
 
 SAM = TypeVar('SAM')
 
@@ -61,32 +62,45 @@ class SAMInferer(Inferer):
         self.mask_threshold = 0 
         self.device = device
 
+        self.pixel_mean = segmenter_wrapper.model.pixel_mean
+        self.pixel_std = segmenter_wrapper.model.pixel_std
+        self.transform = ResizeLongestSide(segmenter_wrapper.model.image_encoder.img_size)
+        self.input_size = None
+
     def preprocess_img(self, img, slices_to_infer):
         '''
         Preprocessing steps
-            - crop and pad to target_volume_shape
-            - Cast to torch tensor with batch size 1 and rgb channels, ie shape [1, 3, *target_volume_shape]
-            - Slice based processing:
-                - standardise per slice (no masking)
-                - interpolate to target_slice_shape
+            - Extract slice, resize (maintaining aspect ratio), pad edges
         '''
-        img = imUt.crop_im(img, self.crop_params) 
-        img = imUt.pad_im(img, self.pad_params)
+        img = np.repeat(img[..., None], repeats=3, axis=-1) #  Add channel dimension and make RGB giving DHWC
 
-        img = torch.from_numpy(img).unsqueeze(0).unsqueeze(0) # add batch and channel dimensions
-        img = torch.repeat_interleave(img, repeats=3, dim=1) # 1 channel -> 3 channels (align to RGB)
 
         # Perform slicewise processing and collect back into a volume at the end
         slices_processed = {}
         for slice_idx in slices_to_infer:
-            slice = img[:, :, slice_idx, ...]
-            slice = (slice - slice.min()) / (slice.max() - slice.min() + 1e-10) * 255.
-            slice = F.interpolate(slice, (self.target_slice_shape, self.target_slice_shape), mode = 'bilinear', align_corners=False)
-            slices_processed[slice_idx] = slice.float()
-        
+            
+            slice = img[slice_idx, ...] # Now HWC
+            slice = ((slice - slice.min()) / (slice.max() - slice.min() + 1e-10) * 255.).astype(np.uint8) # Change to 0-255 scale
+            slice = self.transform.apply_image(slice)            
+            slice = torch.as_tensor(slice, device = self.device)
+            slice = slice.permute(2, 0, 1).contiguous()[None, :, :, :] # Change to BCHW, make memory storage contiguous.
+
+            if self.input_size is None:
+                self.input_size = tuple(slice.shape[-2:]) # Store the input size pre-padding if it hasn't been done yet
+            
+            
+            slice = slice = (slice - self.pixel_mean) / self.pixel_std
+
+            h, w = slice.shape[-2:]
+            padh = self.segmenter.model.image_encoder.img_size - h
+            padw = self.segmenter.model.image_encoder.img_size - w
+            slice = F.pad(slice, (0, padw, 0, padh))
+
+            slices_processed[slice_idx] = slice
+        self.slices_processed = slices_processed
         return(slices_processed)
     
-    def preprocess_points(self, prompt):
+    def preprocess_prompt(self, prompt):
         '''
         Preprocessing steps:
             - Modify in line with the volume cropping
@@ -95,76 +109,61 @@ class SAMInferer(Inferer):
         '''
         coords = prompt.value['coords']
         labs = prompt.value['labels']
-        # Bring coordinates from original coordinate system to cropped coordinate system
-        coords = prUt.crop_pad_coords(coords, self.crop_params, self.pad_params)
 
-        keep_inds = [i for i, c in enumerate(coords) if 0 <= c[0] < 128]
-        if len(keep_inds) != len(coords):
-            print('Warning: foreground does not fit into crop') # Perhaps raise more formally
-            coords = coords[keep_inds]
-            labs = [labs[i] for i in keep_inds]
+        slices_to_infer = set(coords[:,0].astype(int)) # zeroth element of batch (of size one), all triples, z coordinate 
 
-        slices_to_infer = set(coords[:,0].astype(int)) # zeroth element of batch (of size one), all triples, z coordinate # Can't use the usual get_slices_to_infer since we've changed the points. Should just modify the prompt and use the method.
-
-        # Bring coordinates from post-crop coordinate system to post interpolation coordinate system
-        coords_resized = np.array([[p[0],
-                                    np.round((p[1]+0.5)/self.target_volume_shape * self.target_slice_shape),
-                                    np.round((p[2]+0.5)/self.target_volume_shape * self.target_slice_shape), 
-                                    ] for p in coords])
-
-        coords_resized = coords_resized[:,[0,2,1]] # Transpose x and y 
+        coords = coords[:,[2,1,0]] # Change from ZYX to XYZ
+        coords_resized = self.transform.apply_coords(coords, (self.H, self.W))
 
         # Convert to torch tensor 
-        coords_resized = torch.from_numpy(coords_resized).int()
-        labs = torch.tensor(labs)
+        coords_resized = torch.as_tensor(coords_resized, dtype=torch.float)
+        labs = torch.as_tensor(labs, dtype = int)
 
         # Collate
-        preprocessed_points_dict = {}
+        preprocessed_prompts_dict = {}
         for slice_idx in slices_to_infer:
-            slice_coords_mask = (coords_resized[:,0] == slice_idx)
-            slice_coords, slice_labs = coords_resized[slice_coords_mask, 1:], labs[slice_coords_mask] # Leave out z coordinate in slice_coords
-            preprocessed_points_dict[slice_idx] = (slice_coords, slice_labs)
+            slice_coords_mask = (coords_resized[:,2] == slice_idx)
+            slice_coords, slice_labs = coords_resized[slice_coords_mask, :2], labs[slice_coords_mask] # Leave out z coordinate in slice_coords
+            preprocessed_prompts_dict[slice_idx] = (slice_coords, slice_labs)
 
-        return(preprocessed_points_dict, slices_to_infer)
+        return(preprocessed_prompts_dict, slices_to_infer)
     
     def postprocess_slices(self, slice_mask_dict):
         '''
         Postprocessing steps:
-            - Combine inferred slices into one volume, interpolating back to the cropped volume size (ie 128,128,128)
-            - Turn logits into binary mask
-            - Invert crop/pad to get back to original image dimensions
+            - TODO
         '''
         # Combine segmented slices into a volume with 0s for non-segmented slices
-        segmentation = torch.zeros((self.target_volume_shape, self.target_volume_shape, self.target_volume_shape))
+        segmentation = torch.zeros((self.D, self.H, self.W))
 
         for (z,low_res_mask) in slice_mask_dict.items():
             low_res_mask = low_res_mask.unsqueeze(0).unsqueeze(0) # Include batch and channel dimensions
-            slice_mask = F.interpolate(low_res_mask, (self.target_volume_shape, self.target_volume_shape), mode="bilinear", align_corners=False)
+            mask_input_res = F.interpolate(
+                low_res_mask,
+                (self.segmenter.model.image_encoder.img_size, self.segmenter.model.image_encoder.img_size),
+                mode="bilinear",
+                align_corners=False,
+            )   # upscale low res mask to mask as in input_size
+            mask_input_res = mask_input_res[..., : self.input_size[0], : self.input_size[1]] # Crop out any segmentations created in the padded sections
+            slice_mask = F.interpolate(mask_input_res, self.original_size, mode="bilinear", align_corners=False)
+        
             segmentation[z,:,:] = slice_mask
 
         segmentation = (segmentation > self.mask_threshold).numpy()
         segmentation = segmentation.astype(np.uint8)
-
-        # Bring patch 
-        segmentation = imUt.invert_crop_or_pad(segmentation, self.crop_params, self.pad_params)
 
         return(segmentation)
  
     def predict(self, img, prompt):
         if not isinstance(prompt, Points):
             raise RuntimeError('Currently only points are supported')
-
-        prompt = deepcopy(prompt)
-        #prompt.value['coords']=prompt.value['coords'][:,::-1]
-
-        self.crop_pad_center = prUt.get_crop_pad_center_from_points(prompt)
+        img, prompt = deepcopy(img), deepcopy(prompt)
         
-        #self.crop_pad_center = self.crop_pad_center[::-1]
-        
-        self.crop_params, self.pad_params = imUt.get_crop_pad_params(img, self.crop_pad_center, (self.target_volume_shape, self.target_volume_shape, self.target_volume_shape))
+        self.D, self.H, self.W = img.shape
+        self.original_size = (self.H, self.W) # Used for the transform class, which is taken from the original SAM code, hence the 2D size
         
         
-        preprocessed_points_dict, slices_to_infer = self.preprocess_points(prompt)
+        preprocessed_points_dict, slices_to_infer = self.preprocess_prompt(prompt)
         self.preprocessed_points_dict = preprocessed_points_dict
         slices_processed = self.preprocess_img(img, slices_to_infer)
         self.slices_processed = slices_processed

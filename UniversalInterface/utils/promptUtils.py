@@ -191,7 +191,7 @@ def get_minimal_boxes_row_major(gt, delta_x, delta_y):
     box_dict = {slice_idx: box + np.array([-delta_x, -delta_y, delta_x, delta_y]) for slice_idx, box in box_dict.items()}
     return(Boxes2d(box_dict))
 
-# Rework for new row-major order
+# Have to rework for new row-major order
 # def get_3d_box_for_2d(gt, delta_x, delta_y):
 #     '''
 #     Finds 3d bounding box over the volume and returns it in a 2d prompt

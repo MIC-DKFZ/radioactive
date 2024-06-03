@@ -5,7 +5,7 @@ from tqdm import tqdm
 from typing import TypeVar
 from copy import deepcopy
 
-from utils.base_classes import Points, Inferer, SegmenterWrapper
+from utils.base_classes import Points, Boxes2d, Inferer, SegmenterWrapper
 
 import utils.promptUtils as prUt
 import utils.imageUtils as imUt
@@ -24,15 +24,15 @@ class SAMWrapper(SegmenterWrapper):
         self.device = device
         self.model = model.to(self.device)
 
-    def __call__(self, slice, coords, labs):
+    def __call__(self, slice, points, box, mask):
         with torch.no_grad():
-            image_embedding = self.model.image_encoder(slice)
+            image_embedding = self.model.image_encoder(slice.to(self.device))
 
         with torch.no_grad():
             sparse_embeddings, dense_embeddings = self.model.prompt_encoder(
-                points=(coords, labs),
-                boxes=None,
-                masks=None,
+                points=points,
+                boxes=box,
+                masks=mask,
             )
 
             low_res_masks, iou_predictions = self.model.mask_decoder(
@@ -107,26 +107,41 @@ class SAMInferer(Inferer):
             - Modify in line with the interpolation
             - Collect into a dictionary of slice:slice prompt
         '''
-        coords = prompt.value['coords']
-        labs = prompt.value['labels']
+        if isinstance(prompt, Points):
+            coords = prompt.value['coords']
+            labs = prompt.value['labels']
 
-        slices_to_infer = set(coords[:,0].astype(int)) # zeroth element of batch (of size one), all triples, z coordinate 
+            slices_to_infer = set(coords[:,0].astype(int)) # zeroth element of batch (of size one), all triples, z coordinate 
 
-        coords = coords[:,[2,1,0]] # Change from ZYX to XYZ
-        coords_resized = self.transform.apply_coords(coords, (self.H, self.W))
+            coords = coords[:,[2,1,0]] # Change from ZYX to XYZ
+            coords_resized = self.transform.apply_coords(coords, (self.H, self.W))
 
-        # Convert to torch tensor 
-        coords_resized = torch.as_tensor(coords_resized, dtype=torch.float)
-        labs = torch.as_tensor(labs, dtype = int)
+            # Convert to torch tensor 
+            coords_resized = torch.as_tensor(coords_resized, dtype=torch.float)
+            labs = torch.as_tensor(labs, dtype = int)
 
-        # Collate
-        preprocessed_prompts_dict = {}
-        for slice_idx in slices_to_infer:
-            slice_coords_mask = (coords_resized[:,2] == slice_idx)
-            slice_coords, slice_labs = coords_resized[slice_coords_mask, :2], labs[slice_coords_mask] # Leave out z coordinate in slice_coords
-            preprocessed_prompts_dict[slice_idx] = (slice_coords, slice_labs)
+            # Collate
+            preprocessed_prompts_dict = {}
+            for slice_idx in slices_to_infer:
+                slice_coords_mask = (coords_resized[:,2] == slice_idx)
+                slice_coords, slice_labs = coords_resized[slice_coords_mask, :2], labs[slice_coords_mask] # Leave out z coordinate in slice_coords
+                slice_coords, slice_labs = slice_coords.unsqueeze(0), slice_labs.unsqueeze(0)
+                preprocessed_prompts_dict[slice_idx] = (slice_coords.to(self.device), slice_labs.to(self.device))
 
-        return(preprocessed_prompts_dict, slices_to_infer)
+            return(preprocessed_prompts_dict, slices_to_infer)
+        
+        if isinstance(prompt, Boxes2d):
+            slices_to_infer = prompt.get_slices_to_infer()
+            preprocessed_prompts_dict = {}
+            for slice_index, box in prompt.value.items():
+                box = np.array(box)
+                box = self.transform.apply_boxes(box, (self.H, self.W))
+                box = torch.as_tensor(box, dtype=torch.float, device=self.device)
+                box = box[None, :]
+                preprocessed_prompts_dict[slice_index] = box.to(self.device)
+            
+            return(preprocessed_prompts_dict, slices_to_infer)
+
     
     def postprocess_slices(self, slice_mask_dict):
         '''
@@ -155,30 +170,34 @@ class SAMInferer(Inferer):
         return(segmentation)
  
     def predict(self, img, prompt):
-        if not isinstance(prompt, Points):
-            raise RuntimeError('Currently only points are supported')
+        if isinstance(prompt, Points):
+            self.prompt_type = 'point'
+        elif isinstance(prompt, Boxes2d):
+            self.prompt_type = 'box'
+        else:
+            raise RuntimeError(f'Currently only points and boxes are supported, got {type(prompt)}')
         img, prompt = deepcopy(img), deepcopy(prompt)
         
         self.D, self.H, self.W = img.shape
         self.original_size = (self.H, self.W) # Used for the transform class, which is taken from the original SAM code, hence the 2D size
         
-        
-        preprocessed_points_dict, slices_to_infer = self.preprocess_prompt(prompt)
-        self.preprocessed_points_dict = preprocessed_points_dict
+        preprocessed_prompt_dict, slices_to_infer = self.preprocess_prompt(prompt)
+        self.preprocessed_prompt_dict = preprocessed_prompt_dict
         slices_processed = self.preprocess_img(img, slices_to_infer)
         self.slices_processed = slices_processed
         
         slice_mask_dict = {}
         for slice_idx in tqdm(slices_to_infer, desc = 'Performing inference on slices'):
             slice = slices_processed[slice_idx]
-            
-            slice_coords, slice_labs = preprocessed_points_dict[slice_idx]
+            slice_points, slice_box, slice_mask = None, None, None # Initialise to empty
+            if self.prompt_type == 'point':
+                slice_points = preprocessed_prompt_dict[slice_idx]
 
-            # slice = slice.permute(0,1,3,2)
-            #slice_coords = slice_coords[:,[1,0]]
+            if self.prompt_type == 'box':
+                slice_box = preprocessed_prompt_dict[slice_idx]
 
             # Infer
-            slice_raw_outputs = self.segmenter(slice = slice.to(self.device), coords = slice_coords.unsqueeze(0).to(self.device), labs = slice_labs.unsqueeze(0).to(self.device)) # Add batch dimensions
+            slice_raw_outputs = self.segmenter(slice = slice, points = slice_points, box=slice_box, mask = slice_mask) # Add batch dimensions
             slice_mask_dict[slice_idx] = slice_raw_outputs
             
         segmentation = self.postprocess_slices(slice_mask_dict)
