@@ -53,14 +53,14 @@ class SAMWrapper(SegmenterWrapper):
 class SAMInferer(Inferer):
     supported_prompts = (Points,) # TODO: Implement boxes
 
-    def __init__(self, segmenter_wrapper: SAMWrapper, device = 'cuda'):
+    def __init__(self, segmenter_wrapper: SAMWrapper):
         self.segmenter = segmenter_wrapper
         self.prev_mask = None
         self.target_volume_shape = 128 # Hardcoded to match training
         self.target_slice_shape = 256 # Hardcoded to match training
         self.inputs = None
         self.mask_threshold = 0 
-        self.device = device
+        self.device = segmenter_wrapper.device
 
         self.pixel_mean = segmenter_wrapper.model.pixel_mean
         self.pixel_std = segmenter_wrapper.model.pixel_std

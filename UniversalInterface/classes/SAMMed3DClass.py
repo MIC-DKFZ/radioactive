@@ -56,9 +56,9 @@ class SAMMed3DInferer(Inferer):
     supported_prompts = supported_prompts = (Points,)
     required_shape = (128, 128, 128) # Hard code to match training
 
-    def __init__(self, segmenter_wrapper: SAMMed3DWrapper, device = 'cuda', use_only_first_point = False):
+    def __init__(self, segmenter_wrapper: SAMMed3DWrapper, use_only_first_point = False):
         self.segmenter = segmenter_wrapper
-        self.device = device
+        self.device = segmenter_wrapper.device
         self.use_only_first_point = use_only_first_point
         self.offset_mode = 'center'
 

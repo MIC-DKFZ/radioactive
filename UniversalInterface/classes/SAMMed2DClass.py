@@ -9,8 +9,6 @@ import cv2
 
 from utils.base_classes import SegmenterWrapper, Inferer, Points
 
-
-
 class SAMMed2DWrapper(SegmenterWrapper):
     def __init__(self, model, device):
         self.device = device
@@ -40,11 +38,11 @@ class SAMMed2DWrapper(SegmenterWrapper):
             dense_prompt_embeddings=dense_embeddings,
             multimask_output=self.multimask_output,
         )
-        # self.image_embedding = img_embedding
-        # self.sparse_embeddings = sparse_embeddings
-        # self.dense_prompt_embeddings = dense_embeddings
-        # self.low_res_masks = low_res_masks
-        # self.iou_predictions = iou_predictions
+        self.image_embedding = img_embedding
+        self.sparse_embeddings = sparse_embeddings
+        self.dense_prompt_embeddings = dense_embeddings
+        self.low_res_masks = low_res_masks
+        self.iou_predictions = iou_predictions
 
         if self.multimask_output:
             max_values, max_indexs = torch.max(iou_predictions, dim=1)
@@ -60,17 +58,19 @@ class SAMMed2DWrapper(SegmenterWrapper):
 class SAMMed2DInferer(Inferer):
     supported_prompts = (Points,)
 
-    def __init__(self, segmenter_wrapper: SAMMed2DWrapper, device = 'cuda'):
+    def __init__(self, segmenter_wrapper: SAMMed2DWrapper):
         self.segmenter = segmenter_wrapper
         self.inputs = None
         self.logit_threshold = 0 # Hardcoded
-        self.device = device
+        self.device = segmenter_wrapper.device
         self.new_size = (self.segmenter.model.image_encoder.img_size, self.segmenter.model.image_encoder.img_size)
 
-        if self.segmenter.model.pixel_mean.device.type == 'cuda':
-            self.pixel_mean, self.pixel_std = self.segmenter.model.pixel_mean.squeeze().cpu().numpy(), self.segmenter.model.pixel_std.squeeze().cpu().numpy()
-        else:
-            self.pixel_mean, self.pixel_std = self.segmenter.model.pixel_mean.numpy(), self.segmenter.model.pixel_std.numpy()
+        self.pixel_mean, self.pixel_std = self.segmenter.model.pixel_mean.squeeze().cpu().numpy(), self.segmenter.model.pixel_std.squeeze().cpu().numpy()
+
+        # if self.segmenter.model.pixel_mean.device.type == 'cuda':
+        #     self.pixel_mean, self.pixel_std = self.segmenter.model.pixel_mean.squeeze().cpu().numpy(), self.segmenter.model.pixel_std.squeeze().cpu().numpy()
+        # else:
+        #     self.pixel_mean, self.pixel_std = self.segmenter.model.pixel_mean.squeeze().numpy(), self.segmenter.model.pixel_std.squeeze().numpy()
 
         #self.pixel_mean, self.pixel_std = torch.from_numpy(self.pixel_mean), torch.from_numpy(self.pixel_std)
 
@@ -150,16 +150,10 @@ class SAMMed2DInferer(Inferer):
 
         segmentation = torch.zeros((self.D, self.H, self.W))
         for (z,low_res_mask) in slice_mask_dict.items():
-            masks = F.interpolate(low_res_mask, self.new_size, mode="bilinear", align_corners=False)
-            masks = F.interpolate(masks, self.original_size, mode="bilinear", align_corners=False) # upscale in two steps to match original code
+            mask = F.interpolate(low_res_mask, self.new_size, mode="bilinear", align_corners=False)
+            mask = F.interpolate(mask, self.original_size, mode="bilinear", align_corners=False) # upscale in two steps to match original code
 
-            low_res_mask = F.interpolate(
-                low_res_mask,
-                size=(self.H, self.W),
-                mode="bilinear",
-                align_corners=False,
-            )  # (1, 1, gt.shape)
-            segmentation[z,:,:] = low_res_mask
+            segmentation[z,:,:] = mask
         segmentation = (torch.sigmoid(segmentation) > 0.5).numpy()
         segmentation = segmentation.astype(np.uint8)
 

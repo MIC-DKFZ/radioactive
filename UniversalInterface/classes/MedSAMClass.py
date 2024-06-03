@@ -41,11 +41,11 @@ class MedSAMWrapper(SegmenterWrapper):
 class MedSAMInferer(Inferer):
     supported_prompts = (Boxes2d,)
 
-    def __init__(self, segmenter_wrapper: MedSAMWrapper, device = 'cuda'):
+    def __init__(self, segmenter_wrapper: MedSAMWrapper):
         self.segmenter = segmenter_wrapper
         self.inputs = None
         self.logit_threshold = 0.5 
-        self.device = device
+        self.device = segmenter_wrapper.device
 
     def preprocess_img(self, img, slices_to_infer):
         img_new = torch.from_numpy(img).unsqueeze(0).unsqueeze(0) # add batch and channel dimensions
