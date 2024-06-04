@@ -182,9 +182,9 @@ class SAMInferer(Inferer):
         self.original_size = (self.H, self.W) # Used for the transform class, which is taken from the original SAM code, hence the 2D size
         
         preprocessed_prompt_dict, slices_to_infer = self.preprocess_prompt(prompt)
-        self.preprocessed_prompt_dict = preprocessed_prompt_dict
+        self.preprocessed_prompt_dict = preprocessed_prompt_dict # For debugging
         slices_processed = self.preprocess_img(img, slices_to_infer)
-        self.slices_processed = slices_processed
+        self.slices_processed = slices_processed # For debugging
         
         slice_mask_dict = {}
         for slice_idx in tqdm(slices_to_infer, desc = 'Performing inference on slices'):

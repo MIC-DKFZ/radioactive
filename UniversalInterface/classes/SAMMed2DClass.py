@@ -7,7 +7,7 @@ from albumentations.pytorch import ToTensorV2
 import albumentations as A
 import cv2
 
-from utils.base_classes import SegmenterWrapper, Inferer, Points
+from utils.base_classes import SegmenterWrapper, Inferer, Points, Boxes2d
 
 class SAMMed2DWrapper(SegmenterWrapper):
     def __init__(self, model, device):
@@ -16,44 +16,71 @@ class SAMMed2DWrapper(SegmenterWrapper):
         self.multimask_output = True # Hardcoded to match defaults from original
     
     @torch.no_grad()
-    def __call__(
-        self,
-        slice,
-        point_coords,
-        point_labels
-    ):
-        img_embedding = self.model.image_encoder(slice.to(self.device))
-        
+    def __call__(self, slice, points, box, mask):
+
+        image_embedding = self.model.image_encoder(slice.to(self.device))
+
+
         sparse_embeddings, dense_embeddings = self.model.prompt_encoder(
-            points=(point_coords, point_labels),
-            boxes=None,
-            masks=None,
+            points=points,
+            boxes=box,
+            masks=mask,
         )
 
-        # Predict masks
         low_res_masks, iou_predictions = self.model.mask_decoder(
-            image_embeddings=img_embedding,
-            image_pe=self.model.prompt_encoder.get_dense_pe(),
+            image_embeddings = image_embedding,
+            image_pe = self.model.prompt_encoder.get_dense_pe(),
             sparse_prompt_embeddings=sparse_embeddings,
             dense_prompt_embeddings=dense_embeddings,
-            multimask_output=self.multimask_output,
+            multimask_output=True,
         )
-        self.image_embedding = img_embedding
-        self.sparse_embeddings = sparse_embeddings
-        self.dense_prompt_embeddings = dense_embeddings
-        self.low_res_masks = low_res_masks
-        self.iou_predictions = iou_predictions
-
+        
         if self.multimask_output:
             max_values, max_indexs = torch.max(iou_predictions, dim=1)
             max_values = max_values.unsqueeze(1)
             iou_predictions = max_values
             low_res_masks = low_res_masks[:, max_indexs]
+        
+        return(low_res_masks)
+    
+    # def __call__(
+    #     self,
+    #     slice,
+    #     point_coords,
+    #     point_labels
+    # ):
+    #     img_embedding = self.model.image_encoder(slice.to(self.device))
+        
+    #     sparse_embeddings, dense_embeddings = self.model.prompt_encoder(
+    #         points=(point_coords, point_labels),
+    #         boxes=None,
+    #         masks=None,
+    #     )
 
-        # Upscale the masks to the original image resolution
+    #     # Predict masks
+    #     low_res_masks, iou_predictions = self.model.mask_decoder(
+    #         image_embeddings=img_embedding,
+    #         image_pe=self.model.prompt_encoder.get_dense_pe(),
+    #         sparse_prompt_embeddings=sparse_embeddings,
+    #         dense_prompt_embeddings=dense_embeddings,
+    #         multimask_output=self.multimask_output,
+    #     )
+    #     self.image_embedding = img_embedding
+    #     self.sparse_embeddings = sparse_embeddings
+    #     self.dense_prompt_embeddings = dense_embeddings
+    #     self.low_res_masks = low_res_masks
+    #     self.iou_predictions = iou_predictions
+
+    #     if self.multimask_output:
+    #         max_values, max_indexs = torch.max(iou_predictions, dim=1)
+    #         max_values = max_values.unsqueeze(1)
+    #         iou_predictions = max_values
+    #         low_res_masks = low_res_masks[:, max_indexs]
+
+    #     # Upscale the masks to the original image resolution
     
         
-        return low_res_masks
+    #     return low_res_masks
     
 class SAMMed2DInferer(Inferer):
     supported_prompts = (Points,)
@@ -90,6 +117,10 @@ class SAMMed2DInferer(Inferer):
 
         return coords
 
+    def apply_boxes(self, boxes, original_size, new_size): # Copied over from SAM-Med2D predictor_sammed.py
+        boxes = self.apply_coords(boxes.reshape(-1, 2, 2), original_size, new_size)
+        return boxes.reshape(-1, 4)
+
     def preprocess_img(self, img, slices_to_infer):
         img = np.repeat(img[..., None], repeats=3, axis=-1) #  Add channel dimension and make RGB giving DHWC
         
@@ -102,9 +133,8 @@ class SAMMed2DInferer(Inferer):
 
             transforms = self.transforms(self.new_size)
             augments = transforms(image=slice)
-            slice = augments['image'][None, :, :, :]
+            slice = augments['image'][None, :, :, :] # Add batch dimension
 
-            # slice = F.interpolate(slice, (256,256), mode = 'nearest') # Note the nearest neighbours interpolation! Follows from official repo SAM-MEd2D/segment_anything/predictor_sammed.py transforms
             slices_processed[slice_idx] = slice.float()
 
         return(slices_processed)
@@ -116,6 +146,7 @@ class SAMMed2DInferer(Inferer):
             - Modify in line with the interpolation
             - Collect into a dictionary of slice:slice prompt
         '''
+
         if isinstance(prompt, Points):
             coords, labs = prompt.value['coords'], prompt.value['labels']
             coords, labs = np.array(coords).astype(float), np.array(labs).astype(int)
@@ -134,10 +165,24 @@ class SAMMed2DInferer(Inferer):
             for slice_idx in slices_to_infer:
                 slice_coords_mask = (coords_resized[:,2] == slice_idx)
                 slice_coords, slice_labs = coords_resized[slice_coords_mask, :2], labs[slice_coords_mask] # Leave out z coordinate in slice_coords
+                slice_coords, slice_labs = slice_coords.unsqueeze(0).to(self.device), slice_labs.unsqueeze(0).to(self.device) # add batch dimension, move to device.
                 preprocessed_prompts_dict[slice_idx] = (slice_coords, slice_labs)
 
-            return(preprocessed_prompts_dict, slices_to_infer)
+        if isinstance(prompt, Boxes2d):
+            slices_to_infer = prompt.get_slices_to_infer()
+            preprocessed_prompts_dict = {}
+            for slice_index, box in prompt.value.items():
+                box = np.array(box)
+                box = self.apply_boxes(box, (self.H, self.W), self.new_size)
+                box = torch.as_tensor(box, dtype=torch.float, device=self.device)
+                box = box[None, :]
+                preprocessed_prompts_dict[slice_index] = box.to(self.device)
+            
+        return(preprocessed_prompts_dict, slices_to_infer)
         
+
+
+
     def postprocess_slices(self, slice_mask_dict):
         '''
         Postprocessing steps:
@@ -160,29 +205,42 @@ class SAMMed2DInferer(Inferer):
         return(segmentation)
     
     def predict(self, img, prompt):
-        if not isinstance(prompt, Points):
-            raise RuntimeError('Currently only points are supported')
+        if isinstance(prompt, Points):
+            self.prompt_type = 'point'
+        elif isinstance(prompt, Boxes2d):
+            self.prompt_type = 'box'
+        else:
+            raise RuntimeError(f'Currently only points and boxes are supported, got {type(prompt)}')
         img, prompt = deepcopy(img), deepcopy(prompt)
         
         self.D, self.H, self.W = img.shape
         self.original_size = (self.H, self.W)
         
         
-        preprocessed_prompts_dict, slices_to_infer = self.preprocess_prompt(prompt)
-        
+        preprocessed_prompt_dict, slices_to_infer = self.preprocess_prompt(prompt)
         slices_processed = self.preprocess_img(img, slices_to_infer)
-        # self.slices_processed, self.preprocessed_prompts_dict = slices_processed, preprocessed_prompts_dict
+
+        # self.slices_processed, self.preprocessed_prompts_dict = slices_processed, preprocessed_prompts_dict # debugging
         slice_mask_dict = {}
         for slice_idx in tqdm(slices_to_infer, desc = 'Performing inference on slices'):
             slice = slices_processed[slice_idx]
+            slice_points, slice_box, slice_mask = None, None, None # Initialise to empty
+            if self.prompt_type == 'point':
+                slice_points = preprocessed_prompt_dict[slice_idx]
+
+            if self.prompt_type == 'box':
+                slice_box = preprocessed_prompt_dict[slice_idx]
             
-            slice_coords, slice_labs = preprocessed_prompts_dict[slice_idx]
+            # slice_coords, slice_labs = preprocessed_prompt_dict[slice_idx]
 
             # Infer
-            slice_raw_outputs = self.segmenter(slice.to(self.device), slice_coords.unsqueeze(0).to(self.device), slice_labs.unsqueeze(0).to(self.device)) # Add batch dimensions
-            # self.low_res_masks = slice_raw_outputs
-
+            slice_raw_outputs = self.segmenter(slice = slice, points = slice_points, box=slice_box, mask = slice_mask) # Add batch dimensions
             slice_mask_dict[slice_idx] = slice_raw_outputs
+            
+            # slice_raw_outputs = self.segmenter(slice.to(self.device), slice_coords.unsqueeze(0).to(self.device), slice_labs.unsqueeze(0).to(self.device)) # Add batch dimensions
+            # # self.low_res_masks = slice_raw_outputs
+
+            # slice_mask_dict[slice_idx] = slice_raw_outputs
             # self.slice_mask_dict = slice_mask_dict
             
         segmentation = self.postprocess_slices(slice_mask_dict)
