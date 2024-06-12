@@ -1,7 +1,7 @@
-import matplotlib.pyplot as plt
-import torch
 import numpy as np
-from skimage.morphology import dilation, ball, disk
+from copy import deepcopy
+from tqdm import tqdm
+from skimage.morphology import dilation, ball
 from .base_classes import Points, Boxes2d
 from skimage.measure import label
 from scipy.spatial import cKDTree
@@ -144,6 +144,13 @@ def get_bbox3d(mask_volume: np.ndarray):
     bb_max = np.array([i_max, j_max, k_max]) + 1
     return bb_min, bb_max
 
+def get_bbox3d_sliced(mask_volume: np.ndarray):
+    bbox3d = get_bbox3d(mask_volume)
+
+    slices_to_infer = np.arange(bbox3d[0][0], bbox3d[1][0]) # gt is in ZYX format, so index 0 are the axial slices
+    box_dict = {slice_idx: np.array((bbox3d[0][2], bbox3d[0][1], bbox3d[1][2], bbox3d[1][1])) for slice_idx in slices_to_infer} # reverse order to get xyxy
+    return(Boxes2d(box_dict))
+
 def get_bbox2d(mask):
     i_any = np.any(mask, axis=1)
     j_any = np.any(mask, axis=0)
@@ -152,7 +159,7 @@ def get_bbox2d(mask):
     bb_min = np.array([i_min, j_min])
     bb_max = np.array([i_max, j_max]) + 1
 
-    coord_list = np.concatenate([bb_min, bb_max]) # SAM wants row-major y0, x0, y1, x1
+    coord_list = np.concatenate([bb_min, bb_max]) # SAM wants row-major x0y0x1y1
     return coord_list
 
 def get_minimal_boxes(gt, delta_x, delta_y):
@@ -185,9 +192,8 @@ def get_minimal_boxes_row_major(gt, delta_x, delta_y):
     Get bounding boxes of the foreground per slice. delta_x, delta_y enlargen the box
     in the respective dimensions
     '''
-    slices_to_infer = np.where(np.any(gt, axis=(1,2))) # index 0 since a tuple of length 1 is returned
-    slices_to_infer = slices_to_infer[0]
-    box_dict = {slice_idx: get_bbox2d_row_major(gt[slice_idx,:,:]) for slice_idx in slices_to_infer} # Transpose to get coords in row-major format
+    slices_to_infer = np.where(np.any(gt, axis=(1,2)))[0] # index 0 since a tuple of length 1 is returned
+    box_dict = {slice_idx: get_bbox2d_row_major(gt[slice_idx,:,:]) for slice_idx in slices_to_infer} 
     box_dict = {slice_idx: box + np.array([-delta_x, -delta_y, delta_x, delta_y]) for slice_idx, box in box_dict.items()}
     return(Boxes2d(box_dict))
 
@@ -290,3 +296,161 @@ def get_fg_points_from_cc_centers(gt, n):
         corrected_points[i] = np.concatenate([[z], nearest_fg_point])    
 
     return(corrected_points)
+
+def get_fg_points_from_slice(slice, n_clicks):
+    slice_fg = np.where(slice)
+    slice_fg = np.array(slice_fg).T
+
+    n_fg_pixels = len(slice_fg)
+    if n_fg_pixels >= n_clicks:
+        point_indices = np.random.choice(n_fg_pixels, size = n_clicks, replace = False)
+    else:
+        # In this case, take all foreground pixels and then obtain some duplicate points by sampling with replacement additionally
+        point_indices = np.concatenate([np.arange(n_fg_pixels),
+                                    np.random.choice(n_fg_pixels, size = n_clicks-n_fg_pixels, replace = True)])
+        
+    pos_clicks_slice = slice_fg[point_indices]
+    return(pos_clicks_slice)
+
+def get_seed_point(gt, n_clicks):
+    slices_to_infer = np.where(np.any(gt, axis=(1,2)))[0]
+    middle_idx = np.median(slices_to_infer).astype(int)
+
+    pos_clicks_slice = get_fg_points_from_slice(gt[middle_idx], n_clicks)
+
+    ## Put coords in 3d context
+    z_col = np.full((n_clicks,1), middle_idx) 
+    pos_coords = np.hstack([z_col, pos_clicks_slice])
+    pts_prompt = Points({'coords': pos_coords, 'labels': [1]*n_clicks})
+
+    return(pts_prompt)
+
+def point_propagation(inferer, img, seed_prompt, slices_to_infer, seed, n_clicks=5):
+    verbose_state = inferer.verbose # Make inferer not verbose for this experiment
+    inferer.verbose = False
+    np.random.seed(seed)
+    
+    # Initialise segmentation to store total result
+    segmentation = np.zeros_like(img).astype(np.uint8)
+
+    pts_prompt = deepcopy(seed_prompt)
+    middle_idx = np.median(slices_to_infer).astype(int)
+
+    # Infer middle slice
+    slice_seg = inferer.predict(img, pts_prompt)
+    segmentation[middle_idx] = slice_seg[middle_idx]
+
+    # Downwards branch
+    ## Modify seed prompt to exist one axial slice down
+    z_col = np.full((n_clicks,1), middle_idx-1) 
+    pos_coords = np.hstack([z_col, seed_prompt.value['coords'][:,1:]])
+    pts_prompt = Points({'coords': pos_coords, 'labels': [1]*n_clicks})
+
+
+    for slice_idx in tqdm(range(middle_idx-1, slices_to_infer.min()-1, -1), desc = 'Propagating down'):
+        slice_seg = inferer.predict(img, pts_prompt)
+
+        segmentation[slice_idx] = slice_seg[slice_idx]
+
+        if np.all(segmentation[slice_idx] == 0): # Terminate if no fg generated
+            print('Terminate early: no fg generated')
+            break
+
+        # Update prompt
+        pos_clicks_slice = get_fg_points_from_slice(slice_seg[slice_idx], n_clicks)
+
+        # Put coords in 3d context
+        z_col = np.full((n_clicks,1), slice_idx-1) # create z column to add. Note slice_idx-1: these are the prompts for the next slice down
+        pos_coords = np.hstack([z_col, pos_clicks_slice])
+        pts_prompt = Points({'coords': pos_coords, 'labels': [1]*n_clicks})
+
+    # Upward branch
+    ## Modify seed prompt to exist one axial slice up
+    z_col = np.full((n_clicks,1), middle_idx+1) 
+    pos_coords = np.hstack([z_col, seed_prompt.value['coords'][:,1:]])
+    pts_prompt = Points({'coords': pos_coords, 'labels': [1]*n_clicks})
+
+
+    for slice_idx in tqdm(range(middle_idx+1, slices_to_infer.max()+1), desc = 'Propagating up'):
+        slice_seg = inferer.predict(img, pts_prompt)
+
+        segmentation[slice_idx] = slice_seg[slice_idx]
+
+        if np.all(segmentation[slice_idx] == 0): # Terminate if no fg generated
+            print('Terminate early: no fg generated')
+            break
+
+        # Update prompt
+        pos_clicks_slice = get_fg_points_from_slice(slice_seg[slice_idx], n_clicks)
+
+        # Put coords in 3d context
+        z_col = np.full((n_clicks,1), slice_idx+1) # create z column to add. Note slice_idx+1: these are the prompts for the next slice up
+        pos_coords = np.hstack([z_col, pos_clicks_slice])
+        pts_prompt = Points({'coords': pos_coords, 'labels': [1]*n_clicks})
+
+    inferer.verbose = verbose_state # Return inferer verbosity to initial state
+
+    return(segmentation)
+
+
+def get_seed_box(gt):
+    slices_to_infer = np.where(np.any(gt, axis=(1,2)))[0]
+    middle_idx = np.median(slices_to_infer).astype(int)
+
+    bbox_slice = get_bbox2d_row_major(gt[middle_idx])
+    box_dict = {middle_idx: bbox_slice}
+
+    return(Boxes2d(box_dict))
+
+def box_propagation(inferer, img, seed_box, slices_to_infer):
+    verbose_state = inferer.verbose # Make inferer not verbose for this experiment
+    inferer.verbose = False
+
+    # Initialise segmentation to store total result
+    segmentation = np.zeros_like(img).astype(np.uint8)
+
+    box_prompt = deepcopy(seed_box)
+    middle_idx = np.median(slices_to_infer).astype(int)
+
+    # Infer middle slice
+    slice_seg = inferer.predict(img, box_prompt)
+    segmentation[middle_idx] = slice_seg[middle_idx]
+
+
+    # Downwards branch
+    ## Modify seed prompt to exist one axial slice down
+    box_prompt = Boxes2d({k-1:v for k,v in seed_box.value.items()})
+
+    for slice_idx in tqdm(range(middle_idx-1, slices_to_infer.min()-1, -1), desc = 'Propagating down'):
+        slice_seg = inferer.predict(img, box_prompt)
+
+        segmentation[slice_idx] = slice_seg[slice_idx]
+
+        if np.all(segmentation[slice_idx] == 0): # Terminate if no fg generated
+            print('Terminate early: no fg generated')
+            break
+
+        # Update prompt
+        bbox_slice = get_bbox2d_row_major(segmentation[slice_idx])
+        box_prompt = Boxes2d({slice_idx-1: bbox_slice}) # Notice the -1: this is the prompt for one slice down
+
+    # Upward branch
+    ## Modify seed prompt to exist one axial slice up
+    box_prompt = Boxes2d({k+1:v for k,v in seed_box.value.items()})
+
+
+    for slice_idx in tqdm(range(middle_idx+1, slices_to_infer.max()+1), desc = 'Propagating up'):
+        slice_seg = inferer.predict(img, box_prompt)
+
+        segmentation[slice_idx] = slice_seg[slice_idx]
+
+        if np.all(segmentation[slice_idx] == 0): # Terminate if no fg generated
+            print('Terminate early: no fg generated')
+            break
+
+        # Update prompt
+        bbox_slice = get_bbox2d_row_major(segmentation[slice_idx])
+        box_prompt = Boxes2d({slice_idx+1: bbox_slice}) # Notice the +1: this is the prompt for one slice up
+
+    inferer.verbose = verbose_state # Return inferer verbosity to initial state
+    return(segmentation)

@@ -6,7 +6,9 @@ from .MedSAM_segment_anything import sam_model_registry as registry_medsam
 from .SAMMed2D_segment_anything import sam_model_registry as registry_sammed2d
 from .SAMMed3D_segment_anything.build_sam3D import build_sam3D_vit_b_ori
 
-def load_sam(checkpoint_path, device, image_size = 1024):
+from classes.SAMClass import SAMWrapper, SAMInferer
+
+def load_sam(checkpoint_path, device = 'cuda', image_size = 1024):
     args = Namespace()
     args.image_size = image_size
     args.sam_checkpoint = checkpoint_path
@@ -39,3 +41,13 @@ def load_sammed3d(checkpoint_path, device = 'cuda'):
         sam_model_tune.to(device)
 
     return (sam_model_tune)
+
+def load_sam_inferer(checkpoint_path, device = 'cuda', image_size = 1024):
+    args = Namespace()
+    args.image_size = image_size
+    args.sam_checkpoint = checkpoint_path
+    args.model_type = 'vit_h'
+    model = registry_sam[args.model_type](args).to(device)
+    sam_wrapper = SAMWrapper(model, device)
+    sam_inferer = SAMInferer(sam_wrapper)
+    return(sam_inferer)
