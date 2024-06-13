@@ -94,7 +94,6 @@ class SAMMed2DInferer(Inferer):
 
     def clear_embeddings(self):
         self.image_embeddings_dict = {}
-        print('Embeddings cleared')
 
     def transforms(self, new_size): # Copied over from SAM-Med2D predictor_sammed.py
         Transforms = []
@@ -116,13 +115,13 @@ class SAMMed2DInferer(Inferer):
         boxes = self.apply_coords(boxes.reshape(-1, 2, 2), original_size, new_size)
         return boxes.reshape(-1, 4)
 
-    def preprocess_img(self, img, slices_to_infer):
-        img = np.repeat(img[..., None], repeats=3, axis=-1) #  Add channel dimension and make RGB giving DHWC
-        
+    def preprocess_img(self, img, slices_to_infer):        
         slices_processed = {}
-        for slice_idx in slices_to_infer:
+        for slice_idx in slices_to_infer:            
             slice = img[slice_idx, ...]
-            
+
+            slice = np.repeat(slice[..., None], repeats=3, axis=-1)  # Add channel dimension to make it RGB-like
+
             slice = ((slice-slice.min())/(slice.max()-slice.min() + 1e-6)*255).astype(np.uint8) # Get slice into [0,255] rgb scale
             slice = (slice-self.pixel_mean)/self.pixel_std # normalise
 
@@ -185,14 +184,13 @@ class SAMMed2DInferer(Inferer):
         # Combine segmented slices into a volume with 0s for non-segmented slices
     
 
-        segmentation = torch.zeros((self.D, self.H, self.W))
+        segmentation = np.zeros((self.D, self.H, self.W), dtype=int)
         for (z,low_res_mask) in slice_mask_dict.items():
             mask = F.interpolate(low_res_mask, self.new_size, mode="bilinear", align_corners=False)
             mask = F.interpolate(mask, self.original_size, mode="bilinear", align_corners=False) # upscale in two steps to match original code
 
-            segmentation[z,:,:] = mask
-        segmentation = (torch.sigmoid(segmentation) > 0.5).numpy()
-        segmentation = segmentation.astype(np.uint8)
+            mask = (torch.sigmoid(mask) > 0.5)
+            segmentation[z,:,:] = mask.cpu().numpy().astype(np.uint8)
 
         return(segmentation)
     
@@ -207,14 +205,15 @@ class SAMMed2DInferer(Inferer):
         if self.verbose and self.image_embeddings_dict != {}:
             print('Using previously generated image embeddings')
 
-        img, prompt = deepcopy(img), deepcopy(prompt)
+        prompt = deepcopy(prompt)
         
         self.D, self.H, self.W = img.shape
         self.original_size = (self.H, self.W)
         
         
         preprocessed_prompt_dict, slices_to_infer = self.preprocess_prompt(prompt)
-        slices_processed = self.preprocess_img(img, slices_to_infer)
+        slices_to_process = [slice_idx for slice_idx in slices_to_infer if slice_idx not in self.image_embeddings_dict.keys()]
+        slices_processed = self.preprocess_img(img, slices_to_process)
 
         slice_mask_dict = {}
         if self.verbose:

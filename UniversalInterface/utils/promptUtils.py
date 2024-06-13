@@ -186,7 +186,7 @@ def get_bbox2d_row_major(mask):
     coord_list = np.concatenate([bb_min, bb_max]) 
     return coord_list
 
-def get_minimal_boxes_row_major(gt, delta_x, delta_y):
+def get_minimal_boxes_row_major(gt, delta_x=0, delta_y=0):
     '''
     gt must be in row-major ZYX order.
     Get bounding boxes of the foreground per slice. delta_x, delta_y enlargen the box
@@ -237,35 +237,6 @@ def get_largest_CC(segmentation):
     largestCC = labels == np.argmax(np.bincount(labels.flat)[1:])+1
     return largestCC.astype(int)
 
-def interpolate_points(points, kind='linear'):
-    """
-    Interpolate points in 3D space using linear or cubic spline interpolation.
-
-    Parameters:
-    points (numpy.ndarray): An array of shape (n, 3) where each row represents (z, y, x).
-    kind (str): Type of interpolation, either 'linear' or 'cubic'.
-
-    Returns:
-    numpy.ndarray: Array of interpolated points at each integer z-coordinate within the range of input z-coordinates.
-    """
-    # Ensure points are sorted by z-coordinate
-    points = points[points[:, 0].argsort()]
-
-    # Separate z, y, and x coordinates
-    z, y, x = points[:, 0], points[:, 1], points[:, 2]
-
-    # Create interpolation functions for y and x as functions of z
-    y_interp = interp1d(z, y, kind=kind)
-    x_interp = interp1d(z, x, kind=kind)
-
-    # Create an array of z values for which we want to interpolate y and x
-    z_new = np.arange(z.min(), z.max() + 1)
-    y_new = y_interp(z_new)
-    x_new = x_interp(z_new)
-
-    # Stack the new z, y, and x coordinates vertically and return
-    return np.column_stack((z_new, y_new, x_new)).round()
-
 def get_fg_points_from_cc_centers(gt, n):
     def get_bbox(mask): # Bbox function only used in this function
         i_any = np.any(mask, axis=1)
@@ -297,7 +268,43 @@ def get_fg_points_from_cc_centers(gt, n):
 
     return(corrected_points)
 
-def get_fg_points_from_slice(slice, n_clicks):
+def interpolate_points(points, kind='linear'):
+    """
+    Interpolate points in 3D space using linear or cubic spline interpolation.
+
+    Parameters:
+    points (numpy.ndarray): An array of shape (n, 3) where each row represents (z, y, x).
+    kind (str): Type of interpolation, either 'linear' or 'cubic'.
+
+    Returns:
+    numpy.ndarray: Array of interpolated points at each integer z-coordinate within the range of input z-coordinates.
+    """
+    # Ensure points are sorted by z-coordinate
+    points = points[points[:, 0].argsort()]
+
+    # Separate z, y, and x coordinates
+    z, y, x = points[:, 0], points[:, 1], points[:, 2]
+
+    # Create interpolation functions for y and x as functions of z
+    y_interp = interp1d(z, y, kind=kind)
+    x_interp = interp1d(z, x, kind=kind)
+
+    # Create an array of z values for which we want to interpolate y and x
+    z_new = np.arange(z.min(), z.max() + 1)
+    y_new = y_interp(z_new)
+    x_new = x_interp(z_new)
+
+    # Stack the new z, y, and x coordinates vertically and return
+    return np.column_stack((z_new, y_new, x_new)).round()
+
+def line_interpolation(simulated_clicks):
+    coords = interpolate_points(simulated_clicks, kind = 'linear').astype(int)
+    point_prompt = Points({'coords': coords, 'labels': [1]*len(coords)})
+    return(point_prompt)
+
+def get_fg_points_from_slice(slice, n_clicks, seed = None):
+    if seed:
+        np.random.seed(seed)
     slice_fg = np.where(slice)
     slice_fg = np.array(slice_fg).T
 
@@ -312,11 +319,41 @@ def get_fg_points_from_slice(slice, n_clicks):
     pos_clicks_slice = slice_fg[point_indices]
     return(pos_clicks_slice)
 
-def get_seed_point(gt, n_clicks):
+def get_seed_boxes(gt, n):
+    z_indices = np.where(np.any(gt, axis = (1,2)))[0]
+    min_z, max_z = np.min(z_indices), np.max(z_indices)
+    selected_slices = np.linspace(min_z, max_z, num=n, dtype=int)
+
+    bbox_dict = {slice_idx: get_bbox2d_row_major(gt[slice_idx]) for slice_idx in selected_slices}
+
+    return(bbox_dict)
+
+def box_interpolation(seed_boxes):
+
+        
+    '''
+    Takes n equally spaced slices starting at z_min and ending at z_max, where z_min is the lowest transverse slice of gt containing fg, and z_max similarly with highest, 
+    finds the largest connected component of fg, takes the center of its bounding box and takes the nearest fg point. Simulates a clinician clicking in the 'center of the main mass of the roi' per slice
+    '''
+
+    bbox_mins = np.array([(slice_idx, bbox[0], bbox[1]) for slice_idx, bbox in seed_boxes.items()])
+    bbox_mins_interpolated = interpolate_points(bbox_mins)
+
+    bbox_maxs = np.array([(slice_idx, bbox[2], bbox[3]) for slice_idx, bbox in seed_boxes.items()])
+    bbox_maxs_interpolated = interpolate_points(bbox_maxs)
+
+    bbox_np_interpolated = np.concatenate((bbox_mins_interpolated, bbox_maxs_interpolated[:, 1:]), axis = 1).astype(int)
+
+    bbox_dict_interpolated = {row[0]: row[1:] for row in bbox_np_interpolated }
+    box_prompt = Boxes2d(bbox_dict_interpolated)
+
+    return(box_prompt)
+
+def get_seed_point(gt, n_clicks, seed):
     slices_to_infer = np.where(np.any(gt, axis=(1,2)))[0]
     middle_idx = np.median(slices_to_infer).astype(int)
 
-    pos_clicks_slice = get_fg_points_from_slice(gt[middle_idx], n_clicks)
+    pos_clicks_slice = get_fg_points_from_slice(gt[middle_idx], n_clicks, seed)
 
     ## Put coords in 3d context
     z_col = np.full((n_clicks,1), middle_idx) 
@@ -325,7 +362,7 @@ def get_seed_point(gt, n_clicks):
 
     return(pts_prompt)
 
-def point_propagation(inferer, img, seed_prompt, slices_to_infer, seed, n_clicks=5):
+def point_propagation(inferer, img, seed_prompt, slices_to_infer, seed, n_clicks=5, verbose = True):
     verbose_state = inferer.verbose # Make inferer not verbose for this experiment
     inferer.verbose = False
     np.random.seed(seed)
@@ -347,7 +384,11 @@ def point_propagation(inferer, img, seed_prompt, slices_to_infer, seed, n_clicks
     pts_prompt = Points({'coords': pos_coords, 'labels': [1]*n_clicks})
 
 
-    for slice_idx in tqdm(range(middle_idx-1, slices_to_infer.min()-1, -1), desc = 'Propagating down'):
+    downwards_iter = range(middle_idx-1, slices_to_infer.min()-1, -1)
+    if verbose:
+        downwards_iter = tqdm(downwards_iter, desc = 'Propagating down')
+
+    for slice_idx in downwards_iter:    
         slice_seg = inferer.predict(img, pts_prompt)
 
         segmentation[slice_idx] = slice_seg[slice_idx]
@@ -371,7 +412,11 @@ def point_propagation(inferer, img, seed_prompt, slices_to_infer, seed, n_clicks
     pts_prompt = Points({'coords': pos_coords, 'labels': [1]*n_clicks})
 
 
-    for slice_idx in tqdm(range(middle_idx+1, slices_to_infer.max()+1), desc = 'Propagating up'):
+    upwards_iter = range(middle_idx+1, slices_to_infer.max()+1)
+    if verbose:
+        upwards_iter = tqdm(upwards_iter, desc = 'Propagating up')
+
+    for slice_idx in upwards_iter:
         slice_seg = inferer.predict(img, pts_prompt)
 
         segmentation[slice_idx] = slice_seg[slice_idx]
@@ -402,7 +447,7 @@ def get_seed_box(gt):
 
     return(Boxes2d(box_dict))
 
-def box_propagation(inferer, img, seed_box, slices_to_infer):
+def box_propagation(inferer, img, seed_box, slices_to_infer, verbose = True):
     verbose_state = inferer.verbose # Make inferer not verbose for this experiment
     inferer.verbose = False
 
@@ -421,7 +466,11 @@ def box_propagation(inferer, img, seed_box, slices_to_infer):
     ## Modify seed prompt to exist one axial slice down
     box_prompt = Boxes2d({k-1:v for k,v in seed_box.value.items()})
 
-    for slice_idx in tqdm(range(middle_idx-1, slices_to_infer.min()-1, -1), desc = 'Propagating down'):
+    downwards_iter = range(middle_idx-1, slices_to_infer.min()-1, -1)
+    if verbose:
+        downwards_iter = tqdm(downwards_iter, desc = 'Propagating down')
+
+    for slice_idx in downwards_iter:
         slice_seg = inferer.predict(img, box_prompt)
 
         segmentation[slice_idx] = slice_seg[slice_idx]
@@ -438,8 +487,11 @@ def box_propagation(inferer, img, seed_box, slices_to_infer):
     ## Modify seed prompt to exist one axial slice up
     box_prompt = Boxes2d({k+1:v for k,v in seed_box.value.items()})
 
+    upwards_iter = range(middle_idx+1, slices_to_infer.max()+1)
+    if verbose:
+        upwards_iter = tqdm(upwards_iter, desc = 'Propagating up')
 
-    for slice_idx in tqdm(range(middle_idx+1, slices_to_infer.max()+1), desc = 'Propagating up'):
+    for slice_idx in upwards_iter:
         slice_seg = inferer.predict(img, box_prompt)
 
         segmentation[slice_idx] = slice_seg[slice_idx]
@@ -454,3 +506,4 @@ def box_propagation(inferer, img, seed_box, slices_to_infer):
 
     inferer.verbose = verbose_state # Return inferer verbosity to initial state
     return(segmentation)
+

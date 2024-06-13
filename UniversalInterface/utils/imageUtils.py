@@ -29,6 +29,21 @@ def read_im_gt(img_path, gt_path, organ_label = None, RAS = False):
     
     return(img_data, gt_data)
 
+def read_reorient_nifti(path, RAS = False):
+    img = nib.load(path)
+    img_ras = img # Initialize variables to hold potentially reoriented images
+
+    # Check if gt, image are already in RAS+ 
+    if nib.aff2axcodes(img.affine) != ('R', 'A', 'S'):
+        img_ras = nib.as_closest_canonical(img)
+
+    img_data = img_ras.get_fdata()
+
+    if not RAS:
+        img_data = img_data.transpose(2,1,0) # change from RAS to row-major ie xyz to zyx
+    
+    return(img_data)
+
 def get_crop_pad_params(img, crop_pad_center, target_shape): # Modified from TorchIO cropOrPad
     subject_shape = img.shape
     padding = []
