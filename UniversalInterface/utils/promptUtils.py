@@ -6,6 +6,7 @@ from .base_classes import Points, Boxes2d
 from skimage.measure import label
 from scipy.spatial import cKDTree
 from scipy.interpolate import interp1d
+import warnings
 
 def get_crop_pad_center_from_points(points):
     bbox_min = points.value['coords'].T.min(axis = 1) # Get an array of two points: the minimal and maximal vertices of the minimal cube parallel to the axes bounding the points
@@ -297,7 +298,7 @@ def interpolate_points(points, kind='linear'):
     # Stack the new z, y, and x coordinates vertically and return
     return np.column_stack((z_new, y_new, x_new)).round()
 
-def line_interpolation(simulated_clicks):
+def point_interpolation(simulated_clicks):
     coords = interpolate_points(simulated_clicks, kind = 'linear').astype(int)
     point_prompt = Points({'coords': coords, 'labels': [1]*len(coords)})
     return(point_prompt)
@@ -394,7 +395,7 @@ def point_propagation(inferer, img, seed_prompt, slices_to_infer, seed, n_clicks
         segmentation[slice_idx] = slice_seg[slice_idx]
 
         if np.all(segmentation[slice_idx] == 0): # Terminate if no fg generated
-            print('Terminate early: no fg generated')
+            warnings.warn('\nTerminate early: no fg generated')
             break
 
         # Update prompt
@@ -422,7 +423,7 @@ def point_propagation(inferer, img, seed_prompt, slices_to_infer, seed, n_clicks
         segmentation[slice_idx] = slice_seg[slice_idx]
 
         if np.all(segmentation[slice_idx] == 0): # Terminate if no fg generated
-            print('Terminate early: no fg generated')
+            warnings.warn('\nTerminate early: no fg generated')
             break
 
         # Update prompt
@@ -476,7 +477,7 @@ def box_propagation(inferer, img, seed_box, slices_to_infer, verbose = True):
         segmentation[slice_idx] = slice_seg[slice_idx]
 
         if np.all(segmentation[slice_idx] == 0): # Terminate if no fg generated
-            print('Terminate early: no fg generated')
+            warnings.warn('\nTerminate early: no fg generated')
             break
 
         # Update prompt
@@ -497,7 +498,7 @@ def box_propagation(inferer, img, seed_box, slices_to_infer, verbose = True):
         segmentation[slice_idx] = slice_seg[slice_idx]
 
         if np.all(segmentation[slice_idx] == 0): # Terminate if no fg generated
-            print('Terminate early: no fg generated')
+            warnings.warn('\nTerminate early: no fg generated')
             break
 
         # Update prompt

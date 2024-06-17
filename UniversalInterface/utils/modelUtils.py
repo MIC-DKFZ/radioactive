@@ -7,6 +7,16 @@ from .SAMMed2D_segment_anything import sam_model_registry as registry_sammed2d
 from .SAMMed3D_segment_anything.build_sam3D import build_sam3D_vit_b_ori
 
 from classes.SAMClass import SAMWrapper, SAMInferer
+from classes.SAMMed2DClass import SAMMed2DInferer
+from classes.MedSAMClass import MedSAMInferer
+from classes.SAMMed3DClass import SAMMed3DInferer
+
+inferer_registry = {
+    'sam': SAMInferer,
+    'sammed2d': SAMMed2DInferer,
+    'medsam': MedSAMInferer,
+    'sammed3d': SAMMed3DInferer
+}
 
 def load_sam(checkpoint_path, device = 'cuda', image_size = 1024):
     args = Namespace()

@@ -10,13 +10,17 @@ import cv2
 from utils.base_classes import SegmenterWrapper, Inferer, Points, Boxes2d
 
 class SAMMed2DWrapper(SegmenterWrapper):
-    def __init__(self, model):
-        self.device = model.device
+    def __init__(self, model, device):
+        self.device = device
         self.model = model.to(self.device)
         self.multimask_output = True # Hardcoded to match defaults from original
     
     @torch.no_grad()
-    def __call__(self, points, box, mask, image_embedding):
+    def __call__(self, slice, points, box, mask):
+
+        image_embedding = self.model.image_encoder(slice.to(self.device))
+
+
         sparse_embeddings, dense_embeddings = self.model.prompt_encoder(
             points=points,
             boxes=box,
@@ -81,19 +85,21 @@ class SAMMed2DWrapper(SegmenterWrapper):
 class SAMMed2DInferer(Inferer):
     supported_prompts = (Points,)
 
-    def __init__(self, model):
-        self.segmenter = SAMMed2DWrapper(model)
+    def __init__(self, segmenter_wrapper: SAMMed2DWrapper):
+        self.segmenter = segmenter_wrapper
         self.inputs = None
         self.logit_threshold = 0 # Hardcoded
-        self.device = model.device
+        self.device = segmenter_wrapper.device
         self.new_size = (self.segmenter.model.image_encoder.img_size, self.segmenter.model.image_encoder.img_size)
-        self.image_embeddings_dict = {}
-        self.verbose = True # Can change directly if desired
 
         self.pixel_mean, self.pixel_std = self.segmenter.model.pixel_mean.squeeze().cpu().numpy(), self.segmenter.model.pixel_std.squeeze().cpu().numpy()
 
-    def clear_embeddings(self):
-        self.image_embeddings_dict = {}
+        # if self.segmenter.model.pixel_mean.device.type == 'cuda':
+        #     self.pixel_mean, self.pixel_std = self.segmenter.model.pixel_mean.squeeze().cpu().numpy(), self.segmenter.model.pixel_std.squeeze().cpu().numpy()
+        # else:
+        #     self.pixel_mean, self.pixel_std = self.segmenter.model.pixel_mean.squeeze().numpy(), self.segmenter.model.pixel_std.squeeze().numpy()
+
+        #self.pixel_mean, self.pixel_std = torch.from_numpy(self.pixel_mean), torch.from_numpy(self.pixel_std)
 
     def transforms(self, new_size): # Copied over from SAM-Med2D predictor_sammed.py
         Transforms = []
@@ -115,13 +121,13 @@ class SAMMed2DInferer(Inferer):
         boxes = self.apply_coords(boxes.reshape(-1, 2, 2), original_size, new_size)
         return boxes.reshape(-1, 4)
 
-    def preprocess_img(self, img, slices_to_infer):        
+    def preprocess_img(self, img, slices_to_infer):
+        img = np.repeat(img[..., None], repeats=3, axis=-1) #  Add channel dimension and make RGB giving DHWC
+        
         slices_processed = {}
-        for slice_idx in slices_to_infer:            
+        for slice_idx in slices_to_infer:
             slice = img[slice_idx, ...]
-
-            slice = np.repeat(slice[..., None], repeats=3, axis=-1)  # Add channel dimension to make it RGB-like
-
+            
             slice = ((slice-slice.min())/(slice.max()-slice.min() + 1e-6)*255).astype(np.uint8) # Get slice into [0,255] rgb scale
             slice = (slice-self.pixel_mean)/self.pixel_std # normalise
 
@@ -173,6 +179,9 @@ class SAMMed2DInferer(Inferer):
                 preprocessed_prompts_dict[slice_index] = box.to(self.device)
             
         return(preprocessed_prompts_dict, slices_to_infer)
+        
+
+
 
     def postprocess_slices(self, slice_mask_dict):
         '''
@@ -184,13 +193,14 @@ class SAMMed2DInferer(Inferer):
         # Combine segmented slices into a volume with 0s for non-segmented slices
     
 
-        segmentation = np.zeros((self.D, self.H, self.W), dtype=int)
+        segmentation = torch.zeros((self.D, self.H, self.W))
         for (z,low_res_mask) in slice_mask_dict.items():
             mask = F.interpolate(low_res_mask, self.new_size, mode="bilinear", align_corners=False)
             mask = F.interpolate(mask, self.original_size, mode="bilinear", align_corners=False) # upscale in two steps to match original code
 
-            mask = (torch.sigmoid(mask) > 0.5)
-            segmentation[z,:,:] = mask.cpu().numpy().astype(np.uint8)
+            segmentation[z,:,:] = mask
+        segmentation = (torch.sigmoid(segmentation) > 0.5).numpy()
+        segmentation = segmentation.astype(np.uint8)
 
         return(segmentation)
     
@@ -201,45 +211,37 @@ class SAMMed2DInferer(Inferer):
             self.prompt_type = 'box'
         else:
             raise RuntimeError(f'Currently only points and boxes are supported, got {type(prompt)}')
-        
-        if self.verbose and self.image_embeddings_dict != {}:
-            print('Using previously generated image embeddings')
-
-        prompt = deepcopy(prompt)
+        img, prompt = deepcopy(img), deepcopy(prompt)
         
         self.D, self.H, self.W = img.shape
         self.original_size = (self.H, self.W)
         
         
         preprocessed_prompt_dict, slices_to_infer = self.preprocess_prompt(prompt)
-        slices_to_process = [slice_idx for slice_idx in slices_to_infer if slice_idx not in self.image_embeddings_dict.keys()]
-        slices_processed = self.preprocess_img(img, slices_to_process)
+        slices_processed = self.preprocess_img(img, slices_to_infer)
 
+        # self.slices_processed, self.preprocessed_prompts_dict = slices_processed, preprocessed_prompts_dict # debugging
         slice_mask_dict = {}
-        if self.verbose:
-            slices_to_infer = tqdm(slices_to_infer, desc = 'Performing inference on slices')
-        for slice_idx in slices_to_infer:
-            # Get image embedding (either create it, or read it if stored)
-            if slice_idx in self.image_embeddings_dict.keys():
-                image_embedding = self.image_embeddings_dict[slice_idx]
-            else:
-                slice = slices_processed[slice_idx]
-                with torch.no_grad():
-                    image_embedding = self.segmenter.model.image_encoder(slice.to(self.device))
-                self.image_embeddings_dict[slice_idx] = image_embedding
-
-            # Get prompts
+        for slice_idx in tqdm(slices_to_infer, desc = 'Performing inference on slices'):
+            slice = slices_processed[slice_idx]
             slice_points, slice_box, slice_mask = None, None, None # Initialise to empty
-
             if self.prompt_type == 'point':
                 slice_points = preprocessed_prompt_dict[slice_idx]
 
             if self.prompt_type == 'box':
                 slice_box = preprocessed_prompt_dict[slice_idx]
+            
+            # slice_coords, slice_labs = preprocessed_prompt_dict[slice_idx]
 
             # Infer
-            slice_raw_outputs = self.segmenter(points = slice_points, box=slice_box, mask = slice_mask, image_embedding = image_embedding) # Add batch dimensions
+            slice_raw_outputs = self.segmenter(slice = slice, points = slice_points, box=slice_box, mask = slice_mask) # Add batch dimensions
             slice_mask_dict[slice_idx] = slice_raw_outputs
+            
+            # slice_raw_outputs = self.segmenter(slice.to(self.device), slice_coords.unsqueeze(0).to(self.device), slice_labs.unsqueeze(0).to(self.device)) # Add batch dimensions
+            # # self.low_res_masks = slice_raw_outputs
+
+            # slice_mask_dict[slice_idx] = slice_raw_outputs
+            # self.slice_mask_dict = slice_mask_dict
             
         segmentation = self.postprocess_slices(slice_mask_dict)
 

@@ -4,7 +4,7 @@ import os
 import numpy as np
 import json
 from utils.modelUtils import load_sammed2d
-from classes.SAMMed2DClass_new import SAMMed2DInferer
+from Project.UniversalInterface.classes.SAMMed2DClass import SAMMed2DInferer
 import utils.analysisUtils as anUt
 import utils.promptUtils as prUt
 from utils.imageUtils import read_reorient_nifti
