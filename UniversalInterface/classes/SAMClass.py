@@ -86,9 +86,8 @@ class SAMInferer(Inferer):
         slices_processed = {}
         for slice_idx in slices_to_process:
             slice = img[slice_idx, ...] # Now HWC
-            slice = np.repeat(slice[..., None], repeats=3, axis=-1)  # Add channel dimension to make it RGB-like
-
             slice = ((slice - slice.min()) / (slice.max() - slice.min() + 1e-10) * 255.).astype(np.uint8) # Change to 0-255 scale
+            slice = np.repeat(slice[..., None], repeats=3, axis=-1)  # Add channel dimension to make it RGB-like
             slice = self.transform.apply_image(slice)            
             slice = torch.as_tensor(slice, device = self.device)
             slice = slice.permute(2, 0, 1).contiguous()[None, :, :, :] # Change to BCHW, make memory storage contiguous.

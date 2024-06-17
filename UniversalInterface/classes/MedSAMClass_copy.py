@@ -4,18 +4,25 @@ import torch.nn.functional as F
 from copy import deepcopy
 
 from utils.base_classes import SegmenterWrapper, Inferer, Boxes2d, Points
+from utils.MedSAM_segment_anything import sam_model_registry as registry_medsam
 
 from tqdm import tqdm
 
+def load_medsam(checkpoint_path, device = 'cuda'):
+    medsam_model = registry_medsam['vit_b'](checkpoint=checkpoint_path)
+    medsam_model = medsam_model.to(device)
+    medsam_model.eval()
+    return(medsam_model)
+
+
 class MedSAMWrapper(SegmenterWrapper):
-    def __init__(self, model, device):
-        self.device = device
-        self.model = model.to(self.device)
+    def __init__(self, model):
+        self.device = model.device
+        self.model = model
         
     @torch.no_grad()
     def __call__(self, img_1024_tensor, box_1024):
-        with torch.no_grad():
-            img_embed = self.model.image_encoder(img_1024_tensor) # (1, 256, 64, 64)
+        img_embed = self.model.image_encoder(img_1024_tensor) # (1, 256, 64, 64)
 
         box_torch = torch.as_tensor(box_1024, dtype=torch.float, device=img_embed.device)
         if len(box_torch.shape) == 2:
@@ -41,11 +48,12 @@ class MedSAMWrapper(SegmenterWrapper):
 class MedSAMInferer(Inferer):
     supported_prompts = (Boxes2d,)
 
-    def __init__(self, segmenter_wrapper: MedSAMWrapper):
-        self.segmenter = segmenter_wrapper
+    def __init__(self, checkpoint_path, device):
+        model = load_medsam(checkpoint_path, device)
+        self.segmenter = MedSAMWrapper(model)
         self.inputs = None
         self.logit_threshold = 0.5 
-        self.device = segmenter_wrapper.device
+        self.device = device
 
     def preprocess_img(self, img, slices_to_infer):
         img_new = torch.from_numpy(img).unsqueeze(0).unsqueeze(0) # add batch and channel dimensions

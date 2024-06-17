@@ -88,14 +88,13 @@ class SAMMed2DInferer(Inferer):
         boxes = self.apply_coords(boxes.reshape(-1, 2, 2), original_size, new_size)
         return boxes.reshape(-1, 4)
 
-    def preprocess_img(self, img, slices_to_infer):        
+    def preprocess_img(self, img, slices_to_process):        
         slices_processed = {}
-        for slice_idx in slices_to_infer:            
+        for slice_idx in slices_to_process:            
             slice = img[slice_idx, ...]
 
-            slice = np.repeat(slice[..., None], repeats=3, axis=-1)  # Add channel dimension to make it RGB-like
-
             slice = ((slice-slice.min())/(slice.max()-slice.min() + 1e-6)*255).astype(np.uint8) # Get slice into [0,255] rgb scale
+            slice = np.repeat(slice[..., None], repeats=3, axis=-1)  # Add channel dimension to make it RGB-like
             slice = (slice-self.pixel_mean)/self.pixel_std # normalise
 
             transforms = self.transforms(self.new_size)
