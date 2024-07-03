@@ -3,10 +3,12 @@ from copy import deepcopy
 from tqdm import tqdm
 from skimage.morphology import dilation, ball
 from .base_classes import Points, Boxes2d
+from .analysisUtils import compute_dice
 from skimage.measure import label
 from scipy.spatial import cKDTree
 from scipy.interpolate import interp1d
 import warnings
+import torch
 
 def get_crop_pad_center_from_points(points):
     bbox_min = points.value['coords'].T.min(axis = 1) # Get an array of two points: the minimal and maximal vertices of the minimal cube parallel to the axes bounding the points
@@ -124,7 +126,7 @@ def get_pos_clicks2D_row_major(gt, n_clicks, seed = None):
         pos_clicks_slice = np.hstack([z_col, pos_clicks_slice])
         pos_coords = np.vstack([pos_coords, pos_clicks_slice])
 
-    pos_coords = Points({'coords': pos_coords, 'labels': [1]*len(pos_coords)})
+    pos_coords = Points({'coords': pos_coords, 'labels': np.array([1]*len(pos_coords))})
     return(pos_coords)
 
 def get_bbox3d(mask_volume: np.ndarray):
@@ -363,10 +365,13 @@ def get_seed_point(gt, n_clicks, seed):
 
     return(pts_prompt)
 
-def point_propagation(inferer, img, seed_prompt, slices_to_infer, seed, n_clicks=5, verbose = True):
+def point_propagation(inferer, img, seed_prompt, slices_to_infer, seed = None, n_clicks=5, verbose = True):
+    if seed:
+        np.random.seed(seed)
     verbose_state = inferer.verbose # Make inferer not verbose for this experiment
     inferer.verbose = False
-    np.random.seed(seed)
+
+    seed_coords = [seed_prompt.value['coords']] # keep track of all points
     
     # Initialise segmentation to store total result
     segmentation = np.zeros_like(img).astype(np.uint8)
@@ -380,9 +385,11 @@ def point_propagation(inferer, img, seed_prompt, slices_to_infer, seed, n_clicks
 
     # Downwards branch
     ## Modify seed prompt to exist one axial slice down
-    z_col = np.full((n_clicks,1), middle_idx-1) 
+    downwards_coords = []
+    z_col = np.full((len(seed_prompt.value['coords']),1), middle_idx-1) 
     pos_coords = np.hstack([z_col, seed_prompt.value['coords'][:,1:]])
-    pts_prompt = Points({'coords': pos_coords, 'labels': [1]*n_clicks})
+    downwards_coords.append(pos_coords)
+    pts_prompt = Points({'coords': pos_coords, 'labels': [1]*len(seed_prompt.value['coords'])})
 
 
     downwards_iter = range(middle_idx-1, slices_to_infer.min()-1, -1)
@@ -404,13 +411,16 @@ def point_propagation(inferer, img, seed_prompt, slices_to_infer, seed, n_clicks
         # Put coords in 3d context
         z_col = np.full((n_clicks,1), slice_idx-1) # create z column to add. Note slice_idx-1: these are the prompts for the next slice down
         pos_coords = np.hstack([z_col, pos_clicks_slice])
+        downwards_coords.append(pos_coords)
         pts_prompt = Points({'coords': pos_coords, 'labels': [1]*n_clicks})
 
     # Upward branch
     ## Modify seed prompt to exist one axial slice up
-    z_col = np.full((n_clicks,1), middle_idx+1) 
+    upward_coords = []
+    z_col = np.full((len(seed_prompt.value['coords']),1), middle_idx+1) 
     pos_coords = np.hstack([z_col, seed_prompt.value['coords'][:,1:]])
-    pts_prompt = Points({'coords': pos_coords, 'labels': [1]*n_clicks})
+    upward_coords.append(pos_coords)
+    pts_prompt = Points({'coords': pos_coords, 'labels': [1]*len(seed_prompt.value['coords'])})
 
 
     upwards_iter = range(middle_idx+1, slices_to_infer.max()+1)
@@ -432,11 +442,14 @@ def point_propagation(inferer, img, seed_prompt, slices_to_infer, seed, n_clicks
         # Put coords in 3d context
         z_col = np.full((n_clicks,1), slice_idx+1) # create z column to add. Note slice_idx+1: these are the prompts for the next slice up
         pos_coords = np.hstack([z_col, pos_clicks_slice])
+        upward_coords.append(pos_coords)
         pts_prompt = Points({'coords': pos_coords, 'labels': [1]*n_clicks})
 
     inferer.verbose = verbose_state # Return inferer verbosity to initial state
 
-    return(segmentation)
+    prompt = np.concatenate(downwards_coords[::-1] + seed_coords + upward_coords, axis = 0)
+    prompt = Points(value = {'coords': prompt, 'labels': [1]*len(prompt)})
+    return segmentation, prompt
 
 
 def get_seed_box(gt):
@@ -508,3 +521,101 @@ def box_propagation(inferer, img, seed_box, slices_to_infer, verbose = True):
     inferer.verbose = verbose_state # Return inferer verbosity to initial state
     return(segmentation)
 
+
+def iter_improve_sammed2d(img, gt, segmentation, inferer, point_prompt, target_dof = None, initial_dof = None, target_performance = None, fix_worst_slice = False, seed = None):
+    if seed is not None:
+        np.random.seed(seed)
+    dof = initial_dof
+        
+    # Set condition
+    if target_dof is not None and target_performance is None:
+        condition = 'dof'
+        
+    elif target_performance is not None:
+        condition = 'perf'
+    else:
+        raise ValueError('Exactly one of target_dof or target_performance must not be none')
+
+    ## Helper variables and trackers
+    slices_to_infer = np.unique(point_prompt.value['coords'][:,0]) # will need to modify for non-point prompts
+    low_res_masks = inferer.slice_lowres_dict.copy()
+    low_res_masks = {k:torch.sigmoid(v).squeeze().cpu().numpy() for k,v in low_res_masks.items()}
+
+    perf = compute_dice(segmentation, gt)
+    iter_threshold = 20
+
+    dice = []
+    segmentations = []
+    revised_slices = []
+    segmentations.append(segmentation.copy())
+    dice.append(perf)
+
+    inferer.verbose = False
+
+
+    while True:
+        # Break if condition is met
+        if condition == 'dof' and dof >= target_dof - 2: # -2 because otherwise on the next iteration the dof would overshoot the target: dof increases by 3 with each iteration
+            print(f'dof target achieved with with final dice {dice[-1]:.4f}')
+            break
+
+        if condition == 'perf':
+            if dice[-1] >= target_performance:
+                print(f'target performance achieved in {len(dice)} iterations')
+                break
+            elif len(dice)>= iter_threshold:
+                print(f'Target performance not achieved within {iter_threshold} iterations. Final dice {dice[-1]:.4f}')
+                break
+
+        if dice == 1:
+            raise RuntimeError('Perfect dice achieved... That should not happen')
+
+        # Find worst slice
+        if fix_worst_slice:
+            slice_dice_points = {slice_idx: compute_dice(gt[slice_idx], segmentation[slice_idx]) for slice_idx in slices_to_infer}
+            fix_slice_idx = min(slice_dice_points, key = slice_dice_points.get)
+        else:
+            fix_slice_idx = np.random.choice(slices_to_infer, 1).item()
+        print(f'Improving {fix_slice_idx}')
+        revised_slices.append(fix_slice_idx)
+
+
+        # Get new prompt
+        mistake_mask = np.argwhere(segmentation[fix_slice_idx] != gt[fix_slice_idx])
+        new_coords = mistake_mask[np.random.choice(len(mistake_mask), 1)].squeeze()
+        new_coords = np.concatenate(([fix_slice_idx], new_coords))
+        new_label = gt[tuple(new_coords)]
+
+        # Insert into coords and labels
+        coords, labels = point_prompt.value.values()
+        fix_slice_mask = (coords[:,0] == fix_slice_idx)
+        insert_idx = np.argwhere(fix_slice_mask).max()+1
+        coords_new = np.insert(coords, insert_idx, new_coords, axis = 0)
+        labels_new = np.insert(labels, insert_idx, new_label)
+
+        point_prompt = Points({'coords': coords_new, 'labels': labels_new})
+
+        # Obtain prompt only for the worst slice
+        coords, labels = point_prompt.value.values()
+        fix_slice_mask = (point_prompt.value['coords'][:,0] == fix_slice_idx)
+        slice_prompt = Points({'coords': coords[fix_slice_mask], 'labels': labels[fix_slice_mask]})
+
+        # Generate new segmentation
+        new_slice_seg = inferer.predict(img, slice_prompt, mask_dict = low_res_masks)
+        segmentation[fix_slice_idx] = new_slice_seg[fix_slice_idx]
+        segmentations.append(segmentation)
+
+        # Store/update trackers
+        low_res_masks.update({fix_slice_idx: torch.sigmoid(inferer.slice_lowres_dict[fix_slice_idx]).squeeze().cpu().numpy()})
+        dice.append(compute_dice(segmentation, gt))
+        dof+=3
+
+    inferer.verbose = True
+
+    return(dice, revised_slices, dof, segmentations)
+
+def iter_improve_dof_sammed2d(img, gt, segmentation, inferer, seed_prompt, target_dof, initial_dof, fix_worst_slice = False, seed = None):
+    return iter_improve_sammed2d(img, gt, segmentation, inferer, seed_prompt, target_dof, initial_dof, target_performance = None, fix_worst_slice = fix_worst_slice, seed = seed)
+
+def iter_improve_perf_sammed2d(img, gt, segmentation, inferer, seed_prompt, initial_dof, target_performance, fix_worst_slice = False, seed = None):
+    return iter_improve_sammed2d(img, gt, segmentation, inferer, seed_prompt, target_dof = None, initial_dof = initial_dof, target_performance = target_performance, fix_worst_slice = fix_worst_slice, seed = seed)

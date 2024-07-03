@@ -85,14 +85,28 @@ Perform the same experiments as in category 2, but looping until a performance (
 | TDSC-ABUS2023          | Ultrasound               | Breast tumors                 |
 | ToothFairy2023         | CBCT                     | Inferior Alveolar Nerve       |
 | ULS                    | CT                       | Thoracic-abdominal lesions    |
-| Yale Brain Metastases  | MRI - T1, CT1, T2, Flair | Brain metastases              |                                                                                                                                                                         
+| Yale Brain Metastases  | MRI - T1, CT1, T2, Flair | Brain metastases              | 
+
 ### Proposal:
-Use all unless there's a reason to exclude them.
+
+Eliminate:
+ULS: cropped ROIs, center pixel always foreground - ask Consti, Max Rokuss
+Yale Brain Metastases: difficult to summarize
+
+
+| Dataset                | Modality                 | Targets                       |
+|------------------------|--------------------------|-------------------------------|
+| ATLAS2023              | CE-MRI                   | Liver, tumors                 |
+| CAS2023                | TOF-MRA                  | Cerebral arteries             |
+| CC-Tumor Heterogeneity | MR                       | Cervical Cancer               |
+| HCC-TACE-Seg           | CT                       | Liver Cancer                  |
+| SegRap                 | CT                       | Nasopharyngeal organs, tumors |
+| ToothFairy2023         | CBCT                     | Inferior Alveolar Nerve       |
 
 ## Timeline
 Implementation steps:
 * SegVol (1.5 week - 17/6)
-* Interactivity (2 weeks - 1/6)
+* Interactivity (2 weeks - 1/7)
 * Experiments (2 weeks - 15/7)
     * Line propagation for boxes
     * Mask propagation for points and boxes
@@ -100,3 +114,8 @@ Implementation steps:
     * Interactive boxes (category 2, 3)
 * ?
 * Paper writing? (? weeks)
+## new timeline 24.06
+*interactivity as discussed 2d models ( 5.7)
+*interactivity sammed3d + turbo (12.7)
+*SegVol both + one week
+*Vista (maybe) 

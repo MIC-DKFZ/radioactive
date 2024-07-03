@@ -2,32 +2,35 @@ import torch
 import numpy as np
 import torch.nn.functional as F
 from copy import deepcopy
-
-from utils.base_classes import SegmenterWrapper, Inferer, Boxes2d, Points
-
 from tqdm import tqdm
 
+from utils.base_classes import SegmenterWrapper, Inferer, Boxes2d, Points
+from utils.MedSAM_segment_anything import sam_model_registry as registry_medsam
+
+
+def load_medsam(checkpoint_path, device = 'cuda'):
+    medsam_model = registry_medsam['vit_b'](checkpoint=checkpoint_path)
+    medsam_model = medsam_model.to(device)
+    medsam_model.eval()
+    return(medsam_model)
+
 class MedSAMWrapper(SegmenterWrapper):
-    def __init__(self, model, device):
-        self.device = device
-        self.model = model.to(self.device)
+    def __init__(self, model):
+        self.model = model
         
     @torch.no_grad()
-    def __call__(self, img_1024_tensor, box_1024):
-        with torch.no_grad():
-            img_embed = self.model.image_encoder(img_1024_tensor) # (1, 256, 64, 64)
-
-        box_torch = torch.as_tensor(box_1024, dtype=torch.float, device=img_embed.device)
-        if len(box_torch.shape) == 2:
-            box_torch = box_torch[:, None, :] # (B, 1, 4)
+    def __call__(self, points, box, mask, image_embedding):
+        # if len(box_torch.shape) == 2:
+        #     box_torch = box_torch[:, None, :] # (B, 1, 4)
 
         sparse_embeddings, dense_embeddings = self.model.prompt_encoder(
-            points=None,
-            boxes=box_torch,
-            masks=None,
+            points=points,
+            boxes=box,
+            masks=mask,
         )
+
         low_res_logits, _ = self.model.mask_decoder(
-            image_embeddings=img_embed, # (B, 256, 64, 64)
+            image_embeddings=image_embedding, # (B, 256, 64, 64)
             image_pe=self.model.prompt_encoder.get_dense_pe(), # (1, 256, 64, 64)
             sparse_prompt_embeddings=sparse_embeddings, # (B, 2, 256)
             dense_prompt_embeddings=dense_embeddings, # (B, 256, 64, 64)
@@ -35,27 +38,26 @@ class MedSAMWrapper(SegmenterWrapper):
             )
 
         low_res_pred = torch.sigmoid(low_res_logits)  # (1, 1, 256, 256)
-        # low_res_pred = low_res_pred.squeeze().cpu()  # (256, 256)
         return low_res_pred
     
 class MedSAMInferer(Inferer):
-    supported_prompts = (Boxes2d,)
 
-    def __init__(self, segmenter_wrapper: MedSAMWrapper):
-        self.segmenter = segmenter_wrapper
-        self.inputs = None
+    def __init__(self, checkpoint_path, device):
+        model = load_medsam(checkpoint_path, device)
+        self.segmenter = MedSAMWrapper(model)
         self.logit_threshold = 0.5 
-        self.device = segmenter_wrapper.device
+        self.device = device
+        self.image_embeddings_dict = {}
+        self.verbose = True
 
-    def preprocess_img(self, img, slices_to_infer):
-        img_new = torch.from_numpy(img).unsqueeze(0).unsqueeze(0) # add batch and channel dimensions
-        img_new = torch.repeat_interleave(img_new, repeats=3, dim=1) # 1 channel -> 3 channels (align to RGB)
-
+    def preprocess_img(self, img, slices_to_process):
         slices_processed = {}
-        for slice_idx in slices_to_infer:
-            slice = img_new[...,slice_idx]
-            slice = img_new[:, :, slice_idx, :, :]
+        for slice_idx in slices_to_process:
+            slice = img[slice_idx,...]
             slice = (slice - slice.min()) / (slice.max() - slice.min() + 1e-10)
+            slice = np.repeat(slice[None,...], repeats=3, axis=0) # dimensions are NCd_1d_2 to conform to F.interpolate
+
+            slice = torch.from_numpy(slice).unsqueeze(0)
             slice = F.interpolate(slice, (1024,1024), mode = 'bicubic', align_corners=False).clamp(0,1)
             slices_processed[slice_idx] = slice.float()
 
@@ -65,14 +67,13 @@ class MedSAMInferer(Inferer):
         if isinstance(prompt, Boxes2d):
             slices_to_infer = prompt.get_slices_to_infer()
 
-            boxes_processed_dict = {}
+            preprocessed_prompt_dict = {}
             for slice_idx, box in prompt.value.items():
-                #box = box[[1,0,3,2]]# Transpose to get coords in row-major format
                 box_1024 = box / np.array((self.W, self.H, self.W, self.H)) * 1024
                 box_torch = torch.from_numpy(box_1024).float().unsqueeze(0).unsqueeze(0) # Add 'number of boxes' and batch dimensions
-                boxes_processed_dict[slice_idx] = box_torch
+                preprocessed_prompt_dict[slice_idx] = box_torch.to(self.device)
 
-            return(slices_to_infer, boxes_processed_dict)
+            return(preprocessed_prompt_dict, slices_to_infer)
     
     def postprocess_slices(self, slice_mask_dict):
         '''
@@ -98,27 +99,51 @@ class MedSAMInferer(Inferer):
         return(segmentation)
     
     def predict(self, img, prompt):
-        if not isinstance(prompt, Boxes2d):
-            raise RuntimeError('Currently only 2d bboxes are supported')
-        img, prompt = deepcopy(img), deepcopy(prompt)
-        # self.W, self.H, self.D = img.shape
+        if isinstance(prompt, Points):
+            self.prompt_type = 'point'
+        elif isinstance(prompt, Boxes2d):
+            self.prompt_type = 'box'
+        else:
+            raise RuntimeError(f'Currently only points and boxes are supported, got {type(prompt)}')
+        
+        if self.verbose and self.image_embeddings_dict != {}:
+            print('Using previously generated image embeddings')
+
         self.D, self.H, self.W = img.shape
 
-        slices_to_infer, boxes_processed = self.preprocess_prompt(prompt)
-        slices_processed = self.preprocess_img(img, slices_to_infer)
+        preprocessed_prompt_dict, slices_to_infer = self.preprocess_prompt(prompt)
+        slices_to_process = [slice_idx for slice_idx in slices_to_infer if slice_idx not in self.image_embeddings_dict.keys()]
+        slices_processed = self.preprocess_img(img, slices_to_process)
+
+        # debugging
         self.slices_processed = slices_processed
+        self.preprocessed_prompt_dict = preprocessed_prompt_dict
         
         slice_mask_dict = {}
-
-        for slice_idx in tqdm(slices_to_infer, desc = 'Performing inference on slices'):
-            slice, box = slices_processed[slice_idx], boxes_processed[slice_idx]
-            #slice = slice.transpose(-1,-2)
-            #box[:,:] = box[:,:,[1,0,3,2]]
+        if self.verbose:
+            slices_to_infer = tqdm(slices_to_infer, desc = 'Performing inference on slices')
             
-            with torch.no_grad():
-                slice_logits = self.segmenter(slice.to(self.device), box.to(self.device))
+        for slice_idx in slices_to_infer:
+            if slice_idx in self.image_embeddings_dict.keys():
+                image_embedding = self.image_embeddings_dict[slice_idx]
+            else:
+                slice = slices_processed[slice_idx]
+                with torch.no_grad():
+                    image_embedding = self.segmenter.model.image_encoder(slice.to(self.device))
+                self.image_embeddings_dict[slice_idx] = image_embedding
 
-            slice_mask_dict[slice_idx] = slice_logits
+            # Get prompts
+            slice_points, slice_box, slice_mask = None, None, None # Initialise to empty
+
+            if self.prompt_type == 'point':
+                slice_points = preprocessed_prompt_dict[slice_idx]
+
+            if self.prompt_type == 'box':
+                slice_box = preprocessed_prompt_dict[slice_idx]
+
+            # Infer
+            slice_raw_outputs = self.segmenter(points = slice_points, box=slice_box, mask = slice_mask, image_embedding = image_embedding) # Add batch dimensions
+            slice_mask_dict[slice_idx] = slice_raw_outputs
 
             
         segmentation = self.postprocess_slices(slice_mask_dict)

@@ -8,7 +8,7 @@ from .SAMMed3D_segment_anything.build_sam3D import build_sam3D_vit_b_ori
 
 from classes.SAMClass import SAMWrapper, SAMInferer
 from classes.SAMMed2DClass import SAMMed2DInferer
-from classes.MedSAMClass import MedSAMInferer
+from classes.MedSAMClass_oldDelete import MedSAMInferer
 from classes.SAMMed3DClass import SAMMed3DInferer
 
 inferer_registry = {

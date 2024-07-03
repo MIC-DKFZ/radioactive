@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import numpy as np
 
 
 class Prompt(): # Abstract class for prompts to be inputted with the SAM adjusted model
@@ -12,9 +13,12 @@ class Prompt(): # Abstract class for prompts to be inputted with the SAM adjuste
 class Points(Prompt):
     def __init__(self, value):
         super().__init__(name = 'points', value = value)
+        self.value['coords'] = np.array(self.value['coords'])
+        self.value['labels'] = np.array(self.value['labels'])
+
 
     def get_slices_to_infer(self):
-        unique_zs = set(self.value['coords'][:,2].numpy())
+        unique_zs = set(self.value['coords'][:,2])
         return(unique_zs)
 
 class Boxes2d(Prompt):

@@ -64,7 +64,7 @@ def run_experiments(inferer, imgs_gts, results_path, label_dict,
                     'box_propagation': lambda: prUt.box_propagation(inferer, img, prUt.get_seed_box(organ_mask), slices_to_infer, verbose = False)
                 })
                 
-                if 'interactive in supported_prompts':
+                if 'interactive' in supported_prompts:
                     pass # Add interactive box experiments here
 
             # Debugging: Overwrite experiments
@@ -72,6 +72,7 @@ def run_experiments(inferer, imgs_gts, results_path, label_dict,
                 experiments = {ex: experiments[ex] for ex in experiment_overwrite if ex in experiments.keys()}
 
             # Run experiments
+            ## Non-interactive experiments - same for all
             for exp_name, prompting_func in tqdm(experiments.items(), desc = 'looping through experiments', leave = False):
                 prompt = prompting_func()
                 if exp_name in ['point_propagation', 'box_propagation']: # Experiments with more than one forward pass

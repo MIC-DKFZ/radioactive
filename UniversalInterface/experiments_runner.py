@@ -11,7 +11,7 @@ def get_img_gts_jhu(dataset_dir):
     images_dir = os.path.join(dataset_dir, 'imagesTr')
     labels_dir = os.path.join(dataset_dir, 'labelsTr')
     imgs_gts = [
-        (os.path.join(images_dir, img_path), os.path.join(labels_dir, img_path.rstrip('_0000.nii.gz') + '.nii.gz'))
+        (os.path.join(images_dir, img_path), os.path.join(labels_dir, img_path.removesuffix('_0000.nii.gz') + '.nii.gz'))
         for img_path in os.listdir(images_dir)  # Adjust the extension as needed
         if os.path.exists(os.path.join(labels_dir, img_path.rstrip('_0000.nii.gz') + '.nii.gz'))
     ]
@@ -27,13 +27,24 @@ def get_imgs_gts_amos(dataset_dir):
     ]
     return(imgs_gts)
 
+def get_imgs_gts_segrap(dataset_dir):
+    images_dir = os.path.join(dataset_dir, 'imagesTr')
+    labels_dir = os.path.join(dataset_dir, 'labelsTr')
+    imgs_gts = [
+        (os.path.join(images_dir, img_path), os.path.join(labels_dir, img_path.removesuffix('_0000.nii.gz') + '.nii.gz'))
+        for img_path in os.listdir(images_dir)  # Adjust the extension as needed
+        if os.path.exists(os.path.join(labels_dir, img_path.removesuffix('_0000.nii.gz') + '.nii.gz'))
+    ]
+    return(imgs_gts)
+
 checkpoint_registry = {
     'sam': '/home/t722s/Desktop/UniversalModels/TrainedModels/sam_vit_h_4b8939.pth',
     'sammed2d': '/home/t722s/Desktop/UniversalModels/TrainedModels/sam-med2d_b.pth'
 }
 
 dataset_registry={
-    'abdomenAtlas': {'dir':'/home/t722s/Desktop/Datasets/Dataset350_AbdomenAtlasJHU_2img/', 'dataset_func': get_img_gts_jhu}
+    'abdomenAtlas': {'dir':'/home/t722s/Desktop/Datasets/Dataset350_AbdomenAtlasJHU_2img/', 'dataset_func': get_img_gts_jhu},
+    'segrap': {'dir': '/home/t722s/Desktop/Datasets/segrapSub/', 'dataset_func': get_imgs_gts_segrap}
 }
 
 if __name__ == '__main__':
@@ -58,6 +69,10 @@ if __name__ == '__main__':
 
     supported_prompts = ['points', 'boxes', 'interactive']
 
+    label_overwrite = {
+        "organ": 3,
+    }
+
     # label_overwrite = {
     #     # "background": 0,
     #     # "aorta": 1,
@@ -80,7 +95,6 @@ if __name__ == '__main__':
     results_path = os.path.join(results_dir, model_name + '_' + dataset_name + '.json')
     dataset_func, dataset_dir = dataset_registry[dataset_name]['dataset_func'], dataset_registry[dataset_name]['dir']
     imgs_gts = dataset_func(dataset_dir)
-    imgs_gts = imgs_gts[:1]
 
     # Get dataset dict if missing
     with open(os.path.join(dataset_dir, 'dataset.json'), 'r') as f:

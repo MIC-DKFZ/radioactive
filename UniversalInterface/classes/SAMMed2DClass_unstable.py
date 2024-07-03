@@ -209,7 +209,6 @@ class SAMMed2DInferer(Inferer):
             # Get prompts
             slice_points, slice_box, = None, None # Initialise to empty
             slice_mask = torch.from_numpy(mask_dict[slice_idx]).to(self.device).unsqueeze(0).unsqueeze(0) if slice_idx in mask_dict.keys() else None
-            self.slice_mask = slice_mask
                 
             if self.prompt_type == 'point':
                 slice_points = preprocessed_prompt_dict[slice_idx]
