@@ -9,8 +9,8 @@ from argparse import Namespace
 from utils.SAMMed3D_segment_anything.build_sam import sam_model_registry as registry_sam
 from utils.base_classes import Points, Boxes2d, Inferer, SegmenterWrapper
 
-import utils.promptUtils as prUt
-import utils.imageUtils as imUt
+import utils.prompt as prUt
+import utils.image as imUt
 from utils.transforms import ResizeLongestSide
 
 SAM = TypeVar('SAM')
@@ -115,8 +115,8 @@ class SAMInferer(Inferer):
             - Collect into a dictionary of slice:slice prompt
         '''
         if isinstance(prompt, Points):
-            coords = prompt.value['coords']
-            labs = prompt.value['labels']
+            coords = prompt.coords
+            labs = prompt.labels
 
             slices_to_infer = set(coords[:,0].astype(int)) # zeroth element of batch (of size one), all triples, z coordinate 
 

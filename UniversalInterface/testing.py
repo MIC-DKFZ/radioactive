@@ -3,9 +3,9 @@ from classes.SAMMed2DClass_unstable import SAMMed2DInferer
 from utils.base_classes import Points
 import torch
 
-import utils.analysisUtils as anUt
-import utils.promptUtils as prUt
-from utils.imageUtils import read_im_gt
+import utils.analysis as anUt
+import utils.prompt as prUt
+from utils.image import read_im_gt
 
 import numpy as np
 import pickle

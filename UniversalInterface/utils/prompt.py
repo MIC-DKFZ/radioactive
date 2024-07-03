@@ -3,7 +3,7 @@ from copy import deepcopy
 from tqdm import tqdm
 from skimage.morphology import dilation, ball
 from .base_classes import Points, Boxes2d
-from .analysisUtils import compute_dice
+from .analysis import compute_dice
 from skimage.measure import label
 from scipy.spatial import cKDTree
 from scipy.interpolate import interp1d
@@ -11,8 +11,8 @@ import warnings
 import torch
 
 def get_crop_pad_center_from_points(points):
-    bbox_min = points.value['coords'].T.min(axis = 1) # Get an array of two points: the minimal and maximal vertices of the minimal cube parallel to the axes bounding the points
-    bbox_max = points.value['coords'].T.max(axis = 1) + 1 # Add 1 since we'll be using this for indexing 
+    bbox_min = points.coords.T.min(axis = 1) # Get an array of two points: the minimal and maximal vertices of the minimal cube parallel to the axes bounding the points
+    bbox_max = points.coords.T.max(axis = 1) + 1 # Add 1 since we'll be using this for indexing 
     point_center = np.mean((bbox_min, bbox_max), axis = 0)  
 
     return(point_center)
@@ -40,7 +40,7 @@ def get_pos_clicks3D(gt, n_clicks, seed = None):
 
     point_indices = np.random.choice(n_fg_voxels, size = n_clicks, replace = False)
     pos_coords = volume_fg[point_indices]  
-    pos_coords = Points({'coords': pos_coords, 'labels': [1]*len(pos_coords)})
+    pos_coords = Points(coords = pos_coords, labels =  [1]*len(pos_coords))
     return(pos_coords)
 
 def get_neg_clicks_3D(gt, n_clicks, border_distance = 10): # Warning: dilation function is VERY slow! ~ 13 seconds on my machine
@@ -59,7 +59,7 @@ def get_neg_clicks_3D(gt, n_clicks, border_distance = 10): # Warning: dilation f
     point_indices = np.random.choice(n_border_voxels, size = n_clicks, replace = False)
     neg_coords = volume_border[point_indices]  # change from triple of arrays format to list of triples format # change from triple of arrays format to list of triples format
 
-    neg_coords = Points({'coords': neg_coords, 'labels': [0]*len(neg_coords)})
+    neg_coords = Points(coords = neg_coords, labels =  [0]*len(neg_coords))
     return(neg_coords)
 
 def get_pos_clicks2D(gt, n_clicks):
@@ -91,7 +91,7 @@ def get_pos_clicks2D(gt, n_clicks):
         pos_clicks_slice = np.hstack([pos_clicks_slice, z_col])
         pos_coords = np.vstack([pos_coords, pos_clicks_slice])
 
-    pos_coords = Points({'coords': pos_coords, 'labels': [1]*len(pos_coords)})
+    pos_coords = Points(coords = pos_coords, labels =  [1]*len(pos_coords))
     return(pos_coords)
 
 def get_pos_clicks2D_row_major(gt, n_clicks, seed = None):
@@ -126,7 +126,7 @@ def get_pos_clicks2D_row_major(gt, n_clicks, seed = None):
         pos_clicks_slice = np.hstack([z_col, pos_clicks_slice])
         pos_coords = np.vstack([pos_coords, pos_clicks_slice])
 
-    pos_coords = Points({'coords': pos_coords, 'labels': np.array([1]*len(pos_coords))})
+    pos_coords = Points(coords = pos_coords, labels =  np.array([1]*len(pos_coords)))
     return(pos_coords)
 
 def get_bbox3d(mask_volume: np.ndarray):
@@ -302,7 +302,7 @@ def interpolate_points(points, kind='linear'):
 
 def point_interpolation(simulated_clicks):
     coords = interpolate_points(simulated_clicks, kind = 'linear').astype(int)
-    point_prompt = Points({'coords': coords, 'labels': [1]*len(coords)})
+    point_prompt = Points(coords = coords, labels =  [1]*len(coords))
     return(point_prompt)
 
 def get_fg_points_from_slice(slice, n_clicks, seed = None):
@@ -361,7 +361,7 @@ def get_seed_point(gt, n_clicks, seed):
     ## Put coords in 3d context
     z_col = np.full((n_clicks,1), middle_idx) 
     pos_coords = np.hstack([z_col, pos_clicks_slice])
-    pts_prompt = Points({'coords': pos_coords, 'labels': [1]*n_clicks})
+    pts_prompt = Points(coords = pos_coords, labels = [1]*n_clicks)
 
     return(pts_prompt)
 
@@ -371,7 +371,7 @@ def point_propagation(inferer, img, seed_prompt, slices_to_infer, seed = None, n
     verbose_state = inferer.verbose # Make inferer not verbose for this experiment
     inferer.verbose = False
 
-    seed_coords = [seed_prompt.value['coords']] # keep track of all points
+    seed_coords = [seed_prompt.coords] # keep track of all points
     
     # Initialise segmentation to store total result
     segmentation = np.zeros_like(img).astype(np.uint8)
@@ -386,10 +386,10 @@ def point_propagation(inferer, img, seed_prompt, slices_to_infer, seed = None, n
     # Downwards branch
     ## Modify seed prompt to exist one axial slice down
     downwards_coords = []
-    z_col = np.full((len(seed_prompt.value['coords']),1), middle_idx-1) 
-    pos_coords = np.hstack([z_col, seed_prompt.value['coords'][:,1:]])
+    z_col = np.full((len(seed_prompt.coords),1), middle_idx-1) 
+    pos_coords = np.hstack([z_col, seed_prompt.coords[:,1:]])
     downwards_coords.append(pos_coords)
-    pts_prompt = Points({'coords': pos_coords, 'labels': [1]*len(seed_prompt.value['coords'])})
+    pts_prompt = Points(coords = pos_coords, labels =[1]*len(seed_prompt.coords))
 
 
     downwards_iter = range(middle_idx-1, slices_to_infer.min()-1, -1)
@@ -412,15 +412,15 @@ def point_propagation(inferer, img, seed_prompt, slices_to_infer, seed = None, n
         z_col = np.full((n_clicks,1), slice_idx-1) # create z column to add. Note slice_idx-1: these are the prompts for the next slice down
         pos_coords = np.hstack([z_col, pos_clicks_slice])
         downwards_coords.append(pos_coords)
-        pts_prompt = Points({'coords': pos_coords, 'labels': [1]*n_clicks})
+        pts_prompt = Points(coords = pos_coords, labels = [1]*n_clicks)
 
     # Upward branch
     ## Modify seed prompt to exist one axial slice up
     upward_coords = []
-    z_col = np.full((len(seed_prompt.value['coords']),1), middle_idx+1) 
-    pos_coords = np.hstack([z_col, seed_prompt.value['coords'][:,1:]])
+    z_col = np.full((len(seed_prompt.coords),1), middle_idx+1) 
+    pos_coords = np.hstack([z_col, seed_prompt.coords[:,1:]])
     upward_coords.append(pos_coords)
-    pts_prompt = Points({'coords': pos_coords, 'labels': [1]*len(seed_prompt.value['coords'])})
+    pts_prompt = Points(coords = pos_coords, labels =  [1]*len(seed_prompt.coords))
 
 
     upwards_iter = range(middle_idx+1, slices_to_infer.max()+1)
@@ -443,12 +443,12 @@ def point_propagation(inferer, img, seed_prompt, slices_to_infer, seed = None, n
         z_col = np.full((n_clicks,1), slice_idx+1) # create z column to add. Note slice_idx+1: these are the prompts for the next slice up
         pos_coords = np.hstack([z_col, pos_clicks_slice])
         upward_coords.append(pos_coords)
-        pts_prompt = Points({'coords': pos_coords, 'labels': [1]*n_clicks})
+        pts_prompt = Points(coords = pos_coords, labels =  [1]*n_clicks)
 
     inferer.verbose = verbose_state # Return inferer verbosity to initial state
 
     prompt = np.concatenate(downwards_coords[::-1] + seed_coords + upward_coords, axis = 0)
-    prompt = Points(value = {'coords': prompt, 'labels': [1]*len(prompt)})
+    prompt = Points(coords = prompt, labels =  [1]*len(prompt))
     return segmentation, prompt
 
 
@@ -537,7 +537,7 @@ def iter_improve_sammed2d(img, gt, segmentation, inferer, point_prompt, target_d
         raise ValueError('Exactly one of target_dof or target_performance must not be none')
 
     ## Helper variables and trackers
-    slices_to_infer = np.unique(point_prompt.value['coords'][:,0]) # will need to modify for non-point prompts
+    slices_to_infer = np.unique(point_prompt.coords[:,0]) # will need to modify for non-point prompts
     low_res_masks = inferer.slice_lowres_dict.copy()
     low_res_masks = {k:torch.sigmoid(v).squeeze().cpu().numpy() for k,v in low_res_masks.items()}
 
@@ -593,12 +593,12 @@ def iter_improve_sammed2d(img, gt, segmentation, inferer, point_prompt, target_d
         coords_new = np.insert(coords, insert_idx, new_coords, axis = 0)
         labels_new = np.insert(labels, insert_idx, new_label)
 
-        point_prompt = Points({'coords': coords_new, 'labels': labels_new})
+        point_prompt = Points(coords = coords_new, labels =  labels_new)
 
         # Obtain prompt only for the worst slice
         coords, labels = point_prompt.value.values()
-        fix_slice_mask = (point_prompt.value['coords'][:,0] == fix_slice_idx)
-        slice_prompt = Points({'coords': coords[fix_slice_mask], 'labels': labels[fix_slice_mask]})
+        fix_slice_mask = (point_prompt.coords[:,0] == fix_slice_idx)
+        slice_prompt = Points(coords = coords[fix_slice_mask], labels =  labels[fix_slice_mask])
 
         # Generate new segmentation
         new_slice_seg = inferer.predict(img, slice_prompt, mask_dict = low_res_masks)

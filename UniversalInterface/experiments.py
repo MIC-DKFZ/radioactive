@@ -1,9 +1,9 @@
 import os
 import numpy as np
 import json
-import utils.analysisUtils as anUt
-import utils.promptUtils as prUt
-from utils.imageUtils import read_reorient_nifti
+import utils.analysis as anUt
+import utils.prompt as prUt
+from utils.image import read_reorient_nifti
 from tqdm import tqdm
 import warnings
 

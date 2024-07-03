@@ -24,7 +24,7 @@ class SAMMed3DWrapper(SegmenterWrapper):
 
         ## Fill with relevant prompts
         if isinstance(prompt, Points):
-            coords, labs = prompt.value['coords'], prompt.value['labels']
+            coords, labs = prompt.coords, prompt.labels
 
         low_res_spatial_shape = [dim//4 for dim in img.shape[-3:]] #batch and channel dimensions remain the same, spatial dimensions are quartered 
         low_res_mask = torch.zeros([1,1] + low_res_spatial_shape).to(self.device) # [1,1] is batch and channel dimensions
@@ -76,7 +76,7 @@ class SAMMed3DInferer(Inferer):
             crop_transform = tio.CropOrPad(mask_name='label', 
                                 target_shape=(128,128,128))
         else:
-            coords = prompt.value['coords']
+            coords = prompt.coords
             crop_mask = torch.zeros_like(subject.image.data)
             crop_mask[0, *coords.T] = 1 # Include initial 0 for the additional N axis
             subject.add_image(tio.LabelMap(tensor = crop_mask,
@@ -164,8 +164,8 @@ class SAMMed3DInferer(Inferer):
         return cropping_params, padding_params, window_list
 
     def preprocess_prompt(self, pts_prompt):
-        coords = pts_prompt.value['coords']
-        labels = pts_prompt.value['labels']
+        coords = pts_prompt.coords
+        labels = pts_prompt.labels
 
         point_offset = np.array([self.padding_params[0]-self.cropping_params[0], self.padding_params[2]-self.cropping_params[2], self.padding_params[4]-self.cropping_params[4]])
         coords = coords + point_offset

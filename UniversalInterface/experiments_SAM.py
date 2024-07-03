@@ -1,4 +1,4 @@
-from utils.modelUtils import load_sam
+from utils.model import load_sam
 from classes.SAMClass import SAMInferer
 from argparse import Namespace
 import os

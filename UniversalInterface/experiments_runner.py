@@ -3,7 +3,7 @@ import os
 import warnings
 import json
 
-from utils.modelUtils import inferer_registry
+from utils.model import inferer_registry
 from experiments import run_experiments
 
 

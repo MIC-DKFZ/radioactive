@@ -6,8 +6,8 @@ from copy import deepcopy
 
 from utils.base_classes import Points, Inferer, SegmenterWrapper
 
-import utils.imageUtils as imUt
-import utils.promptUtils as prUt
+import utils.image as imUt
+import utils.prompt as prUt
 
 SAM3D = TypeVar('SAM3D')
 

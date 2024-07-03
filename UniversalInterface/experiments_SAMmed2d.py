@@ -1,11 +1,11 @@
 import os
 import numpy as np
 import json
-from utils.modelUtils import load_sammed2d
+from utils.model import load_sammed2d
 from classes.SAMMed2DClass import SAMMed2DInferer
-import utils.analysisUtils as anUt
-import utils.promptUtils as prUt
-from utils.imageUtils import read_reorient_nifti
+import utils.analysis as anUt
+import utils.prompt as prUt
+from utils.image import read_reorient_nifti
 from tqdm import tqdm
 
 # Setup

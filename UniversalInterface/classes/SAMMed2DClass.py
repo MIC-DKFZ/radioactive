@@ -114,7 +114,7 @@ class SAMMed2DInferer(Inferer):
         '''
 
         if isinstance(prompt, Points):
-            coords, labs = prompt.value['coords'], prompt.value['labels']
+            coords, labs = prompt.coords, prompt.labels
             coords, labs = np.array(coords).astype(float), np.array(labs).astype(int)
 
             slices_to_infer = set(coords[:,0].astype(int)) # zeroth element of batch (of size one), all triples, z coordinate 
