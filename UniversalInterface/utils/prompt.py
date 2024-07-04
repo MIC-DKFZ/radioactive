@@ -2,13 +2,14 @@ import numpy as np
 from copy import deepcopy
 from tqdm import tqdm
 from skimage.morphology import dilation, ball
-from .base_classes import Points, Boxes2d
-from .analysis import compute_dice
 from skimage.measure import label
 from scipy.spatial import cKDTree
 from scipy.interpolate import interp1d
 import warnings
 import torch
+
+from .base_classes import Points, Boxes2d
+from .analysis import compute_dice
 
 def get_crop_pad_center_from_points(points):
     bbox_min = points.coords.T.min(axis = 1) # Get an array of two points: the minimal and maximal vertices of the minimal cube parallel to the axes bounding the points
