@@ -58,9 +58,10 @@ def gen_contour_fp_scribble(slice_gt, slice_seg, contour_distance, disk_size_ran
     return scribble
 
 def iterate_2d(inferer, img, gt, segmentation, initial_prompt, pass_prev_prompts,
+               condition, 
                scribble_length = 0.2, contour_distance = 2, disk_size_range = (0,0),
-               dof_bound = 0, perf_bound = 0, init_dof = 0,
-               detailed = False, seed = None, verbose = True):
+               dof_bound = float('inf'), perf_bound = float('inf'), init_dof = 0,
+               detailed = False, seed = None):
     if seed:
         np.random.seed(seed)
         random.seed(seed)
@@ -76,6 +77,7 @@ def iterate_2d(inferer, img, gt, segmentation, initial_prompt, pass_prev_prompts
     inferer.verbose = False
 
     # Obtain low res masks for interactivity
+
     slices_inferred = np.unique(prompt.coords[:,0])
     low_res_masks = inferer.slice_lowres_outputs.copy()
     low_res_masks = {k:torch.sigmoid(v).squeeze().cpu().numpy() for k,v in low_res_masks.items()}
@@ -88,14 +90,9 @@ def iterate_2d(inferer, img, gt, segmentation, initial_prompt, pass_prev_prompts
     segmentations = [segmentation.copy()]
     dice_scores = [prUt.compute_dice(segmentation, gt)]
     max_fp_idxs = []
-    dofs = [init_dof]
 
-    # Conditions to stop
-    num_iter = 0
-    dice_condition_met = False
-    dof_condition_met = False
 
-    while not (dice_condition_met and dof_condition_met) and num_iter <= 10:
+    while True:
         # Determine whether to give positive prompts or attempt negative prompt
         fn_mask = (segmentation == 0) & (gt == 1)
         fn_count = np.sum(fn_mask)
@@ -131,7 +128,6 @@ def iterate_2d(inferer, img, gt, segmentation, initial_prompt, pass_prev_prompts
                 fp_coords_3d = np.vstack([fp_coords[:,0], missing_axis, fp_coords[:,1]]).T
                 improve_slices = np.unique(fp_coords_3d[:,0])
                 dof += 3*4 # To dicuss: assume drawing a scribble is as difficult as drawing four points
-                dofs.append(dof)
 
                 if pass_prev_prompts: # new prompt includes old prompts
                     ## Add to old prompt
@@ -160,7 +156,6 @@ def iterate_2d(inferer, img, gt, segmentation, initial_prompt, pass_prev_prompts
             fp_coords = fp_coords[middle_mask, :]
             new_middle_seed_prompt = fp_coords[np.random.choice(len(fp_coords), 1)]
             dof += 3
-            dofs.append(dof)
 
             # Interpolate linearly from botom_seed-prompt to top_seed_prompt through the new middle prompt to get new positive prompts
             new_seed_prompt = np.vstack([bottom_seed_prompt, new_middle_seed_prompt, top_seed_prompt])
@@ -187,23 +182,24 @@ def iterate_2d(inferer, img, gt, segmentation, initial_prompt, pass_prev_prompts
         # Update the trackers
         low_res_masks.update({fix_slice_idx: torch.sigmoid(inferer.slice_lowres_outputs[fix_slice_idx]).squeeze().cpu().numpy() for fix_slice_idx in improve_slices})
         dice_scores.append(prUt.compute_dice(segmentation, gt))
-        if verbose:
-            print(dice_scores[-1])
+        print(dice_scores[-1])
 
         # Check break conditions
-        if dof >= dof_bound:
-            dof_condition_met = True
+        if condition == 'dof' and dof >= dof_bound:
+            if inferer.verbose:
+                print(f'degrees of freedom bound met; terminating with performance {dice_scores[-1]}')
+            break
+        elif condition == 'perf' and dice_scores[-1] >= perf_bound:
+            if inferer.verbose:
+                print(f'performance bound met; terminating with performance {dice_scores[-1]}')
+            break
+        elif len(dice_scores) == 10:
+            if inferer.verbose:
+                print(f'Could not achieve desired performance/dof within 10 steps; terminating with performance {dice_scores[-1]}')
+            break
 
-        if dice_scores[-1] >= perf_bound:
-            dice_condition_met = True
-
-        num_iter+=1
-
-    # Reset verbosity
     inferer.verbose = verbosity
-
-    # Return variables with chosen degree of detail
     if detailed == False:
-        return dice_scores, dofs
+        return dice_scores, dof
     else:
-        return dice_scores, dofs, segmentations, prompts
+        return dice_scores, dof, segmentations, prompts

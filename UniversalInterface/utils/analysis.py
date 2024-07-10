@@ -69,7 +69,7 @@ def show_seg(slice_idx, img, gt, segmentation, pts_prompt = None, box_prompt = N
     ax[0].set_title("Input Image and slice prompts")
 
     if pts_prompt is not None:
-        coords, _ = pts_prompt.value.values()
+        coords = pts_prompt.coords
         slice_inds = coords[:,2] == slice_idx
         slice_coords = coords[slice_inds,:-1].T
         ax[0].plot(slice_coords[1], slice_coords[0], 'ro')
@@ -97,13 +97,13 @@ def show_seg_row_major(slice_idx, img, gt, segmentation, pts_prompt = None, box_
     ax[0].set_title("Input Image and Slice Prompts")
 
     if pts_prompt is not None:
-        # coords, labels = pts_prompt.value.values()
+        # coords, labels = pts_prompt.coords, pts_prompt.labels
         # slice_inds = coords[:,0] == slice_idx
         # slice_coords = coords[slice_inds,1:].T
         # ax[0].plot(slice_coords[1], slice_coords[0], 'ro')
         # ax[1].plot(slice_coords[1], slice_coords[0], 'ro')
 
-        coords, labels = pts_prompt.value.values()
+        coords, labels = pts_prompt.coords, pts_prompt.labels
         slice_inds = coords[:, 0] == slice_idx
         slice_coords = coords[slice_inds, 1:].T
         slice_labels = labels[slice_inds]

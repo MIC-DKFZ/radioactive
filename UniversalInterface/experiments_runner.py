@@ -60,30 +60,32 @@ if __name__ == '__main__':
         n_click_random_points = 5,
         n_slice_point_interpolation = 5,
         n_slice_box_interpolation = 5,
-        n_seed_points_point_propagation = 5, n_points_propagation = 5, 
+        n_seed_points_point_propagation = 5, n_points_propagation = 5,
+        dof_bound = 60,
+        perf_bound = 0.85,
     )
     device = 'cuda'
     seed = 11121
     label_overwrite = None
     experiment_overwrite = None
 
-    supported_prompts = ['points', 'boxes', 'interactive']
+    prompt_types = ['points', 'boxes', 'interactive']
 
     label_overwrite = {
-        "organ": 3,
+        "kidney_left": 3,
     }
-
+    
     # label_overwrite = {
-    #     # "background": 0,
-    #     # "aorta": 1,
-    #     # "gall_bladder": 2,
-    #     # "kidney_left": 3,
-    #     # "kidney_right": 4,
-    #     # "liver": 5,
-    #     # "pancreas": 6,
+    #     "background": 0,
+    #     "aorta": 1,
+    #     "gall_bladder": 2,
+    #     "kidney_left": 3,
+    #     "kidney_right": 4,
+    #     "liver": 5,
+    #     "pancreas": 6,
     #     "postcava": 7,
     #     "spleen": 8,
-    #     # "stomach": 9
+    #     "stomach": 9
     # }
 
     
@@ -111,5 +113,5 @@ if __name__ == '__main__':
 
     # Run experiments
     run_experiments(inferer, imgs_gts, results_path, label_dict,
-                    exp_params, supported_prompts,
+                    exp_params, prompt_types,
                     seed = 11121, experiment_overwrite = experiment_overwrite)

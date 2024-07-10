@@ -196,7 +196,7 @@ class SAMInferer(Inferer):
         slices_to_process = [slice_idx for slice_idx in slices_to_infer if slice_idx not in self.image_embeddings_dict.keys()]
         slices_processed = self.preprocess_img(img, slices_to_process)
         
-        slice_mask_dict = {}
+        self.slice_lowres_dict = {}
         if self.verbose:
             slices_to_infer = tqdm(slices_to_infer, desc = 'Performing inference on slices')
         for slice_idx in slices_to_infer:
@@ -219,8 +219,8 @@ class SAMInferer(Inferer):
 
             # Infer
             slice_raw_outputs = self.segmenter(points = slice_points, box=slice_box, mask = slice_mask, image_embedding = image_embedding) # Add batch dimensions
-            slice_mask_dict[slice_idx] = slice_raw_outputs
+            self.slice_lowres_dict[slice_idx] = slice_raw_outputs
             
-        segmentation = self.postprocess_slices(slice_mask_dict)
+        segmentation = self.postprocess_slices(self.slice_lowres_dict)
 
         return(segmentation)

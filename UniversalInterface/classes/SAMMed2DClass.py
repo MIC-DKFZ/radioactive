@@ -52,7 +52,7 @@ class SAMMed2DWrapper(SegmenterWrapper):
 
 class SAMMed2DInferer(Inferer):
     supported_prompts = (Points,)
-
+    pass_prev_prompts = True # Flag to track whether in interactive steps previous prompts should be passed, or only the mask and the new prompt
     def __init__(self, checkpoint_path, device):
         model = load_sammed2d(checkpoint_path, device)
         self.segmenter = SAMMed2DWrapper(model)
@@ -193,7 +193,7 @@ class SAMMed2DInferer(Inferer):
         slices_to_process = [slice_idx for slice_idx in slices_to_infer if slice_idx not in self.image_embeddings_dict.keys()]
         slices_processed = self.preprocess_img(img, slices_to_process)
 
-        self.slice_lowres_dict = dict()
+        self.slice_lowres_outputs = {}
         if self.verbose:
             slices_to_infer = tqdm(slices_to_infer, desc = 'Performing inference on slices')
         for slice_idx in slices_to_infer:
@@ -209,7 +209,6 @@ class SAMMed2DInferer(Inferer):
             # Get prompts
             slice_points, slice_box, = None, None # Initialise to empty
             slice_mask = torch.from_numpy(mask_dict[slice_idx]).to(self.device).unsqueeze(0).unsqueeze(0) if slice_idx in mask_dict.keys() else None
-            self.slice_mask = slice_mask
                 
             if self.prompt_type == 'point':
                 slice_points = preprocessed_prompt_dict[slice_idx]
@@ -219,10 +218,10 @@ class SAMMed2DInferer(Inferer):
 
             # Infer
             slice_raw_outputs = self.segmenter(points = slice_points, box=slice_box, mask = slice_mask, image_embedding = image_embedding) # Add batch dimensions
-            self.slice_lowres_dict[slice_idx] = slice_raw_outputs
+            self.slice_lowres_outputs[slice_idx] = slice_raw_outputs
         
 
-        segmentation = self.postprocess_slices(self.slice_lowres_dict, return_logits)
+        segmentation = self.postprocess_slices(self.slice_lowres_outputs, return_logits)
 
         return(segmentation)
     

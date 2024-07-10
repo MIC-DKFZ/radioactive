@@ -448,8 +448,10 @@ def point_propagation(inferer, img, seed_prompt, slices_to_infer, seed = None, n
 
     inferer.verbose = verbose_state # Return inferer verbosity to initial state
 
-    prompt = np.concatenate(downwards_coords[::-1] + seed_coords + upward_coords, axis = 0)
-    prompt = Points(coords = prompt, labels =  [1]*len(prompt))
+    coords = np.concatenate(downwards_coords[::-1] + seed_coords + upward_coords, axis = 0)
+    is_in_slices_inferred = np.isin(coords[:,0], slices_to_infer)
+    coords = coords[is_in_slices_inferred] # Removes extraneous prompts on bottom_slice-1 and top_slice+1 that weren't used.
+    prompt = Points(coords = coords, labels =  [1]*len(coords))
     return segmentation, prompt
 
 
@@ -470,6 +472,7 @@ def box_propagation(inferer, img, seed_box, slices_to_infer, verbose = True):
     segmentation = np.zeros_like(img).astype(np.uint8)
 
     box_prompt = deepcopy(seed_box)
+    all_boxes = seed_box.value # Update throughout the loops to keep track of all box prompts
     middle_idx = np.median(slices_to_infer).astype(int)
 
     # Infer middle slice
@@ -479,6 +482,7 @@ def box_propagation(inferer, img, seed_box, slices_to_infer, verbose = True):
 
     # Downwards branch
     ## Modify seed prompt to exist one axial slice down
+    all_boxes[middle_idx-1] = all_boxes[middle_idx] 
     box_prompt = Boxes2d({k-1:v for k,v in seed_box.value.items()})
 
     downwards_iter = range(middle_idx-1, slices_to_infer.min()-1, -1)
@@ -496,10 +500,12 @@ def box_propagation(inferer, img, seed_box, slices_to_infer, verbose = True):
 
         # Update prompt
         bbox_slice = get_bbox2d_row_major(segmentation[slice_idx])
+        all_boxes[slice_idx-1] = bbox_slice
         box_prompt = Boxes2d({slice_idx-1: bbox_slice}) # Notice the -1: this is the prompt for one slice down
 
     # Upward branch
     ## Modify seed prompt to exist one axial slice up
+    all_boxes[middle_idx+1] = all_boxes[middle_idx]
     box_prompt = Boxes2d({k+1:v for k,v in seed_box.value.items()})
 
     upwards_iter = range(middle_idx+1, slices_to_infer.max()+1)
@@ -517,10 +523,14 @@ def box_propagation(inferer, img, seed_box, slices_to_infer, verbose = True):
 
         # Update prompt
         bbox_slice = get_bbox2d_row_major(segmentation[slice_idx])
+        all_boxes[slice_idx+1] = bbox_slice
         box_prompt = Boxes2d({slice_idx+1: bbox_slice}) # Notice the +1: this is the prompt for one slice up
+    
+    all_boxes = {k:all_boxes[k] for k in slices_to_infer} # Removes top and bottom box - they weren't used
 
+    all_boxes = Boxes2d(all_boxes)
     inferer.verbose = verbose_state # Return inferer verbosity to initial state
-    return(segmentation)
+    return segmentation, all_boxes
 
 
 def iter_improve_sammed2d(img, gt, segmentation, inferer, point_prompt, target_dof = None, initial_dof = None, target_performance = None, fix_worst_slice = False, seed = None):
@@ -539,7 +549,7 @@ def iter_improve_sammed2d(img, gt, segmentation, inferer, point_prompt, target_d
 
     ## Helper variables and trackers
     slices_to_infer = np.unique(point_prompt.coords[:,0]) # will need to modify for non-point prompts
-    low_res_masks = inferer.slice_lowres_dict.copy()
+    low_res_masks = inferer.slice_lowres_outputs.copy()
     low_res_masks = {k:torch.sigmoid(v).squeeze().cpu().numpy() for k,v in low_res_masks.items()}
 
     perf = compute_dice(segmentation, gt)
@@ -620,3 +630,9 @@ def iter_improve_dof_sammed2d(img, gt, segmentation, inferer, seed_prompt, targe
 
 def iter_improve_perf_sammed2d(img, gt, segmentation, inferer, seed_prompt, initial_dof, target_performance, fix_worst_slice = False, seed = None):
     return iter_improve_sammed2d(img, gt, segmentation, inferer, seed_prompt, target_dof = None, initial_dof = initial_dof, target_performance = target_performance, fix_worst_slice = fix_worst_slice, seed = seed)
+
+def line_interpolation(gt, n_slices, interpolation = 'linear'):
+    simulated_clicks = get_fg_points_from_cc_centers(gt, n_slices)
+    coords = interpolate_points(simulated_clicks, kind = interpolation).astype(int)
+    point_prompt = Points(coords = coords, labels = [1]*len(coords))
+    return(point_prompt)
