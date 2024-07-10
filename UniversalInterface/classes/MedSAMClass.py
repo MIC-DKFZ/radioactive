@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from copy import deepcopy
 from tqdm import tqdm
 
-from utils.base_classes import SegmenterWrapper, Inferer, Boxes2d, Points
+from utils.base_classes import SegmenterWrapper, Inferer, Boxes, Points
 from utils.MedSAM_segment_anything import sam_model_registry as registry_medsam
 
 
@@ -64,7 +64,7 @@ class MedSAMInferer(Inferer):
         return(slices_processed)
             
     def preprocess_prompt(self, prompt):
-        if isinstance(prompt, Boxes2d):
+        if isinstance(prompt, Boxes):
             slices_to_infer = prompt.get_slices_to_infer()
 
             preprocessed_prompt_dict = {}
@@ -99,12 +99,8 @@ class MedSAMInferer(Inferer):
         return(segmentation)
     
     def predict(self, img, prompt):
-        if isinstance(prompt, Points):
-            self.prompt_type = 'point'
-        elif isinstance(prompt, Boxes2d):
-            self.prompt_type = 'box'
-        else:
-            raise RuntimeError(f'Currently only points and boxes are supported, got {type(prompt)}')
+        if not isinstance(prompt, Boxes):
+            raise RuntimeError(f'Currently only points and boxes are supported, got {type(prompt)}')            
         
         if self.verbose and self.image_embeddings_dict != {}:
             print('Using previously generated image embeddings')
@@ -135,10 +131,7 @@ class MedSAMInferer(Inferer):
             # Get prompts
             slice_points, slice_box, slice_mask = None, None, None # Initialise to empty
 
-            if self.prompt_type == 'point':
-                slice_points = preprocessed_prompt_dict[slice_idx]
-
-            if self.prompt_type == 'box':
+            if isinstance(prompt, Boxes):
                 slice_box = preprocessed_prompt_dict[slice_idx]
 
             # Infer

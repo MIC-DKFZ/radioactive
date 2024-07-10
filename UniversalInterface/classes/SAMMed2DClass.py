@@ -9,7 +9,7 @@ import cv2
 from argparse import Namespace
 from utils.SAMMed2D_segment_anything import sam_model_registry as registry_sammed2d
 
-from utils.base_classes import SegmenterWrapper, Inferer, Points, Boxes2d
+from utils.base_classes import SegmenterWrapper, Inferer, Points, Boxes
 
 def load_sammed2d(checkpoint_path, device = 'cuda'):
     args = Namespace()
@@ -134,7 +134,7 @@ class SAMMed2DInferer(Inferer):
                 slice_coords, slice_labs = slice_coords.unsqueeze(0).to(self.device), slice_labs.unsqueeze(0).to(self.device) # add batch dimension, move to device.
                 preprocessed_prompts_dict[slice_idx] = (slice_coords, slice_labs)
 
-        if isinstance(prompt, Boxes2d):
+        if isinstance(prompt, Boxes):
             slices_to_infer = prompt.get_slices_to_infer()
             preprocessed_prompts_dict = {}
             for slice_index, box in prompt.value.items():
@@ -173,11 +173,7 @@ class SAMMed2DInferer(Inferer):
         return(segmentation)
     
     def predict(self, img, prompt, mask_dict = {}, return_logits = False):
-        if isinstance(prompt, Points):
-            self.prompt_type = 'point'
-        elif isinstance(prompt, Boxes2d):
-            self.prompt_type = 'box'
-        else:
+        if not (isinstance(prompt, Points) or isinstance(prompt, Boxes)):
             raise RuntimeError(f'Currently only points and boxes are supported, got {type(prompt)}')
         
         if self.verbose and self.image_embeddings_dict != {}:
@@ -210,10 +206,10 @@ class SAMMed2DInferer(Inferer):
             slice_points, slice_box, = None, None # Initialise to empty
             slice_mask = torch.from_numpy(mask_dict[slice_idx]).to(self.device).unsqueeze(0).unsqueeze(0) if slice_idx in mask_dict.keys() else None
                 
-            if self.prompt_type == 'point':
+            if isinstance(prompt, Points):
                 slice_points = preprocessed_prompt_dict[slice_idx]
 
-            if self.prompt_type == 'box':
+            if isinstance(prompt, Boxes):
                 slice_box = preprocessed_prompt_dict[slice_idx]
 
             # Infer

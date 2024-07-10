@@ -6,10 +6,10 @@ from skimage.measure import label as ski_label
 import warnings
 from . import prompt as prUt
 import torch
-from .base_classes import Points, Boxes2d
+from .base_classes import Points, Boxes
 
 # Code courtesy of Karol Gotkowski (modified)
-def gen_contour_fp_scribble(slice_gt, slice_seg, contour_distance, disk_size_range, scribble_length, seed = None): 
+def gen_contour_fp_scribble(slice_gt, slice_seg, contour_distance, disk_size_range, scribble_length, seed = None, verbose = True): 
     if seed:
         random.seed(seed)
     # Erode mask
@@ -36,7 +36,8 @@ def gen_contour_fp_scribble(slice_gt, slice_seg, contour_distance, disk_size_ran
     contour_fp_inds = np.where(values_at_contour_points == 1)[0]
 
     if len(contour_fp_inds) == 0:
-        warnings.warn(' All false positives not on contour: generating fg instead.')
+        if verbose:
+            warnings.warn('All false positives not on contour: generating fg instead.')
         return None
 
     scribble_pos = random.choices(contour_fp_inds)[0]
@@ -115,7 +116,7 @@ def iterate_2d(inferer, img, gt, segmentation, initial_prompt, pass_prev_prompts
             max_fp_slice = gt[:, max_fp_idx]
             slice_seg = segmentation[:, max_fp_idx]
 
-            scribble = gen_contour_fp_scribble(max_fp_slice, slice_seg, contour_distance, disk_size_range, scribble_length)
+            scribble = gen_contour_fp_scribble(max_fp_slice, slice_seg, contour_distance, disk_size_range, scribble_length, seed = seed, verbose = False)
             if scribble is None:
                 generate_positive_prompts = 1 # Generate positive prompts instead
             else:  # Otherwise subset scribble to false positives  to generate new prompt

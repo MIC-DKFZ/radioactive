@@ -8,7 +8,7 @@ from scipy.interpolate import interp1d
 import warnings
 import torch
 
-from .base_classes import Points, Boxes2d
+from .base_classes import Points, Boxes
 from .analysis import compute_dice
 
 def get_crop_pad_center_from_points(points):
@@ -153,7 +153,7 @@ def get_bbox3d_sliced(mask_volume: np.ndarray):
 
     slices_to_infer = np.arange(bbox3d[0][0], bbox3d[1][0]) # gt is in ZYX format, so index 0 are the axial slices
     box_dict = {slice_idx: np.array((bbox3d[0][2], bbox3d[0][1], bbox3d[1][2], bbox3d[1][1])) for slice_idx in slices_to_infer} # reverse order to get xyxy
-    return(Boxes2d(box_dict))
+    return(Boxes(box_dict))
 
 def get_bbox2d(mask):
     i_any = np.any(mask, axis=1)
@@ -174,7 +174,7 @@ def get_minimal_boxes(gt, delta_x, delta_y):
     slices_to_infer = np.where(np.any(gt, axis=(0,1)))[0] # index 0 since a tuple of length 1 is returned
     box_dict = {slice_idx: get_bbox2d(gt[:,:,slice_idx].T) for slice_idx in slices_to_infer} # Transpose to get coords in row-major format
     box_dict = {slice_idx: box + np.array([-delta_x, -delta_y, delta_x, delta_y]) for slice_idx, box in box_dict.items()}
-    return(Boxes2d(box_dict))
+    return(Boxes(box_dict))
 
 def get_bbox2d_row_major(mask):
     '''
@@ -199,7 +199,7 @@ def get_minimal_boxes_row_major(gt, delta_x=0, delta_y=0):
     slices_to_infer = np.where(np.any(gt, axis=(1,2)))[0] # index 0 since a tuple of length 1 is returned
     box_dict = {slice_idx: get_bbox2d_row_major(gt[slice_idx,:,:]) for slice_idx in slices_to_infer} 
     box_dict = {slice_idx: box + np.array([-delta_x, -delta_y, delta_x, delta_y]) for slice_idx, box in box_dict.items()}
-    return(Boxes2d(box_dict))
+    return(Boxes(box_dict))
 
 # Have to rework for new row-major order
 # def get_3d_box_for_2d(gt, delta_x, delta_y):
@@ -210,7 +210,7 @@ def get_minimal_boxes_row_major(gt, delta_x=0, delta_y=0):
 #     box_2d = np.concatenate([box_3d[0][-2:], box_3d[1][-2:]])
 #     box_2d = box_2d + np.array([-delta_x, -delta_y, delta_x, delta_y])
 #     box_dict = {slice_idx: box_2d for slice_idx in range(box_3d[0][2], box_3d[1][2])}
-#     return(Boxes2d(box_dict))
+#     return(Boxes(box_dict))
 
 def get_nearest_fg_point(point, binary_mask):
     """
@@ -349,7 +349,7 @@ def box_interpolation(seed_boxes):
     bbox_np_interpolated = np.concatenate((bbox_mins_interpolated, bbox_maxs_interpolated[:, 1:]), axis = 1).astype(int)
 
     bbox_dict_interpolated = {row[0]: row[1:] for row in bbox_np_interpolated }
-    box_prompt = Boxes2d(bbox_dict_interpolated)
+    box_prompt = Boxes(bbox_dict_interpolated)
 
     return(box_prompt)
 
@@ -462,7 +462,7 @@ def get_seed_box(gt):
     bbox_slice = get_bbox2d_row_major(gt[middle_idx])
     box_dict = {middle_idx: bbox_slice}
 
-    return(Boxes2d(box_dict))
+    return(Boxes(box_dict))
 
 def box_propagation(inferer, img, seed_box, slices_to_infer, verbose = True):
     verbose_state = inferer.verbose # Make inferer not verbose for this experiment
@@ -483,7 +483,7 @@ def box_propagation(inferer, img, seed_box, slices_to_infer, verbose = True):
     # Downwards branch
     ## Modify seed prompt to exist one axial slice down
     all_boxes[middle_idx-1] = all_boxes[middle_idx] 
-    box_prompt = Boxes2d({k-1:v for k,v in seed_box.value.items()})
+    box_prompt = Boxes({k-1:v for k,v in seed_box.value.items()})
 
     downwards_iter = range(middle_idx-1, slices_to_infer.min()-1, -1)
     if verbose:
@@ -501,12 +501,12 @@ def box_propagation(inferer, img, seed_box, slices_to_infer, verbose = True):
         # Update prompt
         bbox_slice = get_bbox2d_row_major(segmentation[slice_idx])
         all_boxes[slice_idx-1] = bbox_slice
-        box_prompt = Boxes2d({slice_idx-1: bbox_slice}) # Notice the -1: this is the prompt for one slice down
+        box_prompt = Boxes({slice_idx-1: bbox_slice}) # Notice the -1: this is the prompt for one slice down
 
     # Upward branch
     ## Modify seed prompt to exist one axial slice up
     all_boxes[middle_idx+1] = all_boxes[middle_idx]
-    box_prompt = Boxes2d({k+1:v for k,v in seed_box.value.items()})
+    box_prompt = Boxes({k+1:v for k,v in seed_box.value.items()})
 
     upwards_iter = range(middle_idx+1, slices_to_infer.max()+1)
     if verbose:
@@ -524,112 +524,13 @@ def box_propagation(inferer, img, seed_box, slices_to_infer, verbose = True):
         # Update prompt
         bbox_slice = get_bbox2d_row_major(segmentation[slice_idx])
         all_boxes[slice_idx+1] = bbox_slice
-        box_prompt = Boxes2d({slice_idx+1: bbox_slice}) # Notice the +1: this is the prompt for one slice up
+        box_prompt = Boxes({slice_idx+1: bbox_slice}) # Notice the +1: this is the prompt for one slice up
     
     all_boxes = {k:all_boxes[k] for k in slices_to_infer} # Removes top and bottom box - they weren't used
 
-    all_boxes = Boxes2d(all_boxes)
+    all_boxes = Boxes(all_boxes)
     inferer.verbose = verbose_state # Return inferer verbosity to initial state
     return segmentation, all_boxes
-
-
-def iter_improve_sammed2d(img, gt, segmentation, inferer, point_prompt, target_dof = None, initial_dof = None, target_performance = None, fix_worst_slice = False, seed = None):
-    if seed is not None:
-        np.random.seed(seed)
-    dof = initial_dof
-        
-    # Set condition
-    if target_dof is not None and target_performance is None:
-        condition = 'dof'
-        
-    elif target_performance is not None:
-        condition = 'perf'
-    else:
-        raise ValueError('Exactly one of target_dof or target_performance must not be none')
-
-    ## Helper variables and trackers
-    slices_to_infer = np.unique(point_prompt.coords[:,0]) # will need to modify for non-point prompts
-    low_res_masks = inferer.slice_lowres_outputs.copy()
-    low_res_masks = {k:torch.sigmoid(v).squeeze().cpu().numpy() for k,v in low_res_masks.items()}
-
-    perf = compute_dice(segmentation, gt)
-    iter_threshold = 20
-
-    dice = []
-    segmentations = []
-    revised_slices = []
-    segmentations.append(segmentation.copy())
-    dice.append(perf)
-
-    inferer.verbose = False
-
-
-    while True:
-        # Break if condition is met
-        if condition == 'dof' and dof >= target_dof - 2: # -2 because otherwise on the next iteration the dof would overshoot the target: dof increases by 3 with each iteration
-            print(f'dof target achieved with with final dice {dice[-1]:.4f}')
-            break
-
-        if condition == 'perf':
-            if dice[-1] >= target_performance:
-                print(f'target performance achieved in {len(dice)} iterations')
-                break
-            elif len(dice)>= iter_threshold:
-                print(f'Target performance not achieved within {iter_threshold} iterations. Final dice {dice[-1]:.4f}')
-                break
-
-        if dice == 1:
-            raise RuntimeError('Perfect dice achieved... That should not happen')
-
-        # Find worst slice
-        if fix_worst_slice:
-            slice_dice_points = {slice_idx: compute_dice(gt[slice_idx], segmentation[slice_idx]) for slice_idx in slices_to_infer}
-            fix_slice_idx = min(slice_dice_points, key = slice_dice_points.get)
-        else:
-            fix_slice_idx = np.random.choice(slices_to_infer, 1).item()
-        print(f'Improving {fix_slice_idx}')
-        revised_slices.append(fix_slice_idx)
-
-
-        # Get new prompt
-        mistake_mask = np.argwhere(segmentation[fix_slice_idx] != gt[fix_slice_idx])
-        new_coords = mistake_mask[np.random.choice(len(mistake_mask), 1)].squeeze()
-        new_coords = np.concatenate(([fix_slice_idx], new_coords))
-        new_label = gt[tuple(new_coords)]
-
-        # Insert into coords and labels
-        coords, labels = point_prompt.value.values()
-        fix_slice_mask = (coords[:,0] == fix_slice_idx)
-        insert_idx = np.argwhere(fix_slice_mask).max()+1
-        coords_new = np.insert(coords, insert_idx, new_coords, axis = 0)
-        labels_new = np.insert(labels, insert_idx, new_label)
-
-        point_prompt = Points(coords = coords_new, labels =  labels_new)
-
-        # Obtain prompt only for the worst slice
-        coords, labels = point_prompt.value.values()
-        fix_slice_mask = (point_prompt.coords[:,0] == fix_slice_idx)
-        slice_prompt = Points(coords = coords[fix_slice_mask], labels =  labels[fix_slice_mask])
-
-        # Generate new segmentation
-        new_slice_seg = inferer.predict(img, slice_prompt, mask_dict = low_res_masks)
-        segmentation[fix_slice_idx] = new_slice_seg[fix_slice_idx]
-        segmentations.append(segmentation)
-
-        # Store/update trackers
-        low_res_masks.update({fix_slice_idx: torch.sigmoid(inferer.slice_lowres_dict[fix_slice_idx]).squeeze().cpu().numpy()})
-        dice.append(compute_dice(segmentation, gt))
-        dof+=3
-
-    inferer.verbose = True
-
-    return(dice, revised_slices, dof, segmentations)
-
-def iter_improve_dof_sammed2d(img, gt, segmentation, inferer, seed_prompt, target_dof, initial_dof, fix_worst_slice = False, seed = None):
-    return iter_improve_sammed2d(img, gt, segmentation, inferer, seed_prompt, target_dof, initial_dof, target_performance = None, fix_worst_slice = fix_worst_slice, seed = seed)
-
-def iter_improve_perf_sammed2d(img, gt, segmentation, inferer, seed_prompt, initial_dof, target_performance, fix_worst_slice = False, seed = None):
-    return iter_improve_sammed2d(img, gt, segmentation, inferer, seed_prompt, target_dof = None, initial_dof = initial_dof, target_performance = target_performance, fix_worst_slice = fix_worst_slice, seed = seed)
 
 def line_interpolation(gt, n_slices, interpolation = 'linear'):
     simulated_clicks = get_fg_points_from_cc_centers(gt, n_slices)

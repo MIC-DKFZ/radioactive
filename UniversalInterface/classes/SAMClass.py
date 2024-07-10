@@ -7,7 +7,7 @@ from copy import deepcopy
 from argparse import Namespace
 
 from utils.SAMMed3D_segment_anything.build_sam import sam_model_registry as registry_sam
-from utils.base_classes import Points, Boxes2d, Inferer, SegmenterWrapper
+from utils.base_classes import Points, Boxes, Inferer, SegmenterWrapper
 
 import utils.prompt as prUt
 import utils.image as imUt
@@ -137,7 +137,7 @@ class SAMInferer(Inferer):
 
             return(preprocessed_prompts_dict, slices_to_infer)
         
-        if isinstance(prompt, Boxes2d):
+        if isinstance(prompt, Boxes):
             slices_to_infer = prompt.get_slices_to_infer()
             preprocessed_prompts_dict = {}
             for slice_index, box in prompt.value.items():
@@ -177,11 +177,7 @@ class SAMInferer(Inferer):
         return(segmentation)
  
     def predict(self, img, prompt):
-        if isinstance(prompt, Points):
-            self.prompt_type = 'point'
-        elif isinstance(prompt, Boxes2d):
-            self.prompt_type = 'box'
-        else:
+        if not (isinstance(prompt, Points) or isinstance(prompt, Boxes)):
             raise RuntimeError(f'Currently only points and boxes are supported, got {type(prompt)}')
         
         if self.verbose and self.image_embeddings_dict != {}:
@@ -211,10 +207,9 @@ class SAMInferer(Inferer):
 
             slice_points, slice_box, slice_mask = None, None, None # Initialise to empty
 
-            if self.prompt_type == 'point':
+            if isinstance(prompt, Points):
                 slice_points = preprocessed_prompt_dict[slice_idx]
-
-            if self.prompt_type == 'box':
+            elif isinstance(prompt, Boxes):
                 slice_box = preprocessed_prompt_dict[slice_idx]
 
             # Infer
