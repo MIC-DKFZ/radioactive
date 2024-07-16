@@ -1,10 +1,20 @@
 from argparse import Namespace
 import os
-import warnings
 import json
+from datetime import datetime
 
-from utils.model import inferer_registry
 from experiments import run_experiments
+from classes.SAMClass import SAMInferer
+from classes.SAMMed2DClass import SAMMed2DInferer
+from classes.MedSAMClass import MedSAMInferer
+from classes.SAMMed3DClass import SAMMed3DInferer
+
+inferer_registry = {
+    'sam': SAMInferer,
+    'sammed2d': SAMMed2DInferer,
+    'medsam': MedSAMInferer,
+    'sammed3d': SAMMed3DInferer
+}
 
 
 def get_img_gts_jhu(dataset_dir):
@@ -69,7 +79,7 @@ if __name__ == '__main__':
     label_overwrite = None
     experiment_overwrite = None
 
-    prompt_types = ['points', 'boxes', 'interactive']
+    prompt_types = ['interactive'] #['points', 'boxes', 'interactive']
 
     label_overwrite = {
         "kidney_left": 3,
@@ -94,7 +104,7 @@ if __name__ == '__main__':
 
 
     # Get (img path, gt path) pairs
-    results_path = os.path.join(results_dir, model_name + '_' + dataset_name + '.json')
+    results_path = os.path.join(results_dir, model_name + '_' + dataset_name + '_' + datetime.now().strftime("%Y%m%d_%H%M") + '.json')
     dataset_func, dataset_dir = dataset_registry[dataset_name]['dataset_func'], dataset_registry[dataset_name]['dir']
     imgs_gts = dataset_func(dataset_dir)
 
@@ -114,4 +124,4 @@ if __name__ == '__main__':
     # Run experiments
     run_experiments(inferer, imgs_gts, results_path, label_dict,
                     exp_params, prompt_types,
-                    seed = 11121, experiment_overwrite = experiment_overwrite)
+                    seed = 1, experiment_overwrite = experiment_overwrite)

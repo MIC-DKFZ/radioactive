@@ -58,7 +58,7 @@ def gen_contour_fp_scribble(slice_gt, slice_seg, contour_distance, disk_size_ran
     scribble = scribble_components == label
     return scribble
 
-def iterate_2d(inferer, img, gt, segmentation, initial_prompt, pass_prev_prompts,
+def iterate_2d(inferer, img, gt, segmentation, low_res_logits, initial_prompt, pass_prev_prompts,
                scribble_length = 0.2, contour_distance = 2, disk_size_range = (0,0),
                dof_bound = 0, perf_bound = 0, init_dof = 0,
                detailed = False, seed = None, verbose = True):
@@ -78,9 +78,7 @@ def iterate_2d(inferer, img, gt, segmentation, initial_prompt, pass_prev_prompts
 
     # Obtain low res masks for interactivity
     slices_inferred = np.unique(prompt.coords[:,0])
-    low_res_masks = inferer.slice_lowres_outputs.copy()
-    low_res_masks = {k:torch.sigmoid(v).squeeze().cpu().numpy() for k,v in low_res_masks.items()}
-    
+
     # Flag for calculating dof
     has_generated_positive_prompt = False
 
@@ -88,6 +86,8 @@ def iterate_2d(inferer, img, gt, segmentation, initial_prompt, pass_prev_prompts
     prompts = [prompt]
     segmentations = [segmentation.copy()]
     dice_scores = [prUt.compute_dice(segmentation, gt)]
+    if verbose:
+        print(dice_scores[-1])
     max_fp_idxs = []
     dofs = [init_dof]
 
@@ -104,7 +104,7 @@ def iterate_2d(inferer, img, gt, segmentation, initial_prompt, pass_prev_prompts
         fg_count = np.sum(segmentation)
 
         generate_positive_prompts_prob = fn_count/fg_count # Generate positive prompts when much of the foreground isn't segmented
-        generate_positive_prompts = np.random.binomial(1,generate_positive_prompts_prob)
+        generate_positive_prompts = np.random.binomial(1, generate_positive_prompts_prob)
 
         if not generate_positive_prompts:
             # Obtain contour scribble on worst sagittal slice
@@ -180,13 +180,13 @@ def iterate_2d(inferer, img, gt, segmentation, initial_prompt, pass_prev_prompts
             improve_slices = slices_inferred # improve all slices 
 
         # Generate new segmentation and integrate into old one
-        new_seg = inferer.predict(img, new_prompt, low_res_masks)
+        new_seg, low_res_logits = inferer.predict(img, new_prompt, low_res_logits, return_low_res_logits = True)
         prompts.append(new_prompt)
         segmentation[improve_slices] = new_seg[improve_slices]
         segmentations.append(segmentation.copy())
 
         # Update the trackers
-        low_res_masks.update({fix_slice_idx: torch.sigmoid(inferer.slice_lowres_outputs[fix_slice_idx]).squeeze().cpu().numpy() for fix_slice_idx in improve_slices})
+        low_res_logits.update(low_res_logits)
         dice_scores.append(prUt.compute_dice(segmentation, gt))
         if verbose:
             print(dice_scores[-1])

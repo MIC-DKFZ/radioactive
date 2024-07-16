@@ -1,4 +1,5 @@
 import numpy as np
+import pickle
 
 def gt_fg_dims(gt):
     '''
@@ -15,3 +16,12 @@ def gt_fg_dims(gt):
     width = max_x - min_x + 1
 
     return({"Depth": depth, "Height": height, "Width": width})
+
+def test_save(obj, name):
+    with open('/home/t722s/Desktop/test/' + name + '.pkl', 'wb') as f:
+        pickle.dump(obj, f)
+
+def test_load(name):
+    with open('/home/t722s/Desktop/test/' + name + '.pkl', 'rb') as f:
+        obj = pickle.load(f)
+    return obj

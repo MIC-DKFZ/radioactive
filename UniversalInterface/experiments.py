@@ -8,6 +8,7 @@ from utils.interactivity import iterate_2d
 from utils.image import read_reorient_nifti
 from tqdm import tqdm
 import warnings
+
 def run_experiments(inferer, imgs_gts, results_path, label_dict,
                     exp_params, prompt_types,
                     seed, experiment_overwrite = None):
@@ -38,7 +39,7 @@ def run_experiments(inferer, imgs_gts, results_path, label_dict,
         interactive_experiments.update({
             'point_interpolation_interactive': lambda organ_mask: prUt.point_interpolation(prUt.get_fg_points_from_cc_centers(organ_mask, exp_params.n_slice_point_interpolation)),
             'point_propagation_interactive': lambda organ_mask, slices_to_infer: prUt.point_propagation(inferer, img, prUt.get_seed_point(organ_mask, exp_params.n_seed_points_point_propagation, seed), 
-                                                                slices_to_infer, seed, exp_params.n_points_propagation, verbose = False),
+                                                                slices_to_infer, seed, exp_params.n_points_propagation, verbose = False, return_low_res_logits = True),
         })
 
     # Debugging: Overwrite experiments
@@ -84,17 +85,18 @@ def run_experiments(inferer, imgs_gts, results_path, label_dict,
             for exp_name, prompting_func in tqdm(interactive_experiments.items(), desc = 'looping through interactive experiments', leave = False):
                 # Set the few things that differ depending on the seed method
                 if exp_name in ['point_propagation_interactive', 'box_propagation_interactive']: 
-                    segmentation, prompt = prompting_func(organ_mask, slices_to_infer)
+                    segmentation, low_res_masks, prompt = prompting_func(organ_mask, slices_to_infer)
                     init_dof = 5
                 else:
                     prompt = prompting_func(organ_mask)
-                    segmentation = inferer.predict(img, prompt)
+                    segmentation, low_res_masks = inferer.predict(img, prompt, return_low_res_logits = True)
                     init_dof = 9
                 
-                dice_scores, dofs = iterate_2d(inferer, img, organ_mask, segmentation, prompt, inferer.pass_prev_prompts,
-                                                                        scribble_length = 0.6, contour_distance = 3, disk_size_range= (0,3),
-                                                                        init_dof = init_dof, perf_bound = exp_params.perf_bound, dof_bound = exp_params.dof_bound, seed = seed, verbose = False)
-                
+                dice_scores, dofs = iterate_2d(inferer, img, organ_mask, segmentation, low_res_masks, prompt, inferer.pass_prev_prompts,
+                                                    scribble_length = 0.6, contour_distance = 3, disk_size_range= (0,3),
+                                                    init_dof = init_dof, perf_bound = exp_params.perf_bound, dof_bound = exp_params.dof_bound, seed = seed, verbose = False)
+
+
                 results[exp_name][label_name][base_name] = {'dof': dofs, 'dice_scores': dice_scores}               
                 
 

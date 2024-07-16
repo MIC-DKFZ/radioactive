@@ -172,7 +172,7 @@ class SAMMed2DInferer(Inferer):
 
         return(segmentation)
     
-    def predict(self, img, prompt, mask_dict = {}, return_logits = False):
+    def predict(self, img, prompt, mask_dict = {}, return_logits = False, return_low_res_logits = False):
         if not (isinstance(prompt, Points) or isinstance(prompt, Boxes)):
             raise RuntimeError(f'Currently only points and boxes are supported, got {type(prompt)}')
         
@@ -216,9 +216,14 @@ class SAMMed2DInferer(Inferer):
             slice_raw_outputs = self.segmenter(points = slice_points, box=slice_box, mask = slice_mask, image_embedding = image_embedding) # Add batch dimensions
             self.slice_lowres_outputs[slice_idx] = slice_raw_outputs
         
+        if return_low_res_logits:
+            low_res_logits = {k:torch.sigmoid(v).squeeze().cpu().numpy() for k,v in self.slice_lowres_outputs.items()}
 
         segmentation = self.postprocess_slices(self.slice_lowres_outputs, return_logits)
 
-        return(segmentation)
+        if return_low_res_logits:
+            return segmentation, low_res_logits
+        else:
+            return segmentation
     
 
