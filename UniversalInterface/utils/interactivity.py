@@ -7,6 +7,8 @@ import warnings
 from . import prompt as prUt
 import torch
 from .base_classes import Points, Boxes
+from .prompt_3d import get_pos_clicks3D
+from .analysis import compute_dice
 
 # Code courtesy of Karol Gotkowski (modified)
 def gen_contour_fp_scribble(slice_gt, slice_seg, contour_distance, disk_size_range, scribble_length, seed = None, verbose = True): 
@@ -85,7 +87,7 @@ def iterate_2d(inferer, img, gt, segmentation, low_res_logits, initial_prompt, p
     # Tracking variables
     prompts = [prompt]
     segmentations = [segmentation.copy()]
-    dice_scores = [prUt.compute_dice(segmentation, gt)]
+    dice_scores = [compute_dice(segmentation, gt)]
     if verbose:
         print(dice_scores[-1])
     max_fp_idxs = []
@@ -187,7 +189,7 @@ def iterate_2d(inferer, img, gt, segmentation, low_res_logits, initial_prompt, p
 
         # Update the trackers
         low_res_logits.update(low_res_logits)
-        dice_scores.append(prUt.compute_dice(segmentation, gt))
+        dice_scores.append(compute_dice(segmentation, gt))
         if verbose:
             print(dice_scores[-1])
 
@@ -204,7 +206,70 @@ def iterate_2d(inferer, img, gt, segmentation, low_res_logits, initial_prompt, p
     inferer.verbose = verbosity
 
     # Return variables with chosen degree of detail
-    if detailed == False:
-        return dice_scores, dofs
-    else:
+    if detailed:
         return dice_scores, dofs, segmentations, prompts
+    else:
+        return dice_scores, dofs
+
+
+def iterate_3d(inferer, img, gt, pass_prev_prompts,
+                perf_bound, dof_bound, seed = None, detailed = False):
+
+    if seed is not None:
+        np.random.seed(seed)
+
+    n=1
+
+    dice_scores = []
+    segmentations = []
+    prompts = []
+    dofs = []
+    num_iter = 0
+    dof = 0
+
+    # Obtain initial segmentation
+
+    prompt = get_pos_clicks3D(gt, n, seed = seed)
+    segmentation, logits = inferer.predict(img, prompt, store_patching=True, return_low_res_logits=True)
+
+    prompts.append(prompt)
+    dof+=3
+    segmentations.append(segmentation.copy())
+    dice_scores.append(compute_dice(segmentation, gt))
+
+    dice_condition_met, dof_condition_met = False, False
+    while not (dice_condition_met and dof_condition_met) and num_iter <= 10:
+
+        # Obtain new prompt
+        misclassifieds = np.vstack(np.where(segmentation != gt)).T
+        sampled_ind = np.random.randint(len(misclassifieds))
+        sampled_coords = [misclassifieds[sampled_ind]]
+        sampled_labels = [gt[*sampled_coords[0]]]
+
+        if pass_prev_prompts:
+            sampled_coords = np.vstack((prompt.coords, sampled_coords))
+            sampled_labels = np.hstack((prompt.labels, sampled_labels))
+            
+        prompt = Points(coords = sampled_coords, labels = sampled_labels)
+        prompts.append(prompt)
+        
+        new_seg, logits = inferer.predict(img, prompt, use_stored_patching=True, return_low_res_logits = True, prev_low_res_logits = logits)
+
+        prompts.append(prompt)
+        dof+=3
+        segmentations.append(segmentation.copy())
+        dice_scores.append(compute_dice(new_seg, gt))
+
+        # Check break conditions
+        if dof >= dof_bound:
+            dof_condition_met = True
+
+        if dice_scores[-1] >= perf_bound:
+            dice_condition_met = True
+
+        num_iter+=1
+
+    if detailed:
+        return dice_scores, dofs, segmentations, prompts
+    else:    
+        return dice_scores, dofs

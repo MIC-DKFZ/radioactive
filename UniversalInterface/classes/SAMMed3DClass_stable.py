@@ -50,7 +50,6 @@ class SAMMed3DInferer(Inferer):
     supported_prompts = (Points,)
     required_shape = (128, 128, 128) # Hard code to match training
     offset_mode = 'center' # Changing this will require siginificant reworking of code; currently doesn't matter anyway since the other method doesn't work
-    pass_prev_prompts = True
 
     def __init__(self, checkpoint_path, device, use_only_first_point = False):
         self.model = load_sammed3d(checkpoint_path,  device)
@@ -200,14 +199,14 @@ class SAMMed3DInferer(Inferer):
                 raise RuntimeError('Prompt coordinates do not lie within stored patch!')
 
         pred = np.zeros_like(img, dtype=np.uint8)
+        low_res_logits_list = []
         for (patch_embedding, pos3D) in patch_list:
-            if prev_low_res_logits is not None: # if previous low res logits are present, add number and channel dimensions
-                prev_low_res_logits = prev_low_res_logits.unsqueeze(0).unsqueeze(0).to(self.device)
-            else: # If no low res mask supplied, create one consisting of zeros
+            if prev_low_res_logits == None: # If no low res mask supplied, create one consisting of zeros
                 low_res_spatial_shape = [dim//4 for dim in SAMMed3DInferer.required_shape] # batch and channel dimensions remain the same, spatial dimensions are quartered 
                 prev_low_res_logits = torch.zeros([1,1] + low_res_spatial_shape).to(self.device) # [1,1] is batch and channel dimensions
 
             low_res_logits = self.segmenter(patch_embedding, prev_low_res_logits, coords, labels)
+            low_res_logits_list.append(low_res_logits)
             logits = F.interpolate(low_res_logits, size = SAMMed3DInferer.required_shape, mode = 'trilinear', align_corners = False).detach().cpu().squeeze()
             seg_mask = (logits>0.5).numpy().astype(np.uint8)
             ori_roi, pred_roi = pos3D["ori_roi"], pos3D["pred_roi"]
@@ -216,6 +215,6 @@ class SAMMed3DInferer(Inferer):
             pred[..., ori_roi[0]:ori_roi[1], ori_roi[2]:ori_roi[3], ori_roi[4]:ori_roi[5]] = seg_mask_roi
         
         if return_low_res_logits:
-            return pred, low_res_logits.cpu().squeeze()
+            return pred, low_res_logits_list
         else:
             return pred
