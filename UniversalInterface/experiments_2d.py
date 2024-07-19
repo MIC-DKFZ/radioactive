@@ -9,7 +9,7 @@ from utils.image import read_reorient_nifti
 from tqdm import tqdm
 import warnings
 
-def run_experiments(inferer, imgs_gts, results_path, label_dict,
+def run_experiments_2d(inferer, imgs_gts, results_path, label_dict,
                     exp_params, prompt_types,
                     seed, experiment_overwrite = None):
     

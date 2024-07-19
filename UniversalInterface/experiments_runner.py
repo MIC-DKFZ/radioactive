@@ -3,7 +3,7 @@ import os
 import json
 from datetime import datetime
 
-from experiments import run_experiments
+from experiments_2d import run_experiments_2d
 from classes.SAMClass import SAMInferer
 from classes.SAMMed2DClass import SAMMed2DInferer
 from classes.MedSAMClass import MedSAMInferer
@@ -122,6 +122,6 @@ if __name__ == '__main__':
     inferer = inferer_registry[model_name](checkpoint_path, device)
 
     # Run experiments
-    run_experiments(inferer, imgs_gts, results_path, label_dict,
+    run_experiments_2d(inferer, imgs_gts, results_path, label_dict,
                     exp_params, prompt_types,
                     seed = 1, experiment_overwrite = experiment_overwrite)

@@ -23,27 +23,6 @@ def crop_pad_coords(coords, cropping_params, padding_params):
     coords = coords + axis_add - axis_sub # same as value[:,i] = value[:,i] + axis_add[i] - axis_sub[i] iterating over i
     return(coords)
 
-def get_pos_clicks3D(gt, n_clicks, seed = None):
-    if seed is not None:
-        np.random.seed(seed)
-        
-    volume_fg = np.where(gt==1) # Get foreground indices (formatted as triple of arrays)
-    volume_fg = np.array(volume_fg).T # Reformat to numpy array of shape n_fg_voxels x 3
-
-    n_fg_voxels = len(volume_fg)
-
-    # Error testing
-    if n_fg_voxels == 0:
-        raise RuntimeError(f'No foreground voxels found! Check that the supplied label is a binary segmentation mask with foreground coded as 1')
-
-    if n_fg_voxels < n_clicks:
-        raise RuntimeError(f'More foreground points were requested than the number of foreground voxels in the volume')
-
-    point_indices = np.random.choice(n_fg_voxels, size = n_clicks, replace = False)
-    pos_coords = volume_fg[point_indices]  
-    pos_coords = Points(coords = pos_coords, labels =  [1]*len(pos_coords))
-    return(pos_coords)
-
 def get_neg_clicks_3D(gt, n_clicks, border_distance = 10): # Warning: dilation function is VERY slow! ~ 13 seconds on my machine
     struct_element = ball(border_distance)
     volume_dilated = dilation(gt, struct_element)
