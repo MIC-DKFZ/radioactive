@@ -8,12 +8,19 @@ from utils.interactivity import iterate_2d
 from utils.image import read_reorient_nifti
 from tqdm import tqdm
 import warnings
+import shutil
+import nibabel as nib
+import pickle
 
-def run_experiments_2d(inferer, imgs_gts, results_path, label_dict,
+def run_experiments_2d(inferer, imgs_gts, results_dir, label_dict,
                     exp_params, prompt_types,
-                    seed, experiment_overwrite = None):
-    
+                    seed, save_segs = False, experiment_overwrite = None):
+
     inferer.verbose = False # No need for progress bars per inference
+
+    if os.path.exists(results_dir):
+        shutil.rmtree(results_dir)
+    os.makedirs(results_dir, exist_ok=True)
 
     # Define experiments
     experiments = {}
@@ -48,25 +55,34 @@ def run_experiments_2d(inferer, imgs_gts, results_path, label_dict,
         interactive_experiments = {ex: experiments[ex] for ex in experiment_overwrite if ex in interactive_experiments.keys()}
 
     experiment_names = list(experiments.keys()) + list(interactive_experiments.keys())
+    targets = [label for label in label_dict if label!= 'background']
+    
+    if save_segs:
+        dir_list = [os.path.join(results_dir, exp_name, target) for exp_name in experiment_names for target in targets]
+        for dir in dir_list:
+            os.makedirs(dir, exist_ok = True)
 
 
     # Initialize results dictionary
-    results = {exp_name: {label: {} for label in label_dict if label != "background"} for exp_name in experiment_names}
+    results = {exp_name: {target: {} for target in targets} for exp_name in experiment_names}
+    results[seed] = seed
 
     # Loop through all image and label pairs
     #for filename in tqdm(os.listdir(images_dir), 'looping through files'):
-    for img_path, gt_path in tqdm(imgs_gts, desc = 'looping through files\n'):
-        base_name = os.path.basename(img_path)
-        img, gt = read_reorient_nifti(img_path).astype(np.float32), read_reorient_nifti(gt_path).astype(int)
+    for img_path, gt_path in tqdm(imgs_gts, desc = 'looping through files\n', leave = False):
+        base_name = os.path.basename(gt_path)
+        img, _ = read_reorient_nifti(img_path, np.float32)
+        gt, inv_transform = read_reorient_nifti(gt_path, np.uint8)
+
 
         # Loop through each organ label except the background
-        for label_name, label_val in tqdm(label_dict.items(), desc = 'looping through organs\n', leave = False):
-            if label_name == 'background':
+        for target, target_label in tqdm(label_dict.items(), desc = 'looping through organs\n', leave = False):
+            if target == 'background':
                 continue
 
-            organ_mask = np.where(gt == label_val, 1, 0)
+            organ_mask = np.where(gt == target_label, 1, 0)
             if not np.any(organ_mask):  # Skip if no foreground for this label
-                warnings.warn(f'{gt_path} missing segmentation for {label_name}')
+                warnings.warn(f'{gt_path} missing segmentation for {target}')
                 continue
 
             slices_to_infer = np.where(np.any(organ_mask, axis=(1, 2)))[0]
@@ -79,7 +95,12 @@ def run_experiments_2d(inferer, imgs_gts, results_path, label_dict,
                     prompt = prompting_func(organ_mask)
                     segmentation = inferer.predict(img, prompt)
                 dice_score = anUt.compute_dice(segmentation, organ_mask)
-                results[exp_name][label_name][base_name] = dice_score
+                results[exp_name][target][base_name] = dice_score
+                
+                if save_segs:
+                    seg_orig_ori = inv_transform(segmentation) # Reorient segmentation
+                    save_path = os.path.join(results_dir, exp_name, target, os.path.basename(gt_path).replace('.nii.gz','_seg.nii.gz'))
+                    seg_orig_ori.to_filename(save_path)
 
             # Now handle interactive experiments
             for exp_name, prompting_func in tqdm(interactive_experiments.items(), desc = 'looping through interactive experiments', leave = False):
@@ -92,18 +113,29 @@ def run_experiments_2d(inferer, imgs_gts, results_path, label_dict,
                     segmentation, low_res_masks = inferer.predict(img, prompt, return_low_res_logits = True)
                     init_dof = 9
                 
-                dice_scores, dofs = iterate_2d(inferer, img, organ_mask, segmentation, low_res_masks, prompt, inferer.pass_prev_prompts,
+                if not save_segs:
+                    dice_scores, dofs = iterate_2d(inferer, img, organ_mask, segmentation, low_res_masks, prompt, inferer.pass_prev_prompts,
                                                     scribble_length = 0.6, contour_distance = 3, disk_size_range= (0,3),
                                                     init_dof = init_dof, perf_bound = exp_params.perf_bound, dof_bound = exp_params.dof_bound, seed = seed, verbose = False)
+                else:
+                    dice_scores, dofs, segmentations, prompts = iterate_2d(inferer, img, organ_mask, segmentation, low_res_masks, prompt, inferer.pass_prev_prompts,
+                                                    scribble_length = 0.6, contour_distance = 3, disk_size_range= (0,3),
+                                                    init_dof = init_dof, perf_bound = exp_params.perf_bound, dof_bound = exp_params.dof_bound, seed = seed, verbose = False, detailed = True)
 
+                results[exp_name][target][base_name] = {'dof': dofs, 'dice_scores': dice_scores}
 
-                results[exp_name][label_name][base_name] = {'dof': dofs, 'dice_scores': dice_scores}               
-                
+                if save_segs:
+                    for i, segmentation in enumerate(segmentations):
+                        seg_orig_ori = inv_transform(segmentation) # Reorient segmentation
+                        save_path = os.path.join(results_dir, exp_name, target, base_name).replace('.nii.gz', f'_seg_{i}.nii.gz')
+                        seg_orig_ori.to_filename(save_path)
 
             inferer.clear_embeddings()
 
     # Save results 
+    
+    results_path = os.path.join(results_dir, 'results.json')
     with open(results_path, 'w') as f:
         json.dump(results, f, indent=4)
 
-    print(f"Results saved to {results_path}")
+    print(f"Results saved to {results_dir}")

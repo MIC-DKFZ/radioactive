@@ -1,5 +1,6 @@
 import numpy as np
 import nibabel as nib
+from nibabel.orientations import io_orientation, ornt_transform
 
 def read_im_gt(img_path, gt_path, organ_label = None, RAS = False):
     img, gt = nib.load(img_path), nib.load(gt_path)
@@ -29,20 +30,33 @@ def read_im_gt(img_path, gt_path, organ_label = None, RAS = False):
     
     return(img_data, gt_data)
 
-def read_reorient_nifti(path, RAS = False):
+def read_reorient_nifti(path, dtype, RAS = False):
+    # Obtain image data
     img = nib.load(path)
     img_ras = img # Initialize variables to hold potentially reoriented images
-
     # Check if gt, image are already in RAS+ 
-    if nib.aff2axcodes(img.affine) != ('R', 'A', 'S'):
+    if nib.aff2axcodes(img_ras.affine) != ('R', 'A', 'S'):
         img_ras = nib.as_closest_canonical(img)
-
-    img_data = img_ras.get_fdata()
+    
+    img_data = img_ras.get_fdata().astype(dtype)
 
     if not RAS:
         img_data = img_data.transpose(2,1,0) # change from RAS to row-major ie xyz to zyx
     
-    return(img_data)
+    # Obtain function to invert transformation
+    ornt_old = io_orientation(img.affine)
+    ornt_new = io_orientation(img_ras.affine)
+    ornt_trans = ornt_transform(ornt_new, ornt_old)
+
+    def inv_trans(seg: np.array):
+        if not RAS:
+            seg = seg.transpose(2,1,0)
+        seg_nib = nib.Nifti1Image(seg, img.affine)
+        seg_orig_ori = seg_nib.as_reoriented(ornt_trans) 
+        
+        return seg_orig_ori
+
+    return img_data, inv_trans
 
 def get_crop_pad_params(img, crop_pad_center, target_shape): # Modified from TorchIO cropOrPad
     subject_shape = img.shape
