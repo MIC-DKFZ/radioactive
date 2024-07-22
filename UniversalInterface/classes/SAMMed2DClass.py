@@ -172,7 +172,7 @@ class SAMMed2DInferer(Inferer):
 
         return(segmentation)
     
-    def predict(self, img, prompt, mask_dict = {}, return_logits = False, return_low_res_logits = False):
+    def predict(self, img, prompt, mask_dict = {}, return_logits = False, return_low_res_logits = False, use_stored_embeddings = False):
         if not (isinstance(prompt, Points) or isinstance(prompt, Boxes)):
             raise RuntimeError(f'Currently only points and boxes are supported, got {type(prompt)}')
         
@@ -186,15 +186,17 @@ class SAMMed2DInferer(Inferer):
         
         
         preprocessed_prompt_dict, slices_to_infer = self.preprocess_prompt(prompt)
-        slices_to_process = [slice_idx for slice_idx in slices_to_infer if slice_idx not in self.image_embeddings_dict.keys()]
-        slices_processed = self.preprocess_img(img, slices_to_process)
+        if use_stored_embeddings:
+            slices_to_infer = [slice_idx for slice_idx in slices_to_infer if slice_idx not in self.image_embeddings_dict.keys()]
+
+        slices_processed = self.preprocess_img(img, slices_to_infer)
 
         self.slice_lowres_outputs = {}
         if self.verbose:
             slices_to_infer = tqdm(slices_to_infer, desc = 'Performing inference on slices')
         for slice_idx in slices_to_infer:
-            # Get image embedding (either create it, or read it if stored)
-            if slice_idx in self.image_embeddings_dict.keys():
+            # Get image embedding (either create it, or read it if stored and desired)
+            if use_stored_embeddings and slice_idx in self.image_embeddings_dict.keys():
                 image_embedding = self.image_embeddings_dict[slice_idx]
             else:
                 slice = slices_processed[slice_idx]
@@ -213,7 +215,7 @@ class SAMMed2DInferer(Inferer):
                 slice_box = preprocessed_prompt_dict[slice_idx]
 
             # Infer
-            slice_raw_outputs = self.segmenter(points = slice_points, box=slice_box, mask = slice_mask, image_embedding = image_embedding) # Add batch dimensions
+            slice_raw_outputs = self.segmenter(points = slice_points, box=slice_box, mask = slice_mask, image_embedding = image_embedding) 
             self.slice_lowres_outputs[slice_idx] = slice_raw_outputs
         
         if return_low_res_logits:
