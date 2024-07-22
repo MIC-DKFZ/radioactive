@@ -3,7 +3,6 @@ import numpy as np
 import torch.nn.functional as F
 from copy import deepcopy
 from tqdm import tqdm
-import cv2
 
 from utils.base_classes import SegmenterWrapper, Inferer, Boxes, Points
 from utils.MedSAM_segment_anything import sam_model_registry as registry_medsam
@@ -21,6 +20,8 @@ class MedSAMWrapper(SegmenterWrapper):
         
     @torch.no_grad()
     def __call__(self, points, box, mask, image_embedding):
+        # if len(box_torch.shape) == 2:
+        #     box_torch = box_torch[:, None, :] # (B, 1, 4)
 
         sparse_embeddings, dense_embeddings = self.model.prompt_encoder(
             points=points,
@@ -53,19 +54,13 @@ class MedSAMInferer(Inferer):
         slices_processed = {}
         for slice_idx in slices_to_process:
             slice = img[slice_idx,...]
-            slice = np.repeat(slice[..., np.newaxis], repeats = 3, axis = 2) # Repeat three times along a new final axis to simulate being a color image. 
-            
-            slice = cv2.resize(
-                slice,
-                (1024, 1024),
-                interpolation=cv2.INTER_CUBIC
-            )
+            slice = (slice - slice.min()) / (slice.max() - slice.min() + 1e-10)
+            slice = np.repeat(slice[None,...], repeats=3, axis=0) # dimensions are NCd_1d_2 to conform to F.interpolate
 
-            slice = (slice - slice.min()) / np.clip(slice.max() - slice.min(), a_min=1e-8, a_max=None) # normalize to [0, 1]
-            slice = slice.transpose(2,0,1)[None] # HWC -> NCHW
-            
-            slices_processed[slice_idx] = torch.from_numpy(slice).float()
-            
+            slice = torch.from_numpy(slice).unsqueeze(0)
+            slice = F.interpolate(slice, (1024,1024), mode = 'bicubic', align_corners=False).clamp(0,1)
+            slices_processed[slice_idx] = slice.float()
+            print(slice.shape)
 
         return(slices_processed)
             

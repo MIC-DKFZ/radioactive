@@ -536,7 +536,7 @@ def box_propagation(inferer, img, seed_box, slices_to_infer, verbose = True, ret
         all_boxes[slice_idx+1] = bbox_slice
         box_prompt = Boxes({slice_idx+1: bbox_slice}) # Notice the +1: this is the prompt for one slice up
     
-    all_boxes = {k:all_boxes[k] for k in slices_to_infer} # Removes top and bottom box - they weren't used
+    all_boxes = {k:all_boxes[k] for k in slices_to_infer if k in all_boxes.keys()} # Removes top and bottom box - they weren't used. 'if clause' in case propagation terminated early.
 
     all_boxes = Boxes(all_boxes)
     inferer.verbose = verbose_state # Return inferer verbosity to initial state
