@@ -5,7 +5,7 @@ from copy import deepcopy
 from tqdm import tqdm
 import cv2
 
-from utils.base_classes import SegmenterWrapper, Inferer, Boxes, Points
+from utils.base_classes import SegmenterWrapper, Inferer, Boxes
 from utils.MedSAM_segment_anything import sam_model_registry as registry_medsam
 
 
@@ -104,7 +104,7 @@ class MedSAMInferer(Inferer):
 
         return(segmentation)
     
-    def predict(self, img, prompt):
+    def predict(self, img, prompt, use_stored_embeddings):
         if not isinstance(prompt, Boxes):
             raise RuntimeError(f'Currently only points and boxes are supported, got {type(prompt)}')            
         
@@ -114,19 +114,18 @@ class MedSAMInferer(Inferer):
         self.D, self.H, self.W = img.shape
 
         preprocessed_prompt_dict, slices_to_infer = self.preprocess_prompt(prompt)
-        slices_to_process = [slice_idx for slice_idx in slices_to_infer if slice_idx not in self.image_embeddings_dict.keys()]
+        if use_stored_embeddings:
+            slices_to_process = [slice_idx for slice_idx in slices_to_infer if slice_idx not in self.image_embeddings_dict.keys()]
+        else: 
+            slices_to_process = slices_to_infer
         slices_processed = self.preprocess_img(img, slices_to_process)
 
-        # debugging
-        self.slices_processed = slices_processed
-        self.preprocessed_prompt_dict = preprocessed_prompt_dict
-        
         slice_mask_dict = {}
         if self.verbose:
             slices_to_infer = tqdm(slices_to_infer, desc = 'Performing inference on slices')
             
         for slice_idx in slices_to_infer:
-            if slice_idx in self.image_embeddings_dict.keys():
+            if use_stored_embeddings and slice_idx in self.image_embeddings_dict.keys():
                 image_embedding = self.image_embeddings_dict[slice_idx]
             else:
                 slice = slices_processed[slice_idx]

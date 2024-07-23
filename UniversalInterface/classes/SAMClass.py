@@ -149,13 +149,14 @@ class SAMInferer(Inferer):
             
             return(preprocessed_prompts_dict, slices_to_infer)
     
-    def postprocess_slices(self, slice_mask_dict):
+    def postprocess_slices(self, slice_mask_dict, return_logits):
         '''
         Postprocessing steps:
             - TODO
         '''
         # Combine segmented slices into a volume with 0s for non-segmented slices
-        segmentation = torch.zeros((self.D, self.H, self.W))
+        dtype = np.float32 if return_logits else np.uint8
+        segmentation = np.zeros((self.D, self.H, self.W), dtype)
 
         for (z,low_res_mask) in slice_mask_dict.items():
             low_res_mask = low_res_mask.unsqueeze(0).unsqueeze(0) # Include batch and channel dimensions
@@ -167,15 +168,13 @@ class SAMInferer(Inferer):
             )   # upscale low res mask to mask as in input_size
             mask_input_res = mask_input_res[..., : self.input_size[0], : self.input_size[1]] # Crop out any segmentations created in the padded sections
             slice_mask = F.interpolate(mask_input_res, self.original_size, mode="bilinear", align_corners=False)
-        
-            segmentation[z,:,:] = slice_mask
-
-        segmentation = (segmentation > self.mask_threshold).numpy()
-        segmentation = segmentation.astype(np.uint8)
+            if not return_logits:
+                slice_mask = (slice_mask > 0.5).to(torch.uint8)
+            segmentation[z,:,:] = slice_mask.cpu().numpy()
 
         return(segmentation)
  
-    def predict(self, img, prompt, use_stored_embeddings = False):
+    def predict(self, img, prompt, mask_dict = {}, return_logits = False, return_low_res_logits = False, use_stored_embeddings = False):
         if not (isinstance(prompt, Points) or isinstance(prompt, Boxes)):
             raise RuntimeError(f'Currently only points and boxes are supported, got {type(prompt)}')
         
@@ -189,11 +188,13 @@ class SAMInferer(Inferer):
         
         preprocessed_prompt_dict, slices_to_infer = self.preprocess_prompt(prompt)
         if use_stored_embeddings:
-            slices_to_infer = [slice_idx for slice_idx in slices_to_infer if slice_idx not in self.image_embeddings_dict.keys()]
+            slices_to_process = [slice_idx for slice_idx in slices_to_infer if slice_idx not in self.image_embeddings_dict.keys()]
+        else:
+            slices_to_process = slices_to_infer
 
-        slices_processed = self.preprocess_img(img, slices_to_infer)
+        slices_processed = self.preprocess_img(img, slices_to_process)
         
-        self.slice_lowres_dict = {}
+        self.slice_lowres_outputs = {}
         if self.verbose:
             slices_to_infer = tqdm(slices_to_infer, desc = 'Performing inference on slices')
         for slice_idx in slices_to_infer:
@@ -205,8 +206,9 @@ class SAMInferer(Inferer):
                     image_embedding = self.segmenter.model.image_encoder(slice.to(self.device))
                 self.image_embeddings_dict[slice_idx] = image_embedding
             
-
-            slice_points, slice_box, slice_mask = None, None, None # Initialise to empty
+            # Get prompts
+            slice_points, slice_box, = None, None # Initialise to empty
+            slice_mask = torch.from_numpy(mask_dict[slice_idx]).to(self.device).unsqueeze(0).unsqueeze(0) if slice_idx in mask_dict.keys() else None
 
             if isinstance(prompt, Points):
                 slice_points = preprocessed_prompt_dict[slice_idx]
@@ -215,8 +217,14 @@ class SAMInferer(Inferer):
 
             # Infer
             slice_raw_outputs = self.segmenter(points = slice_points, box=slice_box, mask = slice_mask, image_embedding = image_embedding) # Add batch dimensions
-            self.slice_lowres_dict[slice_idx] = slice_raw_outputs
+            self.slice_lowres_outputs[slice_idx] = slice_raw_outputs
+        
+        if return_low_res_logits:
+            low_res_logits = {k:torch.sigmoid(v).squeeze().cpu().numpy() for k,v in self.slice_lowres_outputs.items()}
             
-        segmentation = self.postprocess_slices(self.slice_lowres_dict)
+        segmentation = self.postprocess_slices(self.slice_lowres_outputs, return_logits)
 
-        return(segmentation)
+        if return_low_res_logits:
+            return segmentation, low_res_logits
+        else:
+            return segmentation

@@ -155,12 +155,10 @@ class SAMMed2DInferer(Inferer):
             - Invert crop/pad to get back to original image dimensions
         '''
         # Combine segmented slices into a volume with 0s for non-segmented slices
-    
-        if return_logits:
-            segmentation = np.zeros((self.D, self.H, self.W), dtype = np.float32)
-        else:
-            segmentation = np.zeros((self.D, self.H, self.W), dtype = np.uint8)
-            
+
+        dtype = np.float32 if return_logits else np.uint8
+        segmentation = np.zeros((self.D, self.H, self.W), dtype)
+
         for (z,low_res_mask) in slice_mask_dict.items():
             mask = F.interpolate(low_res_mask, self.new_size, mode="bilinear", align_corners=False)
             mask = F.interpolate(mask, self.original_size, mode="bilinear", align_corners=False) # upscale in two steps to match original code

@@ -17,8 +17,8 @@ def gen_contour_fp_scribble(slice_gt, slice_seg, contour_distance, disk_size_ran
     # Erode mask
     disk_size_range = random.randint(contour_distance+disk_size_range[0], contour_distance+disk_size_range[1])
     eroded_mask = binary_dilation(slice_gt, disk(disk_size_range))
-    if not np.any(np.nonzero(eroded_mask)):
-        return None
+    if not np.any(np.nonzero(eroded_mask)): 
+        return none
     # Compute curvature of the contour
     contour = find_contours(eroded_mask)
     if len(contour) == 0:
@@ -60,7 +60,8 @@ def gen_contour_fp_scribble(slice_gt, slice_seg, contour_distance, disk_size_ran
     scribble = scribble_components == label
     return scribble
 
-def iterate_2d(inferer, img, gt, segmentation, low_res_logits, initial_prompt, pass_prev_prompts,
+def iterate_2d(inferer, img, gt, segmentation, low_res_logits, initial_prompt, 
+               pass_prev_prompts, use_stored_embeddings,
                scribble_length = 0.2, contour_distance = 2, disk_size_range = (0,0),
                dof_bound = 0, perf_bound = 0, init_dof = 0,
                detailed = False, seed = None, verbose = True):
@@ -103,7 +104,7 @@ def iterate_2d(inferer, img, gt, segmentation, low_res_logits, initial_prompt, p
         fn_mask = (segmentation == 0) & (gt == 1)
         fn_count = np.sum(fn_mask)
 
-        fg_count = np.sum(segmentation)
+        fg_count = np.sum(gt)
 
         generate_positive_prompts_prob = fn_count/fg_count # Generate positive prompts when much of the foreground isn't segmented
         generate_positive_prompts = np.random.binomial(1, generate_positive_prompts_prob)
@@ -118,12 +119,19 @@ def iterate_2d(inferer, img, gt, segmentation, low_res_logits, initial_prompt, p
             max_fp_slice = gt[:, max_fp_idx]
             slice_seg = segmentation[:, max_fp_idx]
 
-            scribble = gen_contour_fp_scribble(max_fp_slice, slice_seg, contour_distance, disk_size_range, scribble_length, seed = seed, verbose = False)
+            if not np.any(max_fp_slice): # There is no gt in the slice, but lots of fps. For now just draw a vertical line down the column with the most fps
+                fp_mask = slice_seg # All segmented cells are false positives
+                fp_per_column = np.sum(fp_mask, axis = 0)
+                max_fp_column = np.argmax(fp_per_column)
+                scribble = np.zeros_like(slice_seg)
+                scribble[:, max_fp_column] = 1
+            else:
+                scribble = gen_contour_fp_scribble(max_fp_slice, slice_seg, contour_distance, disk_size_range, scribble_length, seed = seed, verbose = False)
             if scribble is None:
-                generate_positive_prompts = 1 # Generate positive prompts instead
+                generate_positive_prompts = True # Give random negative click instaed
             else:  # Otherwise subset scribble to false positives  to generate new prompt
                 scribble_coords = np.where(scribble)
-                scribble_coords = np.stack(scribble_coords, axis = 1)
+                scribble_coords = np.array(scribble_coords).T
 
                 # Obtain false positive points and make new prompt
                 is_fp_mask = slice_seg[*scribble_coords.T].astype(bool)
@@ -182,7 +190,7 @@ def iterate_2d(inferer, img, gt, segmentation, low_res_logits, initial_prompt, p
             improve_slices = slices_inferred # improve all slices 
 
         # Generate new segmentation and integrate into old one
-        new_seg, low_res_logits = inferer.predict(img, new_prompt, low_res_logits, return_low_res_logits = True)
+        new_seg, low_res_logits = inferer.predict(img, new_prompt, low_res_logits, use_stored_embeddings = use_stored_embeddings, return_low_res_logits = True)
         prompts.append(new_prompt)
         segmentation[improve_slices] = new_seg[improve_slices]
         segmentations.append(segmentation.copy())
