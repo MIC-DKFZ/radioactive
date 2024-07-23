@@ -29,7 +29,7 @@ def run_experiments_2d(inferer, imgs_gts, results_dir, label_dict,
         experiments.update({
             'random_points': lambda organ_mask: prUt.get_pos_clicks2D_row_major(organ_mask, exp_params.n_click_random_points, seed=seed),
             'point_interpolation': lambda organ_mask: prUt.point_interpolation(prUt.get_fg_points_from_cc_centers(organ_mask, exp_params.n_slice_point_interpolation)),
-            'point_propagation': lambda organ_mask, slices_to_infer: prUt.point_propagation(inferer, img, prUt.get_seed_point(organ_mask, exp_params.n_seed_points_point_propagation, seed), 
+            'point_propagation': lambda img, organ_mask, slices_to_infer: prUt.point_propagation(inferer, img, prUt.get_seed_point(organ_mask, exp_params.n_seed_points_point_propagation, seed), 
                                                                 slices_to_infer, seed, exp_params.n_points_propagation, verbose = False),
         })
 
@@ -38,14 +38,14 @@ def run_experiments_2d(inferer, imgs_gts, results_dir, label_dict,
             'bounding_boxes': lambda organ_mask: prUt.get_minimal_boxes_row_major(organ_mask),
             'bbox3d_sliced': lambda organ_mask: prUt.get_bbox3d_sliced(organ_mask),
             'box_interpolation': lambda organ_mask: prUt.box_interpolation(prUt.get_seed_boxes(organ_mask, exp_params.n_slice_box_interpolation)),
-            'box_propagation': lambda organ_mask, slices_to_infer: prUt.box_propagation(inferer, img, prUt.get_seed_box(organ_mask), slices_to_infer, verbose = False)
+            'box_propagation': lambda img, organ_mask, slices_to_infer: prUt.box_propagation(inferer, img, prUt.get_seed_box(organ_mask), slices_to_infer, verbose = False)
         })
 
     interactive_experiments = {}
     if 'interactive' in prompt_types:
         interactive_experiments.update({
             'point_interpolation_interactive': lambda organ_mask: prUt.point_interpolation(prUt.get_fg_points_from_cc_centers(organ_mask, exp_params.n_slice_point_interpolation)),
-            'point_propagation_interactive': lambda organ_mask, slices_to_infer: prUt.point_propagation(inferer, img, prUt.get_seed_point(organ_mask, exp_params.n_seed_points_point_propagation, seed), 
+            'point_propagation_interactive': lambda img, organ_mask, slices_to_infer: prUt.point_propagation(inferer, img, prUt.get_seed_point(organ_mask, exp_params.n_seed_points_point_propagation, seed), 
                                                                 slices_to_infer, seed, exp_params.n_points_propagation, verbose = False, return_low_res_logits = True),
         })
 
@@ -90,7 +90,7 @@ def run_experiments_2d(inferer, imgs_gts, results_dir, label_dict,
             # Handle non-interactive experiments
             for exp_name, prompting_func in tqdm(experiments.items(), desc = 'looping through non_interactive experiments', leave = False):
                 if exp_name in ['point_propagation', 'box_propagation']: 
-                    segmentation, prompt = prompting_func(organ_mask, slices_to_infer)
+                    segmentation, prompt = prompting_func(img, organ_mask, slices_to_infer)
                 else:
                     prompt = prompting_func(organ_mask)
                     segmentation = inferer.predict(img, prompt)
@@ -106,21 +106,21 @@ def run_experiments_2d(inferer, imgs_gts, results_dir, label_dict,
             for exp_name, prompting_func in tqdm(interactive_experiments.items(), desc = 'looping through interactive experiments', leave = False):
                 # Set the few things that differ depending on the seed method
                 if exp_name in ['point_propagation_interactive', 'box_propagation_interactive']: 
-                    segmentation, low_res_masks, prompt = prompting_func(organ_mask, slices_to_infer)
+                    segmentation, low_res_masks, prompt = prompting_func(img, organ_mask, slices_to_infer)
                     init_dof = 5
                 else:
                     prompt = prompting_func(organ_mask)
                     segmentation, low_res_masks = inferer.predict(img, prompt, return_low_res_logits = True)
                     init_dof = 9
                 
-                if not save_segs:
+                if save_segs:
+                    dice_scores, dofs, segmentations, prompts = iterate_2d(inferer, img, organ_mask, segmentation, low_res_masks, prompt, inferer.pass_prev_prompts,
+                                                    scribble_length = 0.6, contour_distance = 3, disk_size_range= (0,3),
+                                                    init_dof = init_dof, perf_bound = exp_params.perf_bound, dof_bound = exp_params.dof_bound, seed = seed, verbose = False, detailed = True) 
+                else:
                     dice_scores, dofs = iterate_2d(inferer, img, organ_mask, segmentation, low_res_masks, prompt, inferer.pass_prev_prompts,
                                                     scribble_length = 0.6, contour_distance = 3, disk_size_range= (0,3),
                                                     init_dof = init_dof, perf_bound = exp_params.perf_bound, dof_bound = exp_params.dof_bound, seed = seed, verbose = False)
-                else:
-                    dice_scores, dofs, segmentations, prompts = iterate_2d(inferer, img, organ_mask, segmentation, low_res_masks, prompt, inferer.pass_prev_prompts,
-                                                    scribble_length = 0.6, contour_distance = 3, disk_size_range= (0,3),
-                                                    init_dof = init_dof, perf_bound = exp_params.perf_bound, dof_bound = exp_params.dof_bound, seed = seed, verbose = False, detailed = True)
 
                 results[exp_name][target][base_name] = {'dof': dofs, 'dice_scores': dice_scores}
 

@@ -55,6 +55,7 @@ class SAMWrapper(SegmenterWrapper):
     
 class SAMInferer(Inferer):
     supported_prompts = (Points,) # TODO: Implement boxes
+    pass_prev_prompts = True # In supplied demos, sam doesn't take previous prompts, but this vastly increases performance when teh model greatly oversegments, for example.
 
     def __init__(self, checkpoint_path, device):
         model = load_sam(checkpoint_path, device)

@@ -59,6 +59,9 @@ class SAMMed3DInferer(Inferer):
         self.use_only_first_point = use_only_first_point
         self.stored_cropping_params, self.stored_padding_params, self.stored_patch_list = None, None, None
 
+    def clear_embeddings(self):
+        self.stored_cropping_params, self.stored_padding_params, self.stored_patch_list = None, None, None
+
     def preprocess_into_patches(self, img3D, prompt = None, cheat = False, gt = None):
         img3D = torch.from_numpy(img3D)
 

@@ -49,6 +49,9 @@ class MedSAMInferer(Inferer):
         self.image_embeddings_dict = {}
         self.verbose = True
 
+    def clear_embeddings(self):
+        self.image_embeddings_dict = {}
+
     def preprocess_img(self, img, slices_to_process):
         slices_processed = {}
         for slice_idx in slices_to_process:

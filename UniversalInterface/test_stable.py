@@ -31,5 +31,5 @@ initial_prompt = point_prompt
 condition = 'dof'
 dof_bound = 90
 seed_sub = np.random.randint(10**5)
-segmentation, dof, segmentations, prompts, max_fp_idxs = iterate_2d(sam_inferer, img, gt, segmentation, low_res_logits, initial_prompt, pass_prev_prompts=False, use_stored_embeddings = True,
+dice_scores, dofs, segmentations, prompts = iterate_2d(sam_inferer, img, gt, segmentation, low_res_logits, initial_prompt, pass_prev_prompts=False, use_stored_embeddings = True,
                                                                          init_dof = 5, dof_bound = dof_bound, seed = seed_sub, detailed = True)

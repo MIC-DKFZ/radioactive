@@ -18,7 +18,7 @@ def gen_contour_fp_scribble(slice_gt, slice_seg, contour_distance, disk_size_ran
     disk_size_range = random.randint(contour_distance+disk_size_range[0], contour_distance+disk_size_range[1])
     eroded_mask = binary_dilation(slice_gt, disk(disk_size_range))
     if not np.any(np.nonzero(eroded_mask)): 
-        return none
+        return None
     # Compute curvature of the contour
     contour = find_contours(eroded_mask)
     if len(contour) == 0:
