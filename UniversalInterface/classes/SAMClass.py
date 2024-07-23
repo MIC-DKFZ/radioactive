@@ -85,8 +85,8 @@ class SAMInferer(Inferer):
         # Perform slicewise processing and collect back into a volume at the end
         slices_processed = {}
         for slice_idx in slices_to_process:
-            slice = img[slice_idx, ...] # Now HWC
-            slice = ((slice - slice.min()) / (slice.max() - slice.min() + 1e-10) * 255.).astype(np.uint8) # Change to 0-255 scale
+            slice = img[slice_idx, ...] # Now HW
+            slice = np.round((slice - slice.min()) / (slice.max() - slice.min() + 1e-10) * 255.).astype(np.uint8) # Change to 0-255 scale
             slice = np.repeat(slice[..., None], repeats=3, axis=-1)  # Add channel dimension to make it RGB-like
             slice = self.transform.apply_image(slice)            
             slice = torch.as_tensor(slice, device = self.device)
@@ -148,7 +148,6 @@ class SAMInferer(Inferer):
                 preprocessed_prompts_dict[slice_index] = box.to(self.device)
             
             return(preprocessed_prompts_dict, slices_to_infer)
-
     
     def postprocess_slices(self, slice_mask_dict):
         '''
@@ -176,7 +175,7 @@ class SAMInferer(Inferer):
 
         return(segmentation)
  
-    def predict(self, img, prompt):
+    def predict(self, img, prompt, use_stored_embeddings = False):
         if not (isinstance(prompt, Points) or isinstance(prompt, Boxes)):
             raise RuntimeError(f'Currently only points and boxes are supported, got {type(prompt)}')
         
@@ -189,14 +188,16 @@ class SAMInferer(Inferer):
         self.original_size = (self.H, self.W) # Used for the transform class, which is taken from the original SAM code, hence the 2D size
         
         preprocessed_prompt_dict, slices_to_infer = self.preprocess_prompt(prompt)
-        slices_to_process = [slice_idx for slice_idx in slices_to_infer if slice_idx not in self.image_embeddings_dict.keys()]
-        slices_processed = self.preprocess_img(img, slices_to_process)
+        if use_stored_embeddings:
+            slices_to_infer = [slice_idx for slice_idx in slices_to_infer if slice_idx not in self.image_embeddings_dict.keys()]
+
+        slices_processed = self.preprocess_img(img, slices_to_infer)
         
         self.slice_lowres_dict = {}
         if self.verbose:
             slices_to_infer = tqdm(slices_to_infer, desc = 'Performing inference on slices')
         for slice_idx in slices_to_infer:
-            if slice_idx in self.image_embeddings_dict.keys():
+            if use_stored_embeddings and slice_idx in self.image_embeddings_dict.keys():
                 image_embedding = self.image_embeddings_dict[slice_idx]
             else:
                 slice = slices_processed[slice_idx]

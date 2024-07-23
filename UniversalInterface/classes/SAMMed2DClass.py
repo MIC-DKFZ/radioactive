@@ -53,6 +53,7 @@ class SAMMed2DWrapper(SegmenterWrapper):
 class SAMMed2DInferer(Inferer):
     supported_prompts = (Points,)
     pass_prev_prompts = True # Flag to track whether in interactive steps previous prompts should be passed, or only the mask and the new prompt
+
     def __init__(self, checkpoint_path, device):
         model = load_sammed2d(checkpoint_path, device)
         self.segmenter = SAMMed2DWrapper(model)
@@ -93,7 +94,7 @@ class SAMMed2DInferer(Inferer):
         for slice_idx in slices_to_process:            
             slice = img[slice_idx, ...]
 
-            slice = ((slice-slice.min())/(slice.max()-slice.min() + 1e-6)*255).astype(np.uint8) # Get slice into [0,255] rgb scale
+            slice = np.round((slice-slice.min())/(slice.max()-slice.min() + 1e-6)*255).astype(np.uint8) # Get slice into [0,255] rgb scale
             slice = np.repeat(slice[..., None], repeats=3, axis=-1)  # Add channel dimension to make it RGB-like
             slice = (slice-self.pixel_mean)/self.pixel_std # normalise
 
