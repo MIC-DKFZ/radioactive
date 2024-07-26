@@ -119,7 +119,6 @@ if __name__ == '__main__':
         label_dict = label_overwrite
 
     # Load the model
-    #inferer = SAMInferer(checkpoint_path, device)
     checkpoint_path = checkpoint_registry[model_name]
     inferer = inferer_registry[model_name](checkpoint_path, device)
 

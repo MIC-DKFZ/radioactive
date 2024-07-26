@@ -1,0 +1,3 @@
+python lesions_experiments_runner_2d.py sam
+python lesions_experiments_runner_2d.py medsam
+python lesions_experiments_runner_2d.py sammed2d

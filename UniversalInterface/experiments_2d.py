@@ -68,7 +68,6 @@ def run_experiments_2d(inferer, imgs_gts, results_dir, label_dict,
     results['seed'] = seed
 
     # Loop through all image and label pairs
-    #for filename in tqdm(os.listdir(images_dir), 'looping through files'):
     for img_path, gt_path in tqdm(imgs_gts, desc = 'looping through files\n', leave = False):
         base_name = os.path.basename(gt_path)
         img, _ = read_reorient_nifti(img_path, np.float32)
