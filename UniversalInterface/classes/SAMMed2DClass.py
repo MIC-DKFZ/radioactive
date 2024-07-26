@@ -186,9 +186,11 @@ class SAMMed2DInferer(Inferer):
         
         preprocessed_prompt_dict, slices_to_infer = self.preprocess_prompt(prompt)
         if use_stored_embeddings:
-            slices_to_infer = [slice_idx for slice_idx in slices_to_infer if slice_idx not in self.image_embeddings_dict.keys()]
+            slices_to_process = [slice_idx for slice_idx in slices_to_infer if slice_idx not in self.image_embeddings_dict.keys()]
+        else:
+            slices_to_process = slices_to_infer
 
-        slices_processed = self.preprocess_img(img, slices_to_infer)
+        slices_processed = self.preprocess_img(img, slices_to_process)
 
         self.slice_lowres_outputs = {}
         if self.verbose:

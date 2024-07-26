@@ -49,6 +49,7 @@ def get_imgs_gts_segrap(dataset_dir):
 
 checkpoint_registry = {
     'sam': '/home/t722s/Desktop/UniversalModels/TrainedModels/sam_vit_h_4b8939.pth',
+    'medsam': '/home/t722s/Desktop/UniversalModels/TrainedModels/medsam_vit_b.pth',
     'sammed2d': '/home/t722s/Desktop/UniversalModels/TrainedModels/sam-med2d_b.pth'
 }
 
@@ -62,7 +63,7 @@ if __name__ == '__main__':
     # warnings.filterwarnings('error')
 
     dataset_name = 'abdomenAtlas'
-    model_name = 'sammed2d'
+    model_name = 'medsam'
     results_dir = '/home/t722s/Desktop/ExperimentResults'
     
 
@@ -79,7 +80,8 @@ if __name__ == '__main__':
     label_overwrite = None
     experiment_overwrite = None
 
-    prompt_types = ['points'] #['points', 'boxes', 'interactive']
+    #prompt_types = ['points', 'boxes', 'interactive']
+    prompt_types = ['boxes']
 
     label_overwrite = {
         "kidney_left": 3,
@@ -100,7 +102,7 @@ if __name__ == '__main__':
 
     
 
-    experiment_overwrite = ['random_points']    
+    #experiment_overwrite = ['random_points']    
 
 
     # Get (img path, gt path) pairs

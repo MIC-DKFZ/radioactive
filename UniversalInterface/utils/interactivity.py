@@ -127,6 +127,7 @@ def iterate_2d(inferer, img, gt, segmentation, low_res_logits, initial_prompt,
                 scribble[:, max_fp_column] = 1
             else:
                 scribble = gen_contour_fp_scribble(max_fp_slice, slice_seg, contour_distance, disk_size_range, scribble_length, seed = seed, verbose = False)
+            
             if scribble is None:
                 generate_positive_prompts = True # Give random negative click instaed
             else:  # Otherwise subset scribble to false positives  to generate new prompt

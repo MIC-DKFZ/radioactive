@@ -38,7 +38,7 @@ def run_experiments_2d(inferer, imgs_gts, results_dir, label_dict,
             'bounding_boxes': lambda organ_mask: prUt.get_minimal_boxes_row_major(organ_mask),
             'bbox3d_sliced': lambda organ_mask: prUt.get_bbox3d_sliced(organ_mask),
             'box_interpolation': lambda organ_mask: prUt.box_interpolation(prUt.get_seed_boxes(organ_mask, exp_params.n_slice_box_interpolation)),
-            'box_propagation': lambda img, organ_mask, slices_to_infer: prUt.box_propagation(inferer, img, prUt.get_seed_box(organ_mask), slices_to_infer, verbose = False)
+            'box_propagation': lambda img, organ_mask, slices_to_infer: prUt.box_propagation(inferer, img, prUt.get_seed_box(organ_mask), slices_to_infer, use_stored_embeddings=True, verbose = False)
         })
 
     interactive_experiments = {}
@@ -46,7 +46,7 @@ def run_experiments_2d(inferer, imgs_gts, results_dir, label_dict,
         interactive_experiments.update({
             'point_interpolation_interactive': lambda organ_mask: prUt.point_interpolation(prUt.get_fg_points_from_cc_centers(organ_mask, exp_params.n_slice_point_interpolation)),
             'point_propagation_interactive': lambda img, organ_mask, slices_to_infer: prUt.point_propagation(inferer, img, prUt.get_seed_point(organ_mask, exp_params.n_seed_points_point_propagation, seed), 
-                                                                slices_to_infer, seed, exp_params.n_points_propagation, verbose = False, return_low_res_logits = True),
+                                                                slices_to_infer, seed, exp_params.n_points_propagation, use_stored_embeddings=True, verbose = False, return_low_res_logits = True),
         })
 
     # Debugging: Overwrite experiments
@@ -65,7 +65,7 @@ def run_experiments_2d(inferer, imgs_gts, results_dir, label_dict,
 
     # Initialize results dictionary
     results = {exp_name: {target: {} for target in targets} for exp_name in experiment_names}
-    results[seed] = seed
+    results['seed'] = seed
 
     # Loop through all image and label pairs
     #for filename in tqdm(os.listdir(images_dir), 'looping through files'):
@@ -93,7 +93,7 @@ def run_experiments_2d(inferer, imgs_gts, results_dir, label_dict,
                     segmentation, prompt = prompting_func(img, organ_mask, slices_to_infer)
                 else:
                     prompt = prompting_func(organ_mask)
-                    segmentation = inferer.predict(img, prompt)
+                    segmentation = inferer.predict(img, prompt, use_stored_embeddings=True)
                 dice_score = anUt.compute_dice(segmentation, organ_mask)
                 results[exp_name][target][base_name] = dice_score
                 
@@ -110,15 +110,15 @@ def run_experiments_2d(inferer, imgs_gts, results_dir, label_dict,
                     init_dof = 5
                 else:
                     prompt = prompting_func(organ_mask)
-                    segmentation, low_res_masks = inferer.predict(img, prompt, return_low_res_logits = True)
+                    segmentation, low_res_masks = inferer.predict(img, prompt, return_low_res_logits = True, use_stored_embeddings=True)
                     init_dof = 9
                 
                 if save_segs:
-                    dice_scores, dofs, segmentations, prompts = iterate_2d(inferer, img, organ_mask, segmentation, low_res_masks, prompt, inferer.pass_prev_prompts,
+                    dice_scores, dofs, segmentations, prompts = iterate_2d(inferer, img, organ_mask, segmentation, low_res_masks, prompt, inferer.pass_prev_prompts, use_stored_embeddings=True,
                                                     scribble_length = 0.6, contour_distance = 3, disk_size_range= (0,3),
                                                     init_dof = init_dof, perf_bound = exp_params.perf_bound, dof_bound = exp_params.dof_bound, seed = seed, verbose = False, detailed = True) 
                 else:
-                    dice_scores, dofs = iterate_2d(inferer, img, organ_mask, segmentation, low_res_masks, prompt, inferer.pass_prev_prompts,
+                    dice_scores, dofs = iterate_2d(inferer, img, organ_mask, segmentation, low_res_masks, prompt, inferer.pass_prev_prompts, use_stored_embeddings=True,
                                                     scribble_length = 0.6, contour_distance = 3, disk_size_range= (0,3),
                                                     init_dof = init_dof, perf_bound = exp_params.perf_bound, dof_bound = exp_params.dof_bound, seed = seed, verbose = False)
 
