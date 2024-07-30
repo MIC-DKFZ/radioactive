@@ -200,12 +200,12 @@ class SAMInferer(Inferer):
             slices_to_infer = tqdm(slices_to_infer, desc = 'Performing inference on slices')
         for slice_idx in slices_to_infer:
             if use_stored_embeddings and slice_idx in self.image_embeddings_dict.keys():
-                image_embedding = self.image_embeddings_dict[slice_idx]
+                image_embedding = self.image_embeddings_dict[slice_idx].to(self.device)
             else:
                 slice = slices_processed[slice_idx]
                 with torch.no_grad():
                     image_embedding = self.segmenter.model.image_encoder(slice.to(self.device))
-                self.image_embeddings_dict[slice_idx] = image_embedding
+                self.image_embeddings_dict[slice_idx] = image_embedding.cpu()
             
             # Get prompts
             slice_points, slice_box, = None, None # Initialise to empty
