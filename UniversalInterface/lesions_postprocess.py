@@ -35,56 +35,67 @@ if __name__ == '__main__':
     with open(os.path.join(results_dir, 'results.json'), 'r') as f:
         results = json.load(f)
 
-    total_dice_all = []
+    results['summary_results'] = {}
+    
+    total_dice_all_aggregated = []
     for split in ['Tr', 'Ts']:
+        total_dice_all = []
         # Obtain folders of segmentations
         seg_dir_parent = os.path.join(results_dir, 'segmentations' + split)
-        if os.path.exists(seg_dir_parent):
-            seg_dirs = [os.path.join(seg_dir_parent, f) for f in os.listdir(seg_dir_parent)]
+        if not os.path.exists(seg_dir_parent):
+            continue
 
-            for seg_dir in seg_dirs:
-                gt_basename = os.path.basename(seg_dir) + '.nii.gz'
+        seg_dirs = [os.path.join(seg_dir_parent, f) for f in os.listdir(seg_dir_parent)]
 
-                try: 
-                    # Obtain merged image
-                    segs = [os.path.join(seg_dir, f) for f in os.listdir(seg_dir)]
+        for seg_dir in seg_dirs:
+            if len(os.listdir(seg_dir)) == 0:
+                continue # Skip if there are no segmentations (ie no foreground)
+
+            gt_basename = os.path.basename(seg_dir) + '.nii.gz'
+
+            try: 
+                # Obtain merged image
+                segs = [os.path.join(seg_dir, f) for f in os.listdir(seg_dir)]
+                
+                summed_image = None
+
+                for seg_path in segs:
+                    # Load the NIfTI file using nibabel
+                    img = nib.load(seg_path)
+                    img_data = img.get_fdata()
                     
-                    summed_image = None
+                    if summed_image is None:
+                        # Initialize the summed_image with the first image data
+                        summed_image = img_data.copy()
+                    else:
+                        # Check if the current image has the same shape as the summed_image
+                        if img_data.shape != summed_image.shape:
+                            raise ValueError("All images must have the same dimensions")
+                        # Add the current image data to the summed_image
+                        summed_image += img_data
 
-                    for seg_path in segs:
-                        # Load the NIfTI file using nibabel
-                        img = nib.load(seg_path)
-                        img_data = img.get_fdata()
-                        
-                        if summed_image is None:
-                            # Initialize the summed_image with the first image data
-                            summed_image = img_data.copy()
-                        else:
-                            # Check if the current image has the same shape as the summed_image
-                            if img_data.shape != summed_image.shape:
-                                raise ValueError("All images must have the same dimensions")
-                            # Add the current image data to the summed_image
-                            summed_image += img_data
+                merged_image = np.where(summed_image>0, 1, 0).astype(np.uint8)
 
-                    merged_image = np.where(summed_image>0, 1, 0).astype(np.uint8)
+                ## Save image
+                merged_nifti = nib.Nifti1Image(merged_image, affine=img.affine, header=img.header)
+                merged_nifti.to_filename(os.path.join(seg_dir, 'merged_seg.nii.gz'))
 
-                    ## Save image
-                    merged_nifti = nib.Nifti1Image(merged_image, affine=img.affine, header=img.header)
-                    merged_nifti.to_filename(os.path.join(seg_dir, 'merged_seg.nii.gz'))
+                # Obtain new dice scores
+                ## Obtain and binarize gt
+                gt_path = os.path.join(dataset_dir, 'labels' + split, gt_basename)
+                gt = nib.load(gt_path).get_fdata().astype(np.uint8)
+                gt = np.where(gt > 0, 1, 0)
+                total_dice = compute_dice(gt, merged_image)
+                total_dice_all.append(total_dice)
+            except:
+                total_dice = None
 
-                    # Obtain new dice scores
-                    ## Obtain and binarize gt
-                    gt_path = os.path.join(dataset_dir, 'labels' + split, gt_basename)
-                    gt = nib.load(gt_path).get_fdata().astype(np.uint8)
-                    gt = np.where(gt > 0, 1, 0)
-                    total_dice = compute_dice(gt, merged_image)
-                    total_dice_all.append(total_dice)
-                except:
-                    total_dice = None
+            results[split][gt_basename]['all'] = total_dice
 
-                results[split][gt_basename]['all'] = total_dice
+        results['summary_results'][split] = np.mean(total_dice_all)
+        total_dice_all_aggregated.extend(total_dice_all)
 
-            results[split]['all_avg'] = np.mean(total_dice_all)
+    results['summary_results']['aggregated'] = np.mean(total_dice_all_aggregated)
             
 
     with open(os.path.join(results_dir, 'results.json'), 'w') as f:

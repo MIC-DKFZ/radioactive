@@ -6,13 +6,11 @@ from lesions_experiments_2d import run_experiments_2d
 from classes.SAMClass import SAMInferer
 from classes.SAMMed2DClass import SAMMed2DInferer
 from classes.MedSAMClass import MedSAMInferer
-from classes.SAMMed3DClass import SAMMed3DInferer
 
 inferer_registry = {
     'sam': SAMInferer,
     'sammed2d': SAMMed2DInferer,
-    'medsam': MedSAMInferer,
-    'sammed3d': SAMMed3DInferer
+    'medsam': MedSAMInferer
 }
 def get_imgs_gts(dataset_dir): 
     imgs_gts = {'Tr': [], 'Ts': []}
