@@ -21,13 +21,13 @@ run_experiment_segvol() {
 conda activate segVol
 run_experiment_segvol "/home/t722s/Desktop/Datasets/melanoma_HD/"
 run_experiment_segvol "/home/t722s/Desktop/Datasets/Adrenal-ACC-Ki67/"
-run_experiment_segvol "/home/t722s/Desktop/Datasets/Colorectal-Liver-Metastases/"
+run_experiment_segvol "/home/t722s/Desktop/Datasets/Colorectal-Liver-Metastases_sub/"
 
 # 2d model experiments
 conda activate foundationModels12-2
 
 # Liver Lesions experiments
-dataset_dir="/home/t722s/Desktop/Datasets/Colorectal-Liver-Metastases/"
+dataset_dir="/home/t722s/Desktop/Datasets/Colorectal-Liver-Metastases_sub/"
 
 # Execute for different models
 run_experiment_2d "sam" $dataset_dir

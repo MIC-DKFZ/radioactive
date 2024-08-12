@@ -8,7 +8,7 @@ from utils.image import read_reorient_nifti
 from tqdm import tqdm
 import shutil
 
-def run_experiments_2d(inferer, dim, imgs_gts, results_dir, save_segs = False):
+def run_experiments_2d(inferer, imgs_gts, results_dir, save_segs = False):
 
     inferer.verbose = False # No need for progress bars per inference
 
@@ -56,10 +56,7 @@ def run_experiments_2d(inferer, dim, imgs_gts, results_dir, save_segs = False):
                 for exp_name, prompting_func in experiments.items():
                     prompt = prompting_func(organ_mask)
                     try:
-                        if dim == 2:
-                            segmentation = inferer.predict(img, prompt, use_stored_embeddings=True)
-                        else: 
-                            segmentation = inferer.predict(img, prompt)
+                        segmentation = inferer.predict(img, prompt, use_stored_embeddings=True)
                         dice_score = anUt.compute_dice(segmentation, organ_mask)
                     except: 
                         dice_score = None
