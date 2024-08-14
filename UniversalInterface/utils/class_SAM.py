@@ -7,7 +7,6 @@ from argparse import Namespace
 import nibabel as nib
 from nibabel.orientations import io_orientation, ornt_transform
 import warnings
-from collections import defaultdict
 
 from utils.SAMMed3D_segment_anything.build_sam import sam_model_registry as registry_sam
 from utils.base_classes import Points, Boxes, Inferer, Prompt
@@ -36,48 +35,13 @@ class SAMInferer(Inferer):
         self.mask_threshold = 0 
         self.device = device
         self.image_embeddings_dict = {}
+        self.image_set = False
         self.verbose = True
 
         self.pixel_mean = self.model.pixel_mean
         self.pixel_std = self.model.pixel_std
         self.transform = ResizeLongestSide(self.model.image_encoder.img_size)
-        self.input_size = None
-
-    def load_image(self, img_path):
-        # sitk_image = sitk.ReadImage(img_path)
-
-        # img, _ = sitk_to_nib(sitk_image)
-
-        # img = img[0].transpose(2,1,0) # Don't need single channel dimension, transpose now RAS -> to zyx row major, inverse transpose later
-
-        # meta_info = {
-        #     "origin": sitk_image.GetOrigin(),
-        #     "direction": sitk_image.GetDirection(),
-        #     "spacing": sitk_image.GetSpacing(),
-        # }
-
-        img = nib.load(img_path)
-        img_ras = img # Set in case already in RAS
-        affine = img.affine
-
-        if nib.aff2axcodes(affine) != ('R', 'A', 'S'):
-            img_ras = nib.as_closest_canonical(img)
-
-        ornt_old = io_orientation(img.affine)
-        ornt_new = io_orientation(img_ras.affine)
-        ornt_trans = ornt_transform(ornt_new, ornt_old)
-        img_data = img_ras.get_fdata()
-        img_data = img_data.transpose(2,1,0) # Reorient to zyx 
-
-        def inv_trans(seg: np.array):
-            seg = seg.transpose(2,1,0) # Reorient back from zyx to RAS
-            seg_nib = nib.Nifti1Image(seg, img.affine)
-            seg_orig_ori = seg_nib.as_reoriented(ornt_trans) 
-            
-            return seg_orig_ori
-    
-        return img_data, inv_trans   
-        
+        self.input_size = None        
 
     @torch.no_grad()
     def segment(self, points, box, mask, image_embedding):
@@ -102,8 +66,31 @@ class SAMInferer(Inferer):
         
         return(best_mask)
 
-    def clear_embeddings(self):
-        self.image_embeddings_dict = {}
+    def set_image(self, img_path):
+        if self.image_embeddings_dict:
+            self.image_embeddings_dict = {}
+        img = nib.load(img_path)
+        img_ras = img # Set in case already in RAS
+        affine = img.affine
+
+        if nib.aff2axcodes(affine) != ('R', 'A', 'S'):
+            img_ras = nib.as_closest_canonical(img)
+
+        ornt_old = io_orientation(img.affine)
+        ornt_new = io_orientation(img_ras.affine)
+        ornt_trans = ornt_transform(ornt_new, ornt_old)
+        img_data = img_ras.get_fdata()
+        img_data = img_data.transpose(2,1,0) # Reorient to zyx 
+
+        def inv_trans(seg: np.array):
+            seg = seg.transpose(2,1,0) # Reorient back from zyx to RAS
+            seg_nib = nib.Nifti1Image(seg, img.affine)
+            seg_orig_ori = seg_nib.as_reoriented(ornt_trans) 
+            
+            return seg_orig_ori
+
+        self.img, self.inv_trans = img_data, inv_trans
+        self.image_set = True
 
     def preprocess_img(self, img, slices_to_process):
         '''
@@ -198,44 +185,31 @@ class SAMInferer(Inferer):
 
         return(segmentation)
  
-    def predict(self, img_path, prompt, mask_dict = {}, return_logits = False, return_low_res_logits = False, use_stored_embeddings = False, transform = True):
-        # Legacy:
-        if isinstance(prompt, Boxes):
-            prompt = Prompt(box_prompts = prompt)
-            warnings.warn('Deprecating passing prompts as Boxes or Points, please pass as instance of Prompt class')
-        if isinstance(prompt, Points):
-            prompt = Prompt(point_prompts = prompt)
-            warnings.warn('Deprecating passing prompts as Boxes or Points, please pass as instance of Prompt class')
-
+    def predict(self, prompt, mask_dict = {}, return_logits = False, return_low_res_logits = False, transform = True):
         if not (isinstance(prompt, Prompt)):
             raise TypeError(f'Prompts must be supplied as an instance of the Prompt class.')
         if prompt.has_boxes and prompt.has_points:
             warnings.warn('Both point and box prompts have been supplied; the model has not been trained on this.')
         slices_to_infer = prompt.slices_to_infer
 
-        img, inv_trans = self.load_image(img_path)
-
-        if self.verbose and self.image_embeddings_dict != {}:
-            print('Using previously generated image embeddings')
+        if not self.image_set:
+            raise RuntimeError('Need to set an image to predict on!')
 
         prompt = deepcopy(prompt)
         
-        self.D, self.H, self.W = img.shape
+        self.D, self.H, self.W = self.img.shape
         self.original_size = (self.H, self.W) # Used for the transform class, which is taken from the original SAM code, hence the 2D size
         
         preprocessed_prompt_dict = self.preprocess_prompt(prompt)
-        if use_stored_embeddings:
-            slices_to_process = [slice_idx for slice_idx in slices_to_infer if slice_idx not in self.image_embeddings_dict.keys()]
-        else:
-            slices_to_process = slices_to_infer
+        slices_to_process = [slice_idx for slice_idx in slices_to_infer if slice_idx not in self.image_embeddings_dict.keys()]
 
-        slices_processed = self.preprocess_img(img, slices_to_process)
+        slices_processed = self.preprocess_img(self.img, slices_to_process)
         
         self.slice_lowres_outputs = {}
         if self.verbose:
             slices_to_infer = tqdm(slices_to_infer, desc = 'Performing inference on slices')
         for slice_idx in slices_to_infer:
-            if use_stored_embeddings and slice_idx in self.image_embeddings_dict.keys():
+            if slice_idx in self.image_embeddings_dict.keys():
                 image_embedding = self.image_embeddings_dict[slice_idx].to(self.device)
             else:
                 slice = slices_processed[slice_idx]
@@ -244,14 +218,8 @@ class SAMInferer(Inferer):
                 self.image_embeddings_dict[slice_idx] = image_embedding.cpu()
             
             # Get prompts
-            # slice_points, slice_box, = None, None # Initialise to empty
             slice_points, slice_box = preprocessed_prompt_dict[slice_idx]['point'], preprocessed_prompt_dict[slice_idx]['box']
             slice_mask = torch.from_numpy(mask_dict[slice_idx]).to(self.device).unsqueeze(0).unsqueeze(0) if slice_idx in mask_dict.keys() else None
-
-            # if isinstance(prompt, Points):
-            #     slice_points = preprocessed_prompt_dict[slice_idx]
-            # elif isinstance(prompt, Boxes):
-            #     slice_box = preprocessed_prompt_dict[slice_idx]
 
             # Infer
             slice_raw_outputs = self.segment(points = slice_points, box=slice_box, mask = slice_mask, image_embedding = image_embedding) # Add batch dimensions
@@ -264,7 +232,7 @@ class SAMInferer(Inferer):
 
         # Reorient to original orientation and return with metadata
         if transform == True:
-            segmentation = inv_trans(segmentation)
+            segmentation = self.inv_trans(segmentation)
         
         if return_low_res_logits:
             return segmentation, low_res_logits

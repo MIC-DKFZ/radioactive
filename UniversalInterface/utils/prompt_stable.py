@@ -283,9 +283,8 @@ def get_seed_point(gt, n_clicks, seed):
 
     return(pts_prompt)
 
-def point_propagation(inferer, seed_prompt, slices_to_infer, seed = None, n_clicks=5, verbose = True, return_low_res_logits = False):
-    if not inferer.image_set:
-        raise RuntimeError('Must first set image!')
+def point_propagation(inferer, img_path, seed_prompt, slices_to_infer, seed = None, n_clicks=5, use_stored_embeddings = False, verbose = True, return_low_res_logits = False):
+    img, _ = read_reorient_nifti(img_path, np.float32)
     if seed:
         np.random.seed(seed)
     verbose_state = inferer.verbose # Make inferer not verbose for this experiment
@@ -294,15 +293,19 @@ def point_propagation(inferer, seed_prompt, slices_to_infer, seed = None, n_clic
     seed_coords = [seed_prompt.coords] # keep track of all points
     
     # Initialise segmentation to store total result
-    segmentation = np.zeros_like(inferer.img).astype(np.uint8)
-    low_res_logits = {}
+    segmentation = np.zeros_like(img).astype(np.uint8)
+    if return_low_res_logits:
+        low_res_logits = {}
 
     pts_prompt = deepcopy(seed_prompt)
     middle_idx = np.median(slices_to_infer).astype(int)
 
     # Infer middle slice
-    slice_seg, slice_low_res_logits = inferer.predict(pts_prompt, return_low_res_logits = True, transform = False)
-    low_res_logits[middle_idx] = slice_low_res_logits[middle_idx]
+    if return_low_res_logits:
+        slice_seg, slice_low_res_logits = inferer.predict(img_path, pts_prompt, use_stored_embeddings = use_stored_embeddings, return_low_res_logits = True, transform = False)
+        low_res_logits[middle_idx] = slice_low_res_logits[middle_idx]
+    else:
+        slice_seg = inferer.predict(img_path, pts_prompt, use_stored_embeddings = use_stored_embeddings, transform = False)
     segmentation[middle_idx] = slice_seg[middle_idx]
 
     # Downwards branch
@@ -320,8 +323,11 @@ def point_propagation(inferer, seed_prompt, slices_to_infer, seed = None, n_clic
         downwards_iter = tqdm(downwards_iter, desc = 'Propagating down')
 
     for slice_idx in downwards_iter:    
-        slice_seg, slice_low_res_logits = inferer.predict(pts_prompt, return_low_res_logits = True, transform = False)
-        low_res_logits[slice_idx] = slice_low_res_logits[slice_idx]
+        if return_low_res_logits:
+            slice_seg, slice_low_res_logits = inferer.predict(img_path, pts_prompt, use_stored_embeddings = use_stored_embeddings, return_low_res_logits = True, transform = False)
+            low_res_logits[slice_idx] = slice_low_res_logits[slice_idx]
+        else:
+            slice_seg = inferer.predict(img_path, pts_prompt, use_stored_embeddings = use_stored_embeddings, transform = False)
         segmentation[slice_idx] = slice_seg[slice_idx]
 
         if np.all(segmentation[slice_idx] == 0): # Terminate if no fg generated
@@ -353,8 +359,12 @@ def point_propagation(inferer, seed_prompt, slices_to_infer, seed = None, n_clic
         upwards_iter = tqdm(upwards_iter, desc = 'Propagating up')
 
     for slice_idx in upwards_iter:
-        slice_seg, slice_low_res_logits = inferer.predict(pts_prompt, return_low_res_logits = True, transform = False)
-        low_res_logits[slice_idx] = slice_low_res_logits[slice_idx]
+        if return_low_res_logits:
+            slice_seg, slice_low_res_logits = inferer.predict(img_path, pts_prompt, use_stored_embeddings = use_stored_embeddings, return_low_res_logits = True, transform = False)
+            low_res_logits[slice_idx] = slice_low_res_logits[slice_idx]
+        else:
+            slice_seg = inferer.predict(img_path, pts_prompt, use_stored_embeddings = use_stored_embeddings, transform = False)
+
         segmentation[slice_idx] = slice_seg[slice_idx]
 
         if np.all(segmentation[slice_idx] == 0): # Terminate if no fg generated
@@ -394,24 +404,28 @@ def get_seed_box(gt):
 
     return(box_prompt)
 
-def box_propagation(inferer, seed_box, slices_to_infer, verbose = True, return_low_res_logits = False):
-    if not inferer.image_set:
-        raise RuntimeError('Must first set image!')
+def box_propagation(inferer, img_path, seed_box, slices_to_infer, use_stored_embeddings = False, verbose = True, return_low_res_logits = False):
+    img, _ = read_reorient_nifti(img_path, np.float32)
 
     verbose_state = inferer.verbose # Make inferer not verbose for this experiment
     inferer.verbose = False
 
     # Initialise segmentation to store total result
-    segmentation = np.zeros_like(inferer.img).astype(np.uint8)
-    low_res_logits = {}
+    segmentation = np.zeros_like(img).astype(np.uint8)
+    if return_low_res_logits:
+        low_res_logits = {}
 
     box_prompt = deepcopy(seed_box)
     all_boxes = seed_box.boxes # Update throughout the loops to keep track of all box prompts
     middle_idx = np.median(slices_to_infer).astype(int)
 
     # Infer middle slice
-    slice_seg, slice_low_res_logits = inferer.predict(box_prompt, return_low_res_logits = True, transform = False)
-    low_res_logits[middle_idx] = slice_low_res_logits[middle_idx]
+    if return_low_res_logits:
+        slice_seg, slice_low_res_logits = inferer.predict(img_path, box_prompt, 
+                                                          use_stored_embeddings = use_stored_embeddings, return_low_res_logits = True, transform = False)
+        low_res_logits[middle_idx] = slice_low_res_logits[middle_idx]
+    else:
+        slice_seg = inferer.predict(img_path, box_prompt, use_stored_embeddings = use_stored_embeddings, transform = False)
     segmentation[middle_idx] = slice_seg[middle_idx]
 
 
@@ -425,8 +439,11 @@ def box_propagation(inferer, seed_box, slices_to_infer, verbose = True, return_l
         downwards_iter = tqdm(downwards_iter, desc = 'Propagating down')
 
     for slice_idx in downwards_iter:
-        slice_seg, slice_low_res_logits = inferer.predict(box_prompt, return_low_res_logits = True, transform = False)
-        low_res_logits[slice_idx] = slice_low_res_logits[slice_idx]
+        if return_low_res_logits:
+            slice_seg, slice_low_res_logits = inferer.predict(img_path, box_prompt, use_stored_embeddings = use_stored_embeddings, return_low_res_logits = True, transform = False)
+            low_res_logits[slice_idx] = slice_low_res_logits[slice_idx]
+        else:
+            slice_seg = inferer.predict(img_path, box_prompt, use_stored_embeddings = use_stored_embeddings, transform = False)
 
         segmentation[slice_idx] = slice_seg[slice_idx]
 
@@ -449,8 +466,12 @@ def box_propagation(inferer, seed_box, slices_to_infer, verbose = True, return_l
         upwards_iter = tqdm(upwards_iter, desc = 'Propagating up')
 
     for slice_idx in upwards_iter:
-        slice_seg, slice_low_res_logits = inferer.predict(box_prompt, return_low_res_logits = True, transform = False)
-        low_res_logits[slice_idx] = slice_low_res_logits[slice_idx]
+        if return_low_res_logits:
+            slice_seg, slice_low_res_logits = inferer.predict(img_path, box_prompt, use_stored_embeddings = use_stored_embeddings, return_low_res_logits = True, transform = False)
+            low_res_logits[slice_idx] = slice_low_res_logits[slice_idx]
+        else:
+            slice_seg = inferer.predict(img_path, box_prompt, use_stored_embeddings = use_stored_embeddings, transform = False)
+
         segmentation[slice_idx] = slice_seg[slice_idx]
 
         if np.all(segmentation[slice_idx] == 0): # Terminate if no fg generated
@@ -466,9 +487,5 @@ def box_propagation(inferer, seed_box, slices_to_infer, verbose = True, return_l
 
     all_boxes = Prompt(box_prompts = all_boxes)
     inferer.verbose = verbose_state # Return inferer verbosity to initial state
-
-    if return_low_res_logits:
-        return segmentation, low_res_logits, all_boxes
-    else:
-        return segmentation, all_boxes
+    return segmentation, all_boxes
 

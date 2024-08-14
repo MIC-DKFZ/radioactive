@@ -36,14 +36,11 @@ class SAMMed2DInferer(Inferer):
         self.new_size = (self.model.image_encoder.img_size, self.model.image_encoder.img_size)
         self.image_embeddings_dict = {}
         self.multimask_output = True # Hardcoded to match defaults from original
-        self.image_set = False
         self.verbose = True # Can change directly if desired
 
         self.pixel_mean, self.pixel_std = self.model.pixel_mean.squeeze().cpu().numpy(), self.model.pixel_std.squeeze().cpu().numpy()
 
-    def set_image(self, img_path):
-        if self.image_embeddings_dict:
-            self.image_embeddings_dict = {}
+    def load_image(self, img_path):
         img = nib.load(img_path)
         img_ras = img # Set in case already in RAS
         affine = img.affine
@@ -64,8 +61,7 @@ class SAMMed2DInferer(Inferer):
             
             return seg_orig_ori
     
-        self.img, self.inv_trans = img_data, inv_trans
-        self.image_set = True 
+        return img_data, inv_trans 
 
     def segment(self, points, box, mask, image_embedding):
         sparse_embeddings, dense_embeddings = self.model.prompt_encoder(
@@ -193,35 +189,44 @@ class SAMMed2DInferer(Inferer):
         return(segmentation)
     
     @torch.no_grad()
-    def predict(self, prompt, mask_dict = {}, return_logits = False, return_low_res_logits = False, transform = True):
+    def predict(self, img_path, prompt, mask_dict = {}, return_logits = False, return_low_res_logits = False, use_stored_embeddings = False, transform = True):
+        # Legacy:
+        if isinstance(prompt, Boxes):
+            prompt = Prompt(box_prompts = prompt)
+            warnings.warn('Deprecating passing prompts as Boxes or Points, please pass as instance of Prompt class')
+        if isinstance(prompt, Points):
+            prompt = Prompt(point_prompts = prompt)
+            warnings.warn('Deprecating passing prompts as Boxes or Points, please pass as instance of Prompt class')
+
         if not (isinstance(prompt, Prompt)):
             raise TypeError(f'Prompts must be supplied as an instance of the Prompt class.')
         if prompt.has_boxes and prompt.has_points:
             warnings.warn('Both point and box prompts have been supplied; the model has not been trained on this.')
         slices_to_infer = prompt.slices_to_infer
-
-        if not self.image_set:
-            raise RuntimeError('Need to set an image to predict on!')
         
         if self.verbose and self.image_embeddings_dict != {}:
             print('Using previously generated image embeddings')
+        img, inv_trans = self.load_image(img_path)
 
         prompt = deepcopy(prompt)
         
-        self.D, self.H, self.W = self.img.shape
+        self.D, self.H, self.W = img.shape
         self.original_size = (self.H, self.W)
         
         preprocessed_prompt_dict = self.preprocess_prompt(prompt)
-        slices_to_process = [slice_idx for slice_idx in slices_to_infer if slice_idx not in self.image_embeddings_dict.keys()]
+        if use_stored_embeddings:
+            slices_to_process = [slice_idx for slice_idx in slices_to_infer if slice_idx not in self.image_embeddings_dict.keys()]
+        else:
+            slices_to_process = slices_to_infer
 
-        slices_processed = self.preprocess_img(self.img, slices_to_process)
+        slices_processed = self.preprocess_img(img, slices_to_process)
 
         self.slice_lowres_outputs = {}
         if self.verbose:
             slices_to_infer = tqdm(slices_to_infer, desc = 'Performing inference on slices')
         for slice_idx in slices_to_infer:
             # Get image embedding (either create it, or read it if stored and desired)
-            if slice_idx in self.image_embeddings_dict.keys():
+            if use_stored_embeddings and slice_idx in self.image_embeddings_dict.keys():
                 image_embedding = self.image_embeddings_dict[slice_idx].to(self.device)
             else:
                 slice = slices_processed[slice_idx]
@@ -244,7 +249,7 @@ class SAMMed2DInferer(Inferer):
 
         # Reorient to original orientation and return with metadata
         if transform == True:
-            segmentation = self.inv_trans(segmentation)
+            segmentation = inv_trans(segmentation)
 
         if return_low_res_logits:
             return segmentation, low_res_logits

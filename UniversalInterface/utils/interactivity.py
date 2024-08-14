@@ -60,14 +60,16 @@ def gen_contour_fp_scribble(slice_gt, slice_seg, contour_distance, disk_size_ran
     scribble = scribble_components == label
     return scribble
 
-def iterate_2d(inferer, img, gt, segmentation, low_res_logits, initial_prompt, 
-               pass_prev_prompts, use_stored_embeddings,
+def iterate_2d(inferer, gt, segmentation, low_res_logits, initial_prompt, 
+               pass_prev_prompts, 
                scribble_length = 0.2, contour_distance = 2, disk_size_range = (0,0),
                dof_bound = 0, perf_bound = 0, init_dof = 0,
                detailed = False, seed = None, verbose = True):
     if seed:
         np.random.seed(seed)
         random.seed(seed)
+    if not inferer.image_set:
+        raise RuntimeError('Must first set image!')
 
     # Generate initial segmentation using seed method
 
@@ -187,13 +189,13 @@ def iterate_2d(inferer, img, gt, segmentation, low_res_logits, initial_prompt,
                 new_prompt = Prompt(point_prompts = (coords, labels))
                 new_prompt = prompt
             else:
-                prompt = Prompt(point_prompts = (coords, labels))
+                prompt = Prompt(point_prompts = (new_coords, [1]*len(new_coords)))
                 new_prompt = prompt
             
             improve_slices = slices_inferred # improve all slices 
 
         # Generate new segmentation and integrate into old one
-        new_seg, low_res_logits = inferer.predict(img, new_prompt, low_res_logits, use_stored_embeddings = use_stored_embeddings, return_low_res_logits = True, transform = False)
+        new_seg, low_res_logits = inferer.predict(new_prompt, low_res_logits, return_low_res_logits = True, transform = False)
         prompts.append(new_prompt)
         segmentation[improve_slices] = new_seg[improve_slices]
         segmentations.append(segmentation.copy())
