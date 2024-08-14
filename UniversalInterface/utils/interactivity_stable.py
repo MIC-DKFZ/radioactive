@@ -6,7 +6,7 @@ from skimage.measure import label as ski_label
 import warnings
 from . import prompt as prUt
 import torch
-from .base_classes import Points, Boxes, Prompt
+from .base_classes import Points, Boxes
 from .prompt_3d import get_pos_clicks3D
 from .analysis import compute_dice
 
@@ -80,7 +80,7 @@ def iterate_2d(inferer, img, gt, segmentation, low_res_logits, initial_prompt,
     inferer.verbose = False
 
     # Obtain low res masks for interactivity
-    slices_inferred = np.unique(prompt.coords[:,2])
+    slices_inferred = np.unique(prompt.coords[:,0])
 
     # Flag for calculating dof
     has_generated_positive_prompt = False
@@ -141,8 +141,7 @@ def iterate_2d(inferer, img, gt, segmentation, low_res_logits, initial_prompt,
                 ## Position fp_coords back into original 3d coordinate system
                 missing_axis = np.repeat(max_fp_idx, len(fp_coords))
                 fp_coords_3d = np.vstack([fp_coords[:,0], missing_axis, fp_coords[:,1]]).T
-                fp_coords_3d = fp_coords_3d[:,[2,1,0]] # zyx -> xyz
-                improve_slices = np.unique(fp_coords_3d[:,2])
+                improve_slices = np.unique(fp_coords_3d[:,0])
                 dof += 3*4 # To dicuss: assume drawing a scribble is as difficult as drawing four points
                 dofs.append(dof)
 
@@ -150,13 +149,13 @@ def iterate_2d(inferer, img, gt, segmentation, low_res_logits, initial_prompt,
                     ## Add to old prompt
                     coords = np.concatenate([prompt.coords, fp_coords_3d], axis = 0)
                     labels = np.concatenate([prompt.labels, [0]*len(fp_coords_3d)])
-                    prompt = Prompt(point_prompts = (coords, labels))
+                    prompt = Points(coords = coords, labels = labels)
 
                     ## Subset to prompts only on the slices with new prompts
-                    fix_slice_mask = np.isin(prompt.coords[:,2], improve_slices)
-                    new_prompt = Prompt(point_prompts = (coords[fix_slice_mask], labels[fix_slice_mask]))
+                    fix_slice_mask = np.isin(prompt.coords[:,0], improve_slices)
+                    new_prompt = Points(coords = coords[fix_slice_mask], labels = labels[fix_slice_mask])
                 else:
-                    new_prompt = Prompt(point_prompts = (fp_coords_3d, [0]*len(fp_coords_3d)))
+                    new_prompt = Points(coords = fp_coords_3d, labels = [0]*len(fp_coords_3d))
 
         if generate_positive_prompts:
             if not has_generated_positive_prompt: 
@@ -178,22 +177,21 @@ def iterate_2d(inferer, img, gt, segmentation, low_res_logits, initial_prompt,
             # Interpolate linearly from botom_seed-prompt to top_seed_prompt through the new middle prompt to get new positive prompts
             new_seed_prompt = np.vstack([bottom_seed_prompt, new_middle_seed_prompt, top_seed_prompt])
             new_coords =  prUt.interpolate_points(new_seed_prompt, kind = 'linear').astype(int)
-            new_coords = new_coords[:,[2,1,0]] # zyx -> xyz
 
             if pass_prev_prompts:
                 # Add to old prompt
                 coords = np.concatenate([prompt.coords, new_coords], axis = 0)
                 labels = np.concatenate([prompt.labels, [1]*len(new_coords)])
-                new_prompt = Prompt(point_prompts = (coords, labels))
+                prompt = Points(coords = coords, labels = labels)
                 new_prompt = prompt
             else:
-                prompt = Prompt(point_prompts = (coords, labels))
+                prompt = Points(coords = new_coords, labels = [1]*len(new_coords))
                 new_prompt = prompt
             
             improve_slices = slices_inferred # improve all slices 
 
         # Generate new segmentation and integrate into old one
-        new_seg, low_res_logits = inferer.predict(img, new_prompt, low_res_logits, use_stored_embeddings = use_stored_embeddings, return_low_res_logits = True, transform = False)
+        new_seg, low_res_logits = inferer.predict(img, new_prompt, low_res_logits, use_stored_embeddings = use_stored_embeddings, return_low_res_logits = True)
         prompts.append(new_prompt)
         segmentation[improve_slices] = new_seg[improve_slices]
         segmentations.append(segmentation.copy())

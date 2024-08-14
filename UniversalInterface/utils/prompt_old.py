@@ -1,33 +1,78 @@
 import numpy as np
 from copy import deepcopy
 from tqdm import tqdm
-# from skimage.morphology import dilation, ball
+from skimage.morphology import dilation, ball
 from skimage.measure import label
 from scipy.spatial import cKDTree
 from scipy.interpolate import interp1d
 import warnings
-from utils.image import read_reorient_nifti
+import torch
 
-from .base_classes import Points, Boxes, Prompt
+from .base_classes import Points, Boxes
+from .analysis import compute_dice
 
-# def get_neg_clicks_3D(gt, n_clicks, border_distance = 10): # Warning: dilation function is VERY slow! ~ 13 seconds on my machine
-#     struct_element = ball(border_distance)
-#     volume_dilated = dilation(gt, struct_element)
+def get_crop_pad_center_from_points(points):
+    bbox_min = points.coords.T.min(axis = 1) # Get an array of two points: the minimal and maximal vertices of the minimal cube parallel to the axes bounding the points
+    bbox_max = points.coords.T.max(axis = 1) + 1 # Add 1 since we'll be using this for indexing 
+    point_center = np.mean((bbox_min, bbox_max), axis = 0)  
 
-#     border_region = volume_dilated - gt
+    return(point_center)
 
-#     volume_border = np.where(border_region)
-#     volume_border = np.array(volume_border).T
-#     n_border_voxels = volume_border.shape[0]
+def crop_pad_coords(coords, cropping_params, padding_params):
+    axis_add, axis_sub = padding_params[::2], cropping_params[::2] 
+    coords = coords + axis_add - axis_sub # same as value[:,i] = value[:,i] + axis_add[i] - axis_sub[i] iterating over i
+    return(coords)
 
-#     if n_border_voxels < n_clicks:
-#         raise RuntimeError(f'More background points were requested than the number of border voxels in the volume ({n_clicks} vs {n_border_voxels})')
+def get_neg_clicks_3D(gt, n_clicks, border_distance = 10): # Warning: dilation function is VERY slow! ~ 13 seconds on my machine
+    struct_element = ball(border_distance)
+    volume_dilated = dilation(gt, struct_element)
 
-#     point_indices = np.random.choice(n_border_voxels, size = n_clicks, replace = False)
-#     neg_coords = volume_border[point_indices]  # change from triple of arrays format to list of triples format # change from triple of arrays format to list of triples format
+    border_region = volume_dilated - gt
 
-#     neg_coords = Points(coords = neg_coords, labels =  [0]*len(neg_coords))
-#     return(neg_coords)
+    volume_border = np.where(border_region)
+    volume_border = np.array(volume_border).T
+    n_border_voxels = volume_border.shape[0]
+
+    if n_border_voxels < n_clicks:
+        raise RuntimeError(f'More background points were requested than the number of border voxels in the volume ({n_clicks} vs {n_border_voxels})')
+
+    point_indices = np.random.choice(n_border_voxels, size = n_clicks, replace = False)
+    neg_coords = volume_border[point_indices]  # change from triple of arrays format to list of triples format # change from triple of arrays format to list of triples format
+
+    neg_coords = Points(coords = neg_coords, labels =  [0]*len(neg_coords))
+    return(neg_coords)
+
+def get_pos_clicks2D(gt, n_clicks):
+    volume_fg = np.where(gt==1) # Get foreground indices (formatted as triple of arrays)
+    volume_fg = np.array(volume_fg).T # Reformat to numpy array of shape n_fg_voxels x 3
+    
+    fg_slices = np.unique(volume_fg[:,2]) # Obtain superior axis slices which have foreground before reformating indices
+
+    pos_coords = np.empty(shape = (0,3), dtype = int)
+    warning_zs = [] # track slices without enough foreground/border, if any should exist
+
+    for slice_index in fg_slices:
+        ## Foreground points
+        slice = gt[:,:,slice_index]
+        slice_fg = np.where(slice)
+        slice_fg = np.array(slice_fg).T
+
+        n_fg_pixels = len(slice_fg)
+        if n_fg_pixels >= n_clicks:
+            point_indices = np.random.choice(n_fg_pixels, size = n_clicks, replace = False)
+        else:
+            # In this case, take all foreground pixels and then obtain some duplicate points by sampling with replacement additionally
+            warning_zs.append(f'z = {slice_index}, n foreground = n_fg_pixels')
+            point_indices = np.concatenate([np.arange(n_fg_pixels),
+                                        np.random.choice(n_fg_pixels, size = n_clicks-n_fg_pixels, replace = True)])
+            
+        pos_clicks_slice = slice_fg[point_indices]
+        z_col = np.full((n_clicks,1), slice_index) # create z column to add
+        pos_clicks_slice = np.hstack([pos_clicks_slice, z_col])
+        pos_coords = np.vstack([pos_coords, pos_clicks_slice])
+
+    pos_coords = Points(coords = pos_coords, labels =  [1]*len(pos_coords))
+    return(pos_coords)
 
 def get_pos_clicks2D_row_major(gt, n_clicks, seed = None):
 
@@ -61,11 +106,10 @@ def get_pos_clicks2D_row_major(gt, n_clicks, seed = None):
         pos_clicks_slice = np.hstack([z_col, pos_clicks_slice])
         pos_coords = np.vstack([pos_coords, pos_clicks_slice])
 
-    pos_coords = pos_coords[:,[2,1,0]] # gt is in row-major zyx, so need to reorder to get points in xyz.
-    point_prompt = Prompt(point_prompts = (pos_coords, np.array([1]*len(pos_coords))))
-    return point_prompt
+    pos_coords = Points(coords = pos_coords, labels =  np.array([1]*len(pos_coords)))
+    return(pos_coords)
 
-def _get_bbox3d(mask_volume: np.ndarray):
+def get_bbox3d(mask_volume: np.ndarray):
     """Return 6 coordinates of a 3D bounding box from a given mask.
 
     Taken from `this SO question <https://stackoverflow.com/questions/31400769/bounding-box-of-numpy-array>`_.
@@ -84,14 +128,13 @@ def _get_bbox3d(mask_volume: np.ndarray):
     return bb_min, bb_max
 
 def get_bbox3d_sliced(mask_volume: np.ndarray):
-    bbox3d = _get_bbox3d(mask_volume)
+    bbox3d = get_bbox3d(mask_volume)
 
     slices_to_infer = np.arange(bbox3d[0][0], bbox3d[1][0]) # gt is in ZYX format, so index 0 are the axial slices
     box_dict = {slice_idx: np.array((bbox3d[0][2], bbox3d[0][1], bbox3d[1][2], bbox3d[1][1])) for slice_idx in slices_to_infer} # reverse order to get xyxy
-    box_prompt = Prompt(box_prompts = box_dict)
-    return(box_prompt)
+    return(Boxes(box_dict))
 
-def _get_bbox2d(mask):
+def get_bbox2d(mask):
     i_any = np.any(mask, axis=1)
     j_any = np.any(mask, axis=0)
     i_min, i_max = np.where(i_any)[0][[0, -1]]
@@ -102,7 +145,17 @@ def _get_bbox2d(mask):
     coord_list = np.concatenate([bb_min, bb_max]) # SAM wants row-major x0y0x1y1
     return coord_list
 
-def _get_bbox2d_row_major(mask):
+def get_minimal_boxes(gt, delta_x, delta_y):
+    '''
+    Get bounding boxes of the foreground per slice. delta_x, delta_y enlargen the box
+    in the respective dimensions
+    '''
+    slices_to_infer = np.where(np.any(gt, axis=(0,1)))[0] # index 0 since a tuple of length 1 is returned
+    box_dict = {slice_idx: get_bbox2d(gt[:,:,slice_idx].T) for slice_idx in slices_to_infer} # Transpose to get coords in row-major format
+    box_dict = {slice_idx: box + np.array([-delta_x, -delta_y, delta_x, delta_y]) for slice_idx, box in box_dict.items()}
+    return(Boxes(box_dict))
+
+def get_bbox2d_row_major(mask):
     '''
     Mask must be in row major roder
     '''
@@ -123,10 +176,20 @@ def get_minimal_boxes_row_major(gt, delta_x=0, delta_y=0):
     in the respective dimensions
     '''
     slices_to_infer = np.where(np.any(gt, axis=(1,2)))[0] # index 0 since a tuple of length 1 is returned
-    box_dict = {slice_idx: _get_bbox2d_row_major(gt[slice_idx,:,:]) for slice_idx in slices_to_infer} 
+    box_dict = {slice_idx: get_bbox2d_row_major(gt[slice_idx,:,:]) for slice_idx in slices_to_infer} 
     box_dict = {slice_idx: box + np.array([-delta_x, -delta_y, delta_x, delta_y]) for slice_idx, box in box_dict.items()}
-    box_prompt = Prompt(box_prompts = box_dict)
-    return box_prompt
+    return(Boxes(box_dict))
+
+# Have to rework for new row-major order
+# def get_3d_box_for_2d(gt, delta_x, delta_y):
+#     '''
+#     Finds 3d bounding box over the volume and returns it in a 2d prompt
+#     '''
+#     box_3d = get_bbox3d(gt.transpose(2,1,0)) # Permute to get coords in row major format
+#     box_2d = np.concatenate([box_3d[0][-2:], box_3d[1][-2:]])
+#     box_2d = box_2d + np.array([-delta_x, -delta_y, delta_x, delta_y])
+#     box_dict = {slice_idx: box_2d for slice_idx in range(box_3d[0][2], box_3d[1][2])}
+#     return(Boxes(box_dict))
 
 def get_nearest_fg_point(point, binary_mask):
     """
@@ -186,7 +249,7 @@ def get_fg_points_from_cc_centers(gt, n):
         nearest_fg_point = get_nearest_fg_point(slice_fg_center, largest_cc)
         corrected_points[i] = np.concatenate([[z], nearest_fg_point])    
 
-    return corrected_points
+    return(corrected_points)
 
 def interpolate_points(points, kind='linear'):
     """
@@ -217,12 +280,10 @@ def interpolate_points(points, kind='linear'):
     # Stack the new z, y, and x coordinates vertically and return
     return np.column_stack((z_new, y_new, x_new)).round()
 
-def point_interpolation(gt, n_slices, interpolation = 'linear'):
-    simulated_clicks = get_fg_points_from_cc_centers(gt, n_slices)
-    coords = interpolate_points(simulated_clicks, kind = interpolation).astype(int)
-    coords = coords[:,[2,1,0]] # Gt is in row-major; need to reorder to xyz
-    point_prompt = Prompt(point_prompts = (coords, np.array([1]*len(coords))))
-    return point_prompt
+def point_interpolation(simulated_clicks):
+    coords = interpolate_points(simulated_clicks, kind = 'linear').astype(int)
+    point_prompt = Points(coords = coords, labels =  [1]*len(coords))
+    return(point_prompt)
 
 def get_fg_points_from_slice(slice, n_clicks, seed = None):
     if seed:
@@ -246,11 +307,13 @@ def get_seed_boxes(gt, n):
     min_z, max_z = np.min(z_indices), np.max(z_indices)
     selected_slices = np.linspace(min_z, max_z, num=n, dtype=int)
 
-    bbox_dict = {slice_idx: _get_bbox2d_row_major(gt[slice_idx]) for slice_idx in selected_slices}
+    bbox_dict = {slice_idx: get_bbox2d_row_major(gt[slice_idx]) for slice_idx in selected_slices}
 
     return(bbox_dict)
 
-def box_interpolation(seed_boxes):        
+def box_interpolation(seed_boxes):
+
+        
     '''
     Takes n equally spaced slices starting at z_min and ending at z_max, where z_min is the lowest transverse slice of gt containing fg, and z_max similarly with highest, 
     finds the largest connected component of fg, takes the center of its bounding box and takes the nearest fg point. Simulates a clinician clicking in the 'center of the main mass of the roi' per slice
@@ -265,7 +328,7 @@ def box_interpolation(seed_boxes):
     bbox_np_interpolated = np.concatenate((bbox_mins_interpolated, bbox_maxs_interpolated[:, 1:]), axis = 1).astype(int)
 
     bbox_dict_interpolated = {row[0]: row[1:] for row in bbox_np_interpolated }
-    box_prompt = Prompt(box_prompts = bbox_dict_interpolated)
+    box_prompt = Boxes(bbox_dict_interpolated)
 
     return(box_prompt)
 
@@ -278,13 +341,11 @@ def get_seed_point(gt, n_clicks, seed):
     ## Put coords in 3d context
     z_col = np.full((n_clicks,1), middle_idx) 
     pos_coords = np.hstack([z_col, pos_clicks_slice])
-    pos_coords = pos_coords[:,[2,1,0]] # zyx -> xyz
-    pts_prompt = Prompt(point_prompts= (pos_coords, [1]*n_clicks))
+    pts_prompt = Points(coords = pos_coords, labels = [1]*n_clicks)
 
     return(pts_prompt)
 
-def point_propagation(inferer, img_path, seed_prompt, slices_to_infer, seed = None, n_clicks=5, use_stored_embeddings = False, verbose = True, return_low_res_logits = False):
-    img, _ = read_reorient_nifti(img_path, np.float32)
+def point_propagation(inferer, img, seed_prompt, slices_to_infer, seed = None, n_clicks=5, use_stored_embeddings = False, verbose = True, return_low_res_logits = False):
     if seed:
         np.random.seed(seed)
     verbose_state = inferer.verbose # Make inferer not verbose for this experiment
@@ -302,10 +363,10 @@ def point_propagation(inferer, img_path, seed_prompt, slices_to_infer, seed = No
 
     # Infer middle slice
     if return_low_res_logits:
-        slice_seg, slice_low_res_logits = inferer.predict(img_path, pts_prompt, use_stored_embeddings = use_stored_embeddings, return_low_res_logits = True, transform = False)
+        slice_seg, slice_low_res_logits = inferer.predict(img, pts_prompt, use_stored_embeddings = use_stored_embeddings, return_low_res_logits = True)
         low_res_logits[middle_idx] = slice_low_res_logits[middle_idx]
     else:
-        slice_seg = inferer.predict(img_path, pts_prompt, use_stored_embeddings = use_stored_embeddings, transform = False)
+        slice_seg = inferer.predict(img, pts_prompt, use_stored_embeddings = use_stored_embeddings)
     segmentation[middle_idx] = slice_seg[middle_idx]
 
     # Downwards branch
@@ -313,9 +374,8 @@ def point_propagation(inferer, img_path, seed_prompt, slices_to_infer, seed = No
     downwards_coords = []
     z_col = np.full((len(seed_prompt.coords),1), middle_idx-1) 
     pos_coords = np.hstack([z_col, seed_prompt.coords[:,1:]])
-    pos_coords = pos_coords[:,[2,1,0]] # Change from zyx to xyz
     downwards_coords.append(pos_coords)
-    pts_prompt = Prompt(point_prompts= (pos_coords, [1]*len(seed_prompt.coords)))
+    pts_prompt = Points(coords = pos_coords, labels =[1]*len(seed_prompt.coords))
 
 
     downwards_iter = range(middle_idx-1, slices_to_infer.min()-1, -1)
@@ -324,10 +384,10 @@ def point_propagation(inferer, img_path, seed_prompt, slices_to_infer, seed = No
 
     for slice_idx in downwards_iter:    
         if return_low_res_logits:
-            slice_seg, slice_low_res_logits = inferer.predict(img_path, pts_prompt, use_stored_embeddings = use_stored_embeddings, return_low_res_logits = True, transform = False)
+            slice_seg, slice_low_res_logits = inferer.predict(img, pts_prompt, use_stored_embeddings = use_stored_embeddings, return_low_res_logits = True)
             low_res_logits[slice_idx] = slice_low_res_logits[slice_idx]
         else:
-            slice_seg = inferer.predict(img_path, pts_prompt, use_stored_embeddings = use_stored_embeddings, transform = False)
+            slice_seg = inferer.predict(img, pts_prompt, use_stored_embeddings = use_stored_embeddings)
         segmentation[slice_idx] = slice_seg[slice_idx]
 
         if np.all(segmentation[slice_idx] == 0): # Terminate if no fg generated
@@ -340,18 +400,16 @@ def point_propagation(inferer, img_path, seed_prompt, slices_to_infer, seed = No
         # Put coords in 3d context
         z_col = np.full((n_clicks,1), slice_idx-1) # create z column to add. Note slice_idx-1: these are the prompts for the next slice down
         pos_coords = np.hstack([z_col, pos_clicks_slice])
-        pos_coords = pos_coords[:,[2,1,0]] # Change from zyx to xyz
         downwards_coords.append(pos_coords)
-        pts_prompt = Prompt(point_prompts= (pos_coords, [1]*n_clicks))
+        pts_prompt = Points(coords = pos_coords, labels = [1]*n_clicks)
 
     # Upward branch
     ## Modify seed prompt to exist one axial slice up
     upward_coords = []
     z_col = np.full((len(seed_prompt.coords),1), middle_idx+1) 
     pos_coords = np.hstack([z_col, seed_prompt.coords[:,1:]])
-    pos_coords = pos_coords[:,[2,1,0]] # Change from zyx to xyz
     upward_coords.append(pos_coords)
-    pts_prompt = Prompt(point_prompts= (pos_coords, [1]*len(seed_prompt.coords)))
+    pts_prompt = Points(coords = pos_coords, labels =  [1]*len(seed_prompt.coords))
 
 
     upwards_iter = range(middle_idx+1, slices_to_infer.max()+1)
@@ -360,10 +418,10 @@ def point_propagation(inferer, img_path, seed_prompt, slices_to_infer, seed = No
 
     for slice_idx in upwards_iter:
         if return_low_res_logits:
-            slice_seg, slice_low_res_logits = inferer.predict(img_path, pts_prompt, use_stored_embeddings = use_stored_embeddings, return_low_res_logits = True, transform = False)
+            slice_seg, slice_low_res_logits = inferer.predict(img, pts_prompt, use_stored_embeddings = use_stored_embeddings, return_low_res_logits = True)
             low_res_logits[slice_idx] = slice_low_res_logits[slice_idx]
         else:
-            slice_seg = inferer.predict(img_path, pts_prompt, use_stored_embeddings = use_stored_embeddings, transform = False)
+            slice_seg = inferer.predict(img, pts_prompt, use_stored_embeddings = use_stored_embeddings)
 
         segmentation[slice_idx] = slice_seg[slice_idx]
 
@@ -377,16 +435,15 @@ def point_propagation(inferer, img_path, seed_prompt, slices_to_infer, seed = No
         # Put coords in 3d context
         z_col = np.full((n_clicks,1), slice_idx+1) # create z column to add. Note slice_idx+1: these are the prompts for the next slice up
         pos_coords = np.hstack([z_col, pos_clicks_slice])
-        pos_coords = pos_coords[:,[2,1,0]] # Change from zyx to xyz
         upward_coords.append(pos_coords)
-        pts_prompt = Prompt(point_prompts= (pos_coords, [1]*n_clicks))
+        pts_prompt = Points(coords = pos_coords, labels =  [1]*n_clicks)
 
     inferer.verbose = verbose_state # Return inferer verbosity to initial state
 
     coords = np.concatenate(downwards_coords[::-1] + seed_coords + upward_coords, axis = 0)
     is_in_slices_inferred = np.isin(coords[:,0], slices_to_infer)
     coords = coords[is_in_slices_inferred] # Removes extraneous prompts on bottom_slice-1 and top_slice+1 that weren't used.
-    prompt = Prompt(point_prompts = (coords, [1]*len(coords)))
+    prompt = Points(coords = coords, labels =  [1]*len(coords))
 
     if return_low_res_logits:
         return segmentation, low_res_logits, prompt
@@ -398,15 +455,12 @@ def get_seed_box(gt):
     slices_to_infer = np.where(np.any(gt, axis=(1,2)))[0]
     middle_idx = np.median(slices_to_infer).astype(int)
 
-    bbox_slice = _get_bbox2d_row_major(gt[middle_idx])
+    bbox_slice = get_bbox2d_row_major(gt[middle_idx])
     box_dict = {middle_idx: bbox_slice}
-    box_prompt = Prompt(box_prompts = box_dict)
 
-    return(box_prompt)
+    return(Boxes(box_dict))
 
-def box_propagation(inferer, img_path, seed_box, slices_to_infer, use_stored_embeddings = False, verbose = True, return_low_res_logits = False):
-    img, _ = read_reorient_nifti(img_path, np.float32)
-
+def box_propagation(inferer, img, seed_box, slices_to_infer, use_stored_embeddings = False, verbose = True, return_low_res_logits = False):
     verbose_state = inferer.verbose # Make inferer not verbose for this experiment
     inferer.verbose = False
 
@@ -416,23 +470,23 @@ def box_propagation(inferer, img_path, seed_box, slices_to_infer, use_stored_emb
         low_res_logits = {}
 
     box_prompt = deepcopy(seed_box)
-    all_boxes = seed_box.boxes # Update throughout the loops to keep track of all box prompts
+    all_boxes = seed_box.value # Update throughout the loops to keep track of all box prompts
     middle_idx = np.median(slices_to_infer).astype(int)
 
     # Infer middle slice
     if return_low_res_logits:
-        slice_seg, slice_low_res_logits = inferer.predict(img_path, box_prompt, 
-                                                          use_stored_embeddings = use_stored_embeddings, return_low_res_logits = True, transform = False)
+        slice_seg, slice_low_res_logits = inferer.predict(img, box_prompt, 
+                                                          use_stored_embeddings = use_stored_embeddings, return_low_res_logits = True)
         low_res_logits[middle_idx] = slice_low_res_logits[middle_idx]
     else:
-        slice_seg = inferer.predict(img_path, box_prompt, use_stored_embeddings = use_stored_embeddings, transform = False)
+        slice_seg = inferer.predict(img, box_prompt, use_stored_embeddings = use_stored_embeddings)
     segmentation[middle_idx] = slice_seg[middle_idx]
 
 
     # Downwards branch
     ## Modify seed prompt to exist one axial slice down
     all_boxes[middle_idx-1] = all_boxes[middle_idx] 
-    box_prompt = Prompt(box_prompts = {k-1:v for k,v in seed_box.boxes.items()})
+    box_prompt = Boxes({k-1:v for k,v in seed_box.value.items()})
 
     downwards_iter = range(middle_idx-1, slices_to_infer.min()-1, -1)
     if verbose:
@@ -440,10 +494,10 @@ def box_propagation(inferer, img_path, seed_box, slices_to_infer, use_stored_emb
 
     for slice_idx in downwards_iter:
         if return_low_res_logits:
-            slice_seg, slice_low_res_logits = inferer.predict(img_path, box_prompt, use_stored_embeddings = use_stored_embeddings, return_low_res_logits = True, transform = False)
+            slice_seg, slice_low_res_logits = inferer.predict(img, box_prompt, use_stored_embeddings = use_stored_embeddings, return_low_res_logits = True)
             low_res_logits[slice_idx] = slice_low_res_logits[slice_idx]
         else:
-            slice_seg = inferer.predict(img_path, box_prompt, use_stored_embeddings = use_stored_embeddings, transform = False)
+            slice_seg = inferer.predict(img, box_prompt, use_stored_embeddings = use_stored_embeddings)
 
         segmentation[slice_idx] = slice_seg[slice_idx]
 
@@ -452,14 +506,14 @@ def box_propagation(inferer, img_path, seed_box, slices_to_infer, use_stored_emb
             break
 
         # Update prompt
-        bbox_slice = _get_bbox2d_row_major(segmentation[slice_idx])
+        bbox_slice = get_bbox2d_row_major(segmentation[slice_idx])
         all_boxes[slice_idx-1] = bbox_slice
-        box_prompt = Prompt(box_prompts = {slice_idx-1: bbox_slice}) # Notice the -1: this is the prompt for one slice down
+        box_prompt = Boxes({slice_idx-1: bbox_slice}) # Notice the -1: this is the prompt for one slice down
 
     # Upward branch
     ## Modify seed prompt to exist one axial slice up
     all_boxes[middle_idx+1] = all_boxes[middle_idx]
-    box_prompt = Prompt(box_prompts = {k+1:v for k,v in seed_box.boxes.items()})
+    box_prompt = Boxes({k+1:v for k,v in seed_box.value.items()})
 
     upwards_iter = range(middle_idx+1, slices_to_infer.max()+1)
     if verbose:
@@ -467,10 +521,10 @@ def box_propagation(inferer, img_path, seed_box, slices_to_infer, use_stored_emb
 
     for slice_idx in upwards_iter:
         if return_low_res_logits:
-            slice_seg, slice_low_res_logits = inferer.predict(img_path, box_prompt, use_stored_embeddings = use_stored_embeddings, return_low_res_logits = True, transform = False)
+            slice_seg, slice_low_res_logits = inferer.predict(img, box_prompt, use_stored_embeddings = use_stored_embeddings, return_low_res_logits = True)
             low_res_logits[slice_idx] = slice_low_res_logits[slice_idx]
         else:
-            slice_seg = inferer.predict(img_path, box_prompt, use_stored_embeddings = use_stored_embeddings, transform = False)
+            slice_seg = inferer.predict(img, box_prompt, use_stored_embeddings = use_stored_embeddings)
 
         segmentation[slice_idx] = slice_seg[slice_idx]
 
@@ -479,13 +533,18 @@ def box_propagation(inferer, img_path, seed_box, slices_to_infer, use_stored_emb
             break
 
         # Update prompt
-        bbox_slice = _get_bbox2d_row_major(segmentation[slice_idx])
+        bbox_slice = get_bbox2d_row_major(segmentation[slice_idx])
         all_boxes[slice_idx+1] = bbox_slice
-        box_prompt = Prompt(box_prompts ={slice_idx+1: bbox_slice}) # Notice the +1: this is the prompt for one slice up
+        box_prompt = Boxes({slice_idx+1: bbox_slice}) # Notice the +1: this is the prompt for one slice up
     
     all_boxes = {k:all_boxes[k] for k in slices_to_infer if k in all_boxes.keys()} # Removes top and bottom box - they weren't used. 'if clause' in case propagation terminated early.
 
-    all_boxes = Prompt(box_prompts = all_boxes)
+    all_boxes = Boxes(all_boxes)
     inferer.verbose = verbose_state # Return inferer verbosity to initial state
     return segmentation, all_boxes
 
+def line_interpolation(gt, n_slices, interpolation = 'linear'):
+    simulated_clicks = get_fg_points_from_cc_centers(gt, n_slices)
+    coords = interpolate_points(simulated_clicks, kind = interpolation).astype(int)
+    point_prompt = Points(coords = coords, labels = [1]*len(coords))
+    return(point_prompt)

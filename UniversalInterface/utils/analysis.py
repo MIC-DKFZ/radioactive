@@ -1,11 +1,23 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from torch import Tensor
 
 def compute_dice(mask_gt, mask_pred):
     """Compute soerensen-dice coefficient.
     Returns:
     the dice coeffcient as float. If both masks are empty, the result is NaN
     """
+    if isinstance(mask_gt, Tensor):
+        mask_gt = mask_gt.numpy()
+    if isinstance(mask_pred, Tensor):
+        mask_pred = mask_pred.numpy()
+    
+
+    if mask_gt.dtype != np.uint8:
+        mask_gt = mask_gt.astype(np.uint8)
+    if mask_pred.dtype != np.uint8:
+        mask_pred = mask_pred.astype(np.uint8)
+
     volume_sum = mask_gt.sum() + mask_pred.sum()
     if volume_sum == 0:
         return np.NaN

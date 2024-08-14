@@ -4,7 +4,7 @@ import numpy as np
 import json
 import utils.analysis as anUt
 import utils.prompt as prUt
-from utils.prompt import get_bbox3d
+from utils.prompt import _get_bbox3d
 from utils.prompt_3d import get_pos_clicks3D
 from utils.image import read_reorient_nifti
 from tqdm import tqdm
@@ -20,7 +20,7 @@ def run_experiments_3d(inferer, imgs_gts, results_dir, save_segs = False):
     experiments = {}
 
     experiments.update({
-        'bbox3d': lambda organ_mask: get_bbox3d(organ_mask)
+        'bbox3d': lambda organ_mask: _get_bbox3d(organ_mask)
     })
 
     if save_segs:

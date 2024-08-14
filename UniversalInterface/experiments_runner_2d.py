@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 
 from experiments_2d import run_experiments_2d
-from classes.SAMClass import SAMInferer
+from utils.class_SAM import SAMInferer
 from classes.SAMMed2DClass import SAMMed2DInferer
 from classes.MedSAMClass import MedSAMInferer
 from classes.SAMMed3DClass import SAMMed3DInferer

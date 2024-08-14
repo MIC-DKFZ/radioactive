@@ -3,7 +3,7 @@ import os
 from datetime import datetime
 
 from lesions_experiments_2d import run_experiments_2d
-from classes.SAMClass import SAMInferer
+from utils.class_SAM import SAMInferer
 from classes.SAMMed2DClass import SAMMed2DInferer
 from classes.MedSAMClass import MedSAMInferer
 

@@ -3,7 +3,7 @@ import os
 from datetime import datetime
 
 from lesions_experiments_segvol import run_experiments_3d
-from utils.segvolClass import SegVolInferer
+from utils.class_segvol import SegVolInferer
 inferer_registry = {
     'segvol': SegVolInferer,
 }

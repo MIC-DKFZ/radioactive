@@ -2,18 +2,17 @@ import torch
 import numpy as np
 import torch.nn.functional as F
 from tqdm import tqdm
-from typing import TypeVar
 from copy import deepcopy
 from argparse import Namespace
+import nibabel as nib
+from nibabel.orientations import io_orientation, ornt_transform
+import warnings
+from collections import defaultdict
 
 from utils.SAMMed3D_segment_anything.build_sam import sam_model_registry as registry_sam
-from utils.base_classes import Points, Boxes, Inferer, SegmenterWrapper
+from utils.base_classes import Points, Boxes, Inferer, Prompt
 
-import utils.prompt as prUt
-import utils.image as imUt
 from utils.transforms import ResizeLongestSide
-
-SAM = TypeVar('SAM')
 
 def load_sam(checkpoint_path, device = 'cuda', image_size = 1024):
     args = Namespace()
@@ -21,16 +20,67 @@ def load_sam(checkpoint_path, device = 'cuda', image_size = 1024):
     args.sam_checkpoint = checkpoint_path
     args.model_type = 'vit_h'
     model = registry_sam[args.model_type](args).to(device)
+    model.eval()
     return(model)
+    
+    
+class SAMInferer(Inferer):
+    pass_prev_prompts = True # In supplied demos, sam doesn't take previous prompts, but this vastly increases performance when the model greatly oversegments, for example.
 
-class SAMWrapper(SegmenterWrapper):
-    def __init__(self, model: SAM):
-        self.model = model
-        self.device = model.device
+    def __init__(self, checkpoint_path, device):
+        self.model = load_sam(checkpoint_path, device)
+        self.prev_mask = None
+        self.target_volume_shape = 128 # Hardcoded to match training
+        self.target_slice_shape = 256 # Hardcoded to match training
+        self.inputs = None
+        self.mask_threshold = 0 
+        self.device = device
+        self.image_embeddings_dict = {}
+        self.verbose = True
 
+        self.pixel_mean = self.model.pixel_mean
+        self.pixel_std = self.model.pixel_std
+        self.transform = ResizeLongestSide(self.model.image_encoder.img_size)
+        self.input_size = None
+
+    def load_image(self, img_path):
+        # sitk_image = sitk.ReadImage(img_path)
+
+        # img, _ = sitk_to_nib(sitk_image)
+
+        # img = img[0].transpose(2,1,0) # Don't need single channel dimension, transpose now RAS -> to zyx row major, inverse transpose later
+
+        # meta_info = {
+        #     "origin": sitk_image.GetOrigin(),
+        #     "direction": sitk_image.GetDirection(),
+        #     "spacing": sitk_image.GetSpacing(),
+        # }
+
+        img = nib.load(img_path)
+        img_ras = img # Set in case already in RAS
+        affine = img.affine
+
+        if nib.aff2axcodes(affine) != ('R', 'A', 'S'):
+            img_ras = nib.as_closest_canonical(img)
+
+        ornt_old = io_orientation(img.affine)
+        ornt_new = io_orientation(img_ras.affine)
+        ornt_trans = ornt_transform(ornt_new, ornt_old)
+        img_data = img_ras.get_fdata()
+        img_data = img_data.transpose(2,1,0) # Reorient to zyx 
+
+        def inv_trans(seg: np.array):
+            seg = seg.transpose(2,1,0) # Reorient back from zyx to RAS
+            seg_nib = nib.Nifti1Image(seg, img.affine)
+            seg_orig_ori = seg_nib.as_reoriented(ornt_trans) 
+            
+            return seg_orig_ori
+    
+        return img_data, inv_trans   
+        
 
     @torch.no_grad()
-    def __call__(self, points, box, mask, image_embedding):
+    def segment(self, points, box, mask, image_embedding):
         sparse_embeddings, dense_embeddings = self.model.prompt_encoder(
             points=points,
             boxes=box,
@@ -51,28 +101,6 @@ class SAMWrapper(SegmenterWrapper):
         best_mask = low_res_masks[0, max_index]
         
         return(best_mask)
-    
-    
-class SAMInferer(Inferer):
-    supported_prompts = (Points,) # TODO: Implement boxes
-    pass_prev_prompts = True # In supplied demos, sam doesn't take previous prompts, but this vastly increases performance when teh model greatly oversegments, for example.
-
-    def __init__(self, checkpoint_path, device):
-        model = load_sam(checkpoint_path, device)
-        self.segmenter = SAMWrapper(model)
-        self.prev_mask = None
-        self.target_volume_shape = 128 # Hardcoded to match training
-        self.target_slice_shape = 256 # Hardcoded to match training
-        self.inputs = None
-        self.mask_threshold = 0 
-        self.device = model.device
-        self.image_embeddings_dict = {}
-        self.verbose = True
-
-        self.pixel_mean = model.pixel_mean
-        self.pixel_std = model.pixel_std
-        self.transform = ResizeLongestSide(model.image_encoder.img_size)
-        self.input_size = None
 
     def clear_embeddings(self):
         self.image_embeddings_dict = {}
@@ -100,8 +128,8 @@ class SAMInferer(Inferer):
             slice = slice = (slice - self.pixel_mean) / self.pixel_std
 
             h, w = slice.shape[-2:]
-            padh = self.segmenter.model.image_encoder.img_size - h
-            padw = self.segmenter.model.image_encoder.img_size - w
+            padh = self.model.image_encoder.img_size - h
+            padw = self.model.image_encoder.img_size - w
             slice = F.pad(slice, (0, padw, 0, padh))
 
             slices_processed[slice_idx] = slice
@@ -115,13 +143,12 @@ class SAMInferer(Inferer):
             - Modify in line with the interpolation
             - Collect into a dictionary of slice:slice prompt
         '''
-        if isinstance(prompt, Points):
+        preprocessed_prompts_dict = {slice_idx: {'point': None, 'box': None} for slice_idx in prompt.slices_to_infer}
+
+        if prompt.has_points:
             coords = prompt.coords
             labs = prompt.labels
 
-            slices_to_infer = set(coords[:,0].astype(int)) # zeroth element of batch (of size one), all triples, z coordinate 
-
-            coords = coords[:,[2,1,0]] # Change from ZYX to XYZ
             coords_resized = self.transform.apply_coords(coords, (self.H, self.W))
 
             # Convert to torch tensor 
@@ -129,26 +156,22 @@ class SAMInferer(Inferer):
             labs = torch.as_tensor(labs, dtype = int)
 
             # Collate
-            preprocessed_prompts_dict = {}
-            for slice_idx in slices_to_infer:
+            
+            for slice_idx in prompt.slices_to_infer:
                 slice_coords_mask = (coords_resized[:,2] == slice_idx)
                 slice_coords, slice_labs = coords_resized[slice_coords_mask, :2], labs[slice_coords_mask] # Leave out z coordinate in slice_coords
                 slice_coords, slice_labs = slice_coords.unsqueeze(0), slice_labs.unsqueeze(0)
-                preprocessed_prompts_dict[slice_idx] = (slice_coords.to(self.device), slice_labs.to(self.device))
+                preprocessed_prompts_dict[slice_idx]['point'] = (slice_coords.to(self.device), slice_labs.to(self.device))
 
-            return(preprocessed_prompts_dict, slices_to_infer)
-        
-        if isinstance(prompt, Boxes):
-            slices_to_infer = prompt.get_slices_to_infer()
-            preprocessed_prompts_dict = {}
-            for slice_index, box in prompt.value.items():
-                box = np.array(box)
+        if prompt.has_boxes:
+            for slice_index, box in prompt.boxes.items():
                 box = self.transform.apply_boxes(box, (self.H, self.W))
                 box = torch.as_tensor(box, dtype=torch.float, device=self.device)
                 box = box[None, :]
-                preprocessed_prompts_dict[slice_index] = box.to(self.device)
+                preprocessed_prompts_dict[slice_index]['box'] = box.to(self.device)
             
-            return(preprocessed_prompts_dict, slices_to_infer)
+        
+        return preprocessed_prompts_dict
     
     def postprocess_slices(self, slice_mask_dict, return_logits):
         '''
@@ -163,7 +186,7 @@ class SAMInferer(Inferer):
             low_res_mask = low_res_mask.unsqueeze(0).unsqueeze(0) # Include batch and channel dimensions
             mask_input_res = F.interpolate(
                 low_res_mask,
-                (self.segmenter.model.image_encoder.img_size, self.segmenter.model.image_encoder.img_size),
+                (self.model.image_encoder.img_size, self.model.image_encoder.img_size),
                 mode="bilinear",
                 align_corners=False,
             )   # upscale low res mask to mask as in input_size
@@ -175,10 +198,23 @@ class SAMInferer(Inferer):
 
         return(segmentation)
  
-    def predict(self, img, prompt, mask_dict = {}, return_logits = False, return_low_res_logits = False, use_stored_embeddings = False):
-        if not (isinstance(prompt, Points) or isinstance(prompt, Boxes)):
-            raise RuntimeError(f'Currently only points and boxes are supported, got {type(prompt)}')
-        
+    def predict(self, img_path, prompt, mask_dict = {}, return_logits = False, return_low_res_logits = False, use_stored_embeddings = False, transform = True):
+        # Legacy:
+        if isinstance(prompt, Boxes):
+            prompt = Prompt(box_prompts = prompt)
+            warnings.warn('Deprecating passing prompts as Boxes or Points, please pass as instance of Prompt class')
+        if isinstance(prompt, Points):
+            prompt = Prompt(point_prompts = prompt)
+            warnings.warn('Deprecating passing prompts as Boxes or Points, please pass as instance of Prompt class')
+
+        if not (isinstance(prompt, Prompt)):
+            raise TypeError(f'Prompts must be supplied as an instance of the Prompt class.')
+        if prompt.has_boxes and prompt.has_points:
+            warnings.warn('Both point and box prompts have been supplied; the model has not been trained on this.')
+        slices_to_infer = prompt.slices_to_infer
+
+        img, inv_trans = self.load_image(img_path)
+
         if self.verbose and self.image_embeddings_dict != {}:
             print('Using previously generated image embeddings')
 
@@ -187,7 +223,7 @@ class SAMInferer(Inferer):
         self.D, self.H, self.W = img.shape
         self.original_size = (self.H, self.W) # Used for the transform class, which is taken from the original SAM code, hence the 2D size
         
-        preprocessed_prompt_dict, slices_to_infer = self.preprocess_prompt(prompt)
+        preprocessed_prompt_dict = self.preprocess_prompt(prompt)
         if use_stored_embeddings:
             slices_to_process = [slice_idx for slice_idx in slices_to_infer if slice_idx not in self.image_embeddings_dict.keys()]
         else:
@@ -204,20 +240,21 @@ class SAMInferer(Inferer):
             else:
                 slice = slices_processed[slice_idx]
                 with torch.no_grad():
-                    image_embedding = self.segmenter.model.image_encoder(slice.to(self.device))
+                    image_embedding = self.model.image_encoder(slice.to(self.device))
                 self.image_embeddings_dict[slice_idx] = image_embedding.cpu()
             
             # Get prompts
-            slice_points, slice_box, = None, None # Initialise to empty
+            # slice_points, slice_box, = None, None # Initialise to empty
+            slice_points, slice_box = preprocessed_prompt_dict[slice_idx]['point'], preprocessed_prompt_dict[slice_idx]['box']
             slice_mask = torch.from_numpy(mask_dict[slice_idx]).to(self.device).unsqueeze(0).unsqueeze(0) if slice_idx in mask_dict.keys() else None
 
-            if isinstance(prompt, Points):
-                slice_points = preprocessed_prompt_dict[slice_idx]
-            elif isinstance(prompt, Boxes):
-                slice_box = preprocessed_prompt_dict[slice_idx]
+            # if isinstance(prompt, Points):
+            #     slice_points = preprocessed_prompt_dict[slice_idx]
+            # elif isinstance(prompt, Boxes):
+            #     slice_box = preprocessed_prompt_dict[slice_idx]
 
             # Infer
-            slice_raw_outputs = self.segmenter(points = slice_points, box=slice_box, mask = slice_mask, image_embedding = image_embedding) # Add batch dimensions
+            slice_raw_outputs = self.segment(points = slice_points, box=slice_box, mask = slice_mask, image_embedding = image_embedding) # Add batch dimensions
             self.slice_lowres_outputs[slice_idx] = slice_raw_outputs
         
         if return_low_res_logits:
@@ -225,6 +262,10 @@ class SAMInferer(Inferer):
             
         segmentation = self.postprocess_slices(self.slice_lowres_outputs, return_logits)
 
+        # Reorient to original orientation and return with metadata
+        if transform == True:
+            segmentation = inv_trans(segmentation)
+        
         if return_low_res_logits:
             return segmentation, low_res_logits
         else:
