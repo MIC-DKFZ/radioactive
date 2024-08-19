@@ -225,11 +225,13 @@ def iterate_2d(inferer, gt, segmentation, low_res_logits, initial_prompt,
         return dice_scores, dofs
 
 
-def iterate_3d(inferer, img, gt, pass_prev_prompts,
-                perf_bound, dof_bound, seed = None, detailed = False):
-
+def iterate_3d(inferer, gt_unprocessed, pass_prev_prompts,
+                perf_bound, dof_bound, seed = None, detailed = False, sammed3d = False):
     if seed is not None:
         np.random.seed(seed)
+
+    if not inferer.image_set:
+        raise RuntimeError('Must first set image!')
 
     n=1
 
@@ -242,22 +244,32 @@ def iterate_3d(inferer, img, gt, pass_prev_prompts,
 
     # Obtain initial segmentation
 
-    prompt = get_pos_clicks3D(gt, n, seed = seed)
-    segmentation, logits = inferer.predict(img, prompt, store_patching=True, return_low_res_logits=True)
+    prompt = get_pos_clicks3D(gt_unprocessed, n, seed = seed)
+    segmentation, logits = inferer.predict(prompt, store_patching=True, return_low_res_logits=True, transform = False)
+
+    
+    gt_to_compare = gt_unprocessed
+    # For SAMMed3D, must sample for new prompts only in a 128x128x128 crop around the initial prompt.
+    if sammed3d:
+        gt_to_compare = np.zeros_like(gt_unprocessed)
+        seed_coords = prompt.coords[0]
+        low = np.maximum(seed_coords - 64, 0)
+        high = np.minimum(seed_coords + 64, gt_unprocessed.shape)
+        gt_to_compare[low[0]:high[0], low[1]:high[1], low[2]:high[2]] = gt_unprocessed[low[0]:high[0], low[1]:high[1], low[2]:high[2]]
 
     prompts.append(prompt)
     dof+=3
     segmentations.append(segmentation.copy())
-    dice_scores.append(compute_dice(segmentation, gt))
+    dice_scores.append(compute_dice(segmentation, gt_unprocessed))
 
     dice_condition_met, dof_condition_met = False, False
     while not (dice_condition_met and dof_condition_met) and num_iter <= 10:
 
         # Obtain new prompt
-        misclassifieds = np.vstack(np.where(segmentation != gt)).T
+        misclassifieds = np.vstack(np.where(segmentation != gt_to_compare)).T
         sampled_ind = np.random.randint(len(misclassifieds))
         sampled_coords = [misclassifieds[sampled_ind]]
-        sampled_labels = [gt[*sampled_coords[0]]]
+        sampled_labels = [gt_to_compare[*sampled_coords[0]]]
 
         if pass_prev_prompts:
             sampled_coords = np.vstack((prompt.coords, sampled_coords))
@@ -266,12 +278,12 @@ def iterate_3d(inferer, img, gt, pass_prev_prompts,
         prompt = Points(coords = sampled_coords, labels = sampled_labels)
         prompts.append(prompt)
         
-        new_seg, logits = inferer.predict(img, prompt, use_stored_patching=True, return_low_res_logits = True, prev_low_res_logits = logits)
+        segmentation, logits = inferer.predict(prompt, use_stored_patching=True, return_low_res_logits = True, prev_low_res_logits = logits, transform = False)
 
         prompts.append(prompt)
         dof+=3
         segmentations.append(segmentation.copy())
-        dice_scores.append(compute_dice(new_seg, gt))
+        dice_scores.append(compute_dice(segmentation, gt_unprocessed))
 
         # Check break conditions
         if dof >= dof_bound:

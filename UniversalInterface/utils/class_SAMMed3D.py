@@ -5,8 +5,10 @@ from typing import TypeVar
 from copy import deepcopy
 import torchio as tio
 from itertools import product
+import nibabel as nib
+from nibabel.orientations import io_orientation, ornt_transform
 
-from utils.base_classes import Points, Inferer, SegmenterWrapper
+from utils.base_classes import Points, Inferer
 from utils.SAMMed3D_segment_anything.build_sam3D import build_sam3D_vit_b_ori
 
 SAM3D = TypeVar('SAM3D')
@@ -18,16 +20,24 @@ def load_sammed3d(checkpoint_path, device = 'cuda'):
         state_dict = model_dict['model_state_dict']
         sam_model_tune.load_state_dict(state_dict)
         sam_model_tune.to(device)
+        sam_model_tune.eval()
 
     return (sam_model_tune)
 
-class SAMMed3DWrapper(SegmenterWrapper):
-    def __init__(self, model):
-        self.model = model
-        self.device = model.device
+class SAMMed3DInferer(Inferer):
+    supported_prompts = (Points,)
+    required_shape = (128, 128, 128) # Hard code to match training
+    offset_mode = 'center' # Changing this will require siginificant reworking of code; currently doesn't matter anyway since the other method doesn't work
+    pass_prev_prompts = True
 
-    @torch.no_grad()
-    def __call__(self, img_embedding, low_res_mask, coords, labels):
+    def __init__(self, checkpoint_path, device, use_only_first_point = False):
+        self.model = load_sammed3d(checkpoint_path,  device)
+        self.device = device
+        self.use_only_first_point = use_only_first_point
+        self.image_set = False
+        self.stored_cropping_params, self.stored_padding_params, self.stored_patch_list = None, None, None
+
+    def segment(self, img_embedding, low_res_mask, coords, labels):
         # Get prompt embeddings
         sparse_embeddings, dense_embeddings = self.model.prompt_encoder(
             points = [coords, labels],
@@ -46,18 +56,14 @@ class SAMMed3DWrapper(SegmenterWrapper):
         
         return(low_res_logits)
     
-class SAMMed3DInferer(Inferer):
-    supported_prompts = (Points,)
-    required_shape = (128, 128, 128) # Hard code to match training
-    offset_mode = 'center' # Changing this will require siginificant reworking of code; currently doesn't matter anyway since the other method doesn't work
-    pass_prev_prompts = True
+    def set_image(self, img_path): 
+        # Original code: the ToCanonical function doesn't work without metadata anyway, so it efectively only reads in the image. For ease of preserving metadata, I use nib
+        img = nib.load(img_path)
+        img_data = img.get_fdata()
+        self.img = img_data
+        self.affine = img.affine
+        self.image_set = True
 
-    def __init__(self, checkpoint_path, device, use_only_first_point = False):
-        self.model = load_sammed3d(checkpoint_path,  device)
-        self.segmenter = SAMMed3DWrapper(self.model)
-        self.device = device
-        self.use_only_first_point = use_only_first_point
-        self.stored_cropping_params, self.stored_padding_params, self.stored_patch_list = None, None, None
 
     def clear_embeddings(self):
         self.stored_cropping_params, self.stored_padding_params, self.stored_patch_list = None, None, None
@@ -135,7 +141,6 @@ class SAMMed3DInferer(Inferer):
             norm_transform = tio.ZNormalization(masking_method=lambda x: x > 0)
             img3D_roi = norm_transform(img3D_roi) # (N, C, W, H, D)
             img3D_roi = img3D_roi.unsqueeze(dim=0).to(self.device)
-            # TODO MODIFICATION FROM ORIGINAL: CREATE IMAGE EMBEDDING HERE TO PERMIT STORAGE
             patch_embedding = self.model.image_encoder(img3D_roi.to(self.device)) # (1, 384, 16, 16, 16)
 
             # collect all position information, and set correct roi for sliding-windows in 
@@ -168,6 +173,7 @@ class SAMMed3DInferer(Inferer):
         coords = pts_prompt.coords
         labels = pts_prompt.labels
 
+        # Transform prompt in line with image transforms
         point_offset = np.array([padding_params[0]-cropping_params[0], padding_params[2]-cropping_params[2], padding_params[4]-cropping_params[4]])
         coords = coords + point_offset
         
@@ -179,21 +185,36 @@ class SAMMed3DInferer(Inferer):
         
         return batch_points, batch_labels
     
-    def predict(self, img, prompt, prev_low_res_logits = None,
+    @torch.no_grad()
+    def predict(self, prompt, prev_low_res_logits = None,
                 cheat = False, gt = None, 
                 store_patching = False, use_stored_patching = False,
-                return_low_res_logits = False): # If iterate, use previous patching, previous embeddings
+                return_low_res_logits = False,
+                transform = True): # If iterating, use previous patching, previous embeddings
         if not isinstance(prompt, SAMMed3DInferer.supported_prompts):
             raise ValueError(f'Unsupported prompt type: got {type(prompt)}')
-    
-        prompt = deepcopy(prompt)        
+        if not self.image_set:
+            raise RuntimeError('Must first set image!')
+
+        # ######
+        # prompt = deepcopy(prompt) 
+        # # Prompts were generated in RAS, bring to original orientation. Must do it here since the generated cropping and padding params depend on the prompt.
+        # coords = prompt.coords
+
+        # coords_mask = np.zeros_like(self.img).astype(float)
+        # coords_mask[*coords.T] = 1 # And now on the coords_mask as well
+
+        # coords_mask_inv = self.inv_transform(coords_mask).get_fdata()
+        # coords_inv = np.array(np.where(coords_mask_inv == 1)).T
+        # prompt = Points(coords = coords_inv, labels = prompt.labels)
+        # #########
 
         if use_stored_patching:
             if (self.stored_cropping_params is None) or (self.stored_padding_params is None) or (self.stored_patch_list is None):
                 raise RuntimeError('No stored patchings to use!')
             cropping_params, padding_params, patch_list = self.stored_cropping_params, self.stored_padding_params, self.stored_patch_list
         else: # If stored patchings shouldn't be used, generate new ones
-            cropping_params, padding_params, patch_list = self.preprocess_into_patches(img, prompt, cheat, gt)
+            cropping_params, padding_params, patch_list = self.preprocess_into_patches(self.img, prompt, cheat, gt)
         if store_patching and not use_stored_patching: # store patching if desired. If use_stored_patching, this would do nothing
             self.stored_cropping_params, self.stored_padding_params, self.stored_patch_list = cropping_params, padding_params, patch_list
             
@@ -202,7 +223,7 @@ class SAMMed3DInferer(Inferer):
             if torch.any(torch.logical_or(coords<0, coords>=128)): 
                 raise RuntimeError('Prompt coordinates do not lie within stored patch!')
 
-        pred = np.zeros_like(img, dtype=np.uint8)
+        pred = np.zeros_like(self.img, dtype=np.uint8)
         for (patch_embedding, pos3D) in patch_list:
             if prev_low_res_logits is not None: # if previous low res logits are present, add number and channel dimensions
                 prev_low_res_logits = prev_low_res_logits.unsqueeze(0).unsqueeze(0).to(self.device)
@@ -210,13 +231,16 @@ class SAMMed3DInferer(Inferer):
                 low_res_spatial_shape = [dim//4 for dim in SAMMed3DInferer.required_shape] # batch and channel dimensions remain the same, spatial dimensions are quartered 
                 prev_low_res_logits = torch.zeros([1,1] + low_res_spatial_shape).to(self.device) # [1,1] is batch and channel dimensions
 
-            low_res_logits = self.segmenter(patch_embedding, prev_low_res_logits, coords, labels)
+            low_res_logits = self.segment(patch_embedding, prev_low_res_logits, coords, labels)
             logits = F.interpolate(low_res_logits, size = SAMMed3DInferer.required_shape, mode = 'trilinear', align_corners = False).detach().cpu().squeeze()
             seg_mask = (logits>0.5).numpy().astype(np.uint8)
             ori_roi, pred_roi = pos3D["ori_roi"], pos3D["pred_roi"]
             
             seg_mask_roi = seg_mask[..., pred_roi[0]:pred_roi[1], pred_roi[2]:pred_roi[3], pred_roi[4]:pred_roi[5]]
             pred[..., ori_roi[0]:ori_roi[1], ori_roi[2]:ori_roi[3], ori_roi[4]:ori_roi[5]] = seg_mask_roi
+
+        if transform:
+            pred = nib.Nifti1Image(pred, self.affine)
         
         if return_low_res_logits:
             return pred, low_res_logits.cpu().squeeze()
