@@ -80,6 +80,17 @@ class Boxes():
     
     def keys(self):
         return self.value.keys()
+    
+class Boxes3D():
+    def __init__(self, bbox_min, bbox_max):
+        assert len(bbox_min) == 3 and len(bbox_max) == 3
+        assert np.all(bbox_min <= bbox_max)
+        self.min, self.max = np.array(bbox_min), np.array(bbox_max)
+        self.bbox = (self.min, self.max)
+
+    def __getitem__(self, idx):
+        return self.bbox[idx]
+
         
 class Inferer(ABC):
     def __init__(self, model):
@@ -99,22 +110,3 @@ class Inferer(ABC):
     def predict(self, model, inputs, device = 'cuda', keep_img_embedding = True):
         '''Obtain logits '''
         pass
-
-class SegmenterWrapper(ABC):
-    supported_prompts: list # List of supported prompt types
-
-    @abstractmethod
-    def __init__(self, model, device: str):
-        '''
-        Initialise with the usual model and device (eg cuda)
-        '''
-
-    @abstractmethod
-    def __call__(self, img, prompt):
-        '''
-        Take only the image and prompt and return a 2D/3D logit mask as appropriate
-        '''
-        if prompt.is_point():
-            pass
-        else:
-            raise ValueError("This model does not support these")

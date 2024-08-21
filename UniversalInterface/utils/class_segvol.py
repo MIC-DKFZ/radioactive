@@ -1,5 +1,3 @@
-from utils.SegVol_segment_anything import sam_model_registry
-
 from argparse import Namespace
 from utils.SegVol_segment_anything.network.model import SegVol
 import torch
@@ -8,11 +6,12 @@ import sys
 from utils.SegVol_segment_anything.monai_inferers_utils import build_binary_points, build_binary_cube, logits2roi_coor, sliding_window_inference
 import torch.nn.functional as F
 import numpy as np
+import nibabel as nib
 import monai.transforms as transforms
 from copy import deepcopy
 
-from utils.base_classes import Points, Boxes, Inferer, SegmenterWrapper
-from utils.testing import test_save
+from utils.SegVol_segment_anything import sam_model_registry
+from utils.base_classes import Points, Boxes3D, Inferer
 
 class MinMaxNormalization(transforms.Transform):
     def __call__(self, data):
@@ -31,27 +30,6 @@ class DimTranspose(transforms.Transform):
         for key in self.keys:
             d[key] = np.swapaxes(d[key], -1, -3)
         return d
-
-# class DimTransposeInvertible(transforms.MapTransform, transforms.InvertibleTransform):
-#     def __init__(self, keys):
-#         self.keys = keys
-    
-#     def __call__(self, data):
-#         d = dict(data)
-#         for key in self.keys:
-#             d[key] = np.swapaxes(d[key], -1, -3)
-#             # Store original axes positions to reverse this operation
-#             self.push_transform(d, key, extra_info={'original_axes': (-1, -3)})
-#         return d
-
-#     def inverse(self, data):
-#         d = dict(data)
-#         for key in self.keys:
-#             transform = self.pop_transform(d, key)
-#             original_axes = transform['extra_info']['original_axes']
-#             # Swap back using the stored original axes
-#             d[key] = np.swapaxes(d[key], original_axes[0], original_axes[1])
-#         return d
 
 class ForegroundNormalization(transforms.Transform):
     def __init__(self, keys):
@@ -133,6 +111,7 @@ class SegVolInferer(Inferer):
         self.mask_threshold = 0 
         self.infer_overlap = 0.5
         self.verbose = True
+        self.image_set = False
 
         self.spatial_size = (32, 256, 256)
         self.transform = transforms.Compose([
@@ -146,15 +125,15 @@ class SegVolInferer(Inferer):
         ])
         self.zoom_out_transform = transforms.Resized(keys=["image"], spatial_size=self.spatial_size, mode='nearest-exact')
         self.img_loader = transforms.LoadImage()
-
-    def preprocess_img(self, case_path):
+    
+    def set_image(self, img_path):
         item = {}
         # generate ct_voxel_ndarray
-        ct_voxel_ndarray, _ = self.img_loader(case_path)
-        self.ct_shape = ct_voxel_ndarray.shape
-        ct_voxel_ndarray = np.array(ct_voxel_ndarray).squeeze()
-        ct_voxel_ndarray = np.expand_dims(ct_voxel_ndarray, axis=0) # Ensure image is in CDWH (spatial dimensions will be 'supposed' to be RAS anyway)
-        item['image'] = ct_voxel_ndarray
+        img, metadata = self.img_loader(img_path)
+        self.affine = metadata['affine']
+        self.shape = img.shape
+        img = np.expand_dims(img, axis=0) # Ensure image is in CDWH (spatial dimensions will be assumed to be RAS anyway)
+        item['image'] = img
 
         # transform
         item = self.transform(item)
@@ -163,39 +142,14 @@ class SegVolInferer(Inferer):
         
         item_zoom_out = self.zoom_out_transform(item)
         item['zoom_out_image'] = item_zoom_out['image']
-        image, image_zoom_out = item['image'].float().unsqueeze(0), item['zoom_out_image'].float().unsqueeze(0) # clear out unnecessary original code
-        self.cropped_shape = image.shape[-3:] # Store spatial cropped shape for prompt preprocessing
-        image_single = image[0,0] # just squeeze instead of unsqueeze?
-        self.ori_shape = image_single.shape # Is this the same as ct_voxel_ndarray.shape?
-        
-        return image_single, image_zoom_out
-    
-    def preprocess_prompt_old(self, prompt, prompt_type):
-        '''
-        Preprocessing steps:
-            - Modify in line with the volume cropping
-            - Modify in line with the interpolation
-            - Collect into a dictionary of slice:slice prompt
-        '''
-        text_single, box_single, binary_cube_resize, points_single, binary_points_resize = prompt
+        image, image_zoom_out = item['image'].float().unsqueeze(0), item['zoom_out_image'].float().unsqueeze(0) 
+        image_single = image[0,0] # 
+        self.cropped_shape = image_single.shape 
 
-        # Clean up
-        binary_cube = binary_points = None
+        self.image_set = True
+        self.img, self.img_zoom_out = image_single, image_zoom_out
 
-        if prompt_type == 'point':
-            binary_points = F.interpolate(
-                binary_points_resize.unsqueeze(0).unsqueeze(0).float(),
-                size=self.ori_shape, mode='nearest')[0][0]        
-        if prompt_type == 'box':
-            binary_cube = F.interpolate(
-                binary_cube_resize.unsqueeze(0).unsqueeze(0).float(),
-                size=self.ori_shape, mode='nearest')[0][0]
-            
-
-        prompt = text_single, box_single, binary_cube, points_single, binary_points
-        return prompt
-
-    def preprocess_prompt(self, prompt, prompt_type):
+    def preprocess_prompt(self, prompt, prompt_type, text_prompt = None):
         '''
         Preprocessing steps:
             - Modify in line with the volume cropping
@@ -208,25 +162,24 @@ class SegVolInferer(Inferer):
         box_single = points_single = binary_cube = binary_points = None
 
         if prompt_type == 'point':
+            # prompt.coords = prompt.coords[:,::-1]
             coords, labels = prompt.coords, prompt.labels
-            coords = coords[:,::-1]
+            # coords = coords[:,::-1]
+            # Transform in line with cropping
             coords = coords - self.start_coord
             coords = np.maximum(coords, 0)
             coords = np.minimum(coords, self.end_coord)
             coords = np.round(coords*np.array(self.spatial_size)/np.array(self.cropped_shape)) # Transform in line with resizing
-            points = (coords, labels)
 
             coords, labels = torch.from_numpy(coords).float(), torch.from_numpy(labels).float()
             points_single = (coords.unsqueeze(0).cuda(), labels.unsqueeze(0).cuda()) 
             binary_points_resize = build_binary_points(coords, labels, self.spatial_size)
             binary_points = F.interpolate(
                 binary_points_resize.unsqueeze(0).unsqueeze(0).float(),
-                size=self.ori_shape, mode='nearest')[0][0]        
+                size=self.cropped_shape, mode='nearest')[0][0]        
         if prompt_type == 'box':
             # Transform box in line with image transformations
-            box_single = np.array(prompt) # Change from pair of points to 2x3 array
-            box_single[1] = box_single[1]-1 # Remove dilation of 1 pixel on max coords; segvol doesn't do that
-            box_single = box_single[:, ::-1] # Transpose spatial dimensions
+            box_single = np.array(prompt.bbox) # Change from pair of points to 2x3 array
             box_single = box_single - self.start_coord # transform in line with cropping
             box_single[0] = np.maximum(box_single[0], 0)
             box_single[1] = np.minimum(box_single[1], self.end_coord)
@@ -238,9 +191,9 @@ class SegVolInferer(Inferer):
             binary_cube_resize = build_binary_cube(box_single, self.spatial_size)
             binary_cube = F.interpolate(
                 binary_cube_resize.unsqueeze(0).unsqueeze(0).float(),
-                size=self.ori_shape, mode='nearest')[0][0]
+                size=self.cropped_shape, mode='nearest')[0][0]
             
-        text_single = None
+        text_single = text_prompt
         prompt = text_single, box_single, binary_cube, points_single, binary_points
         return prompt
             
@@ -253,10 +206,11 @@ class SegVolInferer(Inferer):
                                         boxes=box_single, 
                                         points=points_single)
         
+
         # resize back global logits
         logits_global_zoom_out = F.interpolate(
                 logits_global_zoom_out.cpu(),
-                size=self.ori_shape, mode='nearest')[0][0]
+                size=self.cropped_shape, mode='nearest')[0][0]
         
         # zoom-in inference:
         min_d, min_h, min_w, max_d, max_h, max_w = logits2roi_coor(self.spatial_size, logits_global_zoom_out)
@@ -309,41 +263,41 @@ class SegVolInferer(Inferer):
         '''
         if not return_logits:
             mask = (mask>0).to(torch.uint8) # Variable name says logits but it's actually raw results.
+        # Invert transform
         mask = mask.transpose(-1, -3)
-        self.start_coord[-1], self.start_coord[-3] = self.start_coord[-3], self.start_coord[-1]
-        self.end_coord[-1], self.end_coord[-3] = self.end_coord[-3], self.end_coord[-1]
-        segmentation = torch.zeros(self.ct_shape)
-        segmentation[self.start_coord[0]:self.end_coord[0], 
-                        self.start_coord[1]:self.end_coord[1], 
-                        self.start_coord[2]:self.end_coord[2]] = mask
+        start_coord, end_coord = deepcopy(self.start_coord), deepcopy(self.end_coord)
+        start_coord[-1], start_coord[-3] = start_coord[-3], start_coord[-1]
+        end_coord[-1], end_coord[-3] = end_coord[-3], end_coord[-1]
+        segmentation = torch.zeros(self.shape)
+        segmentation[start_coord[0]:end_coord[0], 
+                        start_coord[1]:end_coord[1], 
+                        start_coord[2]:end_coord[2]] = mask
         segmentation = segmentation.cpu().numpy().astype(np.uint8) # Check if .cpu is necessary
 
         return(segmentation)
  
-    def predict(self, img_path, prompt, prompt_type, mask_dict = {}, return_logits = False, return_low_res_logits = False, use_stored_embeddings = False):
-        # if not (isinstance(prompt, Points) or isinstance(prompt, Boxes)):
-        #     raise RuntimeError(f'Currently only points and boxes are supported, got {type(prompt)}')
+    def predict(self, prompt, text_prompt = None, return_logits = False, transform = True, seed = 1):
+        if not self.image_set:
+            raise RuntimeError('Must first set image!')
         
-        # if self.verbose and self.image_embeddings_dict != {}:
-        #     print('Using previously generated image embeddings')
+        if not isinstance(prompt, (Boxes3D, Points)):
+            raise TypeError('Prompts must be 3d bounding boxes or points, and must be supplied as an instance of Boxes3D or Points')
 
-        image_single, image_single_resize = self.preprocess_img(img_path)
-        
+        prompt_type = 'box' if isinstance(prompt, Boxes3D) else 'point'
+
+        if prompt_type == 'point':
+            torch.manual_seed(seed) # New points are sampled in the zoom-in section of zoom-out zoom-in inference leaving some randomness even after a point prompt is fixed.
+
+        image_single, image_single_resize = self.img, self.img_zoom_out
+
         prompt = deepcopy(prompt)
-        
-        prompt = self.preprocess_prompt(prompt, prompt_type)
-
-        if use_stored_embeddings:
-            pass
-        else:
-            pass
-
-        
-
+        prompt = self.preprocess_prompt(prompt, prompt_type, text_prompt)
 
         res = self.segment(image_single, image_single_resize, prompt, prompt_type)
-        test_save(res, 'res')
             
         segmentation = self.postprocess_mask(res[-1], return_logits)
+
+        if transform:
+            segmentation = nib.Nifti1Image(segmentation, self.affine)
 
         return segmentation

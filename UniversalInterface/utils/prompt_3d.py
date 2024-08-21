@@ -8,7 +8,7 @@ from scipy.interpolate import interp1d
 import warnings
 import torch
 
-from .base_classes import Points, Boxes
+from .base_classes import Points, Boxes3D
 from .analysis import compute_dice
 
 def get_crop_pad_center_from_points(points):
@@ -41,6 +41,7 @@ def get_pos_clicks3D(gt, n_clicks, seed = None):
 
     point_indices = np.random.choice(n_fg_voxels, size = n_clicks, replace = False)
     pos_coords = volume_fg[point_indices]  
+    pos_coords = pos_coords[:,::-1] # Assume gt is in row major zyx, need to reverse order 
     pos_coords = Points(coords = pos_coords, labels =  [1]*len(pos_coords))
     return(pos_coords)
 
@@ -63,7 +64,7 @@ def get_neg_clicks_3D(gt, n_clicks, border_distance = 10): # Warning: dilation f
     neg_coords = Points(coords = neg_coords, labels =  [0]*len(neg_coords))
     return(neg_coords)
 
-def get_bbox3d(mask_volume: np.ndarray):
+def get_bbox3d(mask_volume: np.ndarray, delta = 0):
     """Return 6 coordinates of a 3D bounding box from a given mask.
 
     Taken from `this SO question <https://stackoverflow.com/questions/31400769/bounding-box-of-numpy-array>`_.
@@ -77,6 +78,11 @@ def get_bbox3d(mask_volume: np.ndarray):
     i_min, i_max = np.where(i_any)[0][[0, -1]]
     j_min, j_max = np.where(j_any)[0][[0, -1]]
     k_min, k_max = np.where(k_any)[0][[0, -1]]
-    bb_min = np.array([i_min, j_min, k_min])
-    bb_max = np.array([i_max, j_max, k_max]) + 1
-    return bb_min, bb_max
+    bb_min = np.array([i_min, j_min, k_min]) - delta
+    bb_max = np.array([i_max, j_max, k_max]) + delta
+
+    # Assume gt is in row major zyx - reverse order of coordinates
+    bb_min = bb_min[::-1]
+    bb_max = bb_max[::-1]
+    bb = Boxes3D(bb_min, bb_max)
+    return bb

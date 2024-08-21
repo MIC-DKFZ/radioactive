@@ -1,42 +1,32 @@
-import torchio as tio
-from torchio.data.io import sitk_to_nib
-import SimpleITK as sitk
-import napari
+from utils.prompt_3d import get_bbox3d, get_pos_clicks3D
+from utils.analysis import compute_dice
 import numpy as np
 import nibabel as nib
-
-from utils.class_SAMMed3D import SAMMed3DInferer
-from utils.prompt_3d import get_pos_clicks3D
-import utils.analysis as anUt
-from utils.interactivity import iterate_3d
-from utils.image import read_im_gt, read_reorient_nifti
-
-from utils.image import  read_reorient_nifti
+from importlib import reload
+import utils.class_segvol as c
 
 # Obtain model, image, gt
-device = 'cuda'
-sammed3d_checkpoint_path = '/home/t722s/Desktop/UniversalModels/TrainedModels/sam_med3d_turbo.pth'
+device = 'cuda' # In this case, redundant; segvol requires cuda
+checkpoint_path = "/home/t722s/Desktop/UniversalModels/TrainedModels/SegVol_v1.pth"
 
-inferer = SAMMed3DInferer(sammed3d_checkpoint_path, device)
+inferer = c.SegVolInferer(checkpoint_path)
+#inferer = SegVolInferer(checkpoint)
 
-img_path = '/home/t722s/Desktop/Datasets/Dataset350_AbdomenAtlasJHU_2img/imagesTr/BDMAP_00000001_0000.nii.gz'
-gt_path = '/home/t722s/Desktop/Datasets/Dataset350_AbdomenAtlasJHU_2img/labelsTr/BDMAP_00000001.nii.gz'
-class_label = 3
+img_path = "/home/t722s/Desktop/Datasets/segvolTest/Case_image_00001_0000.nii.gz"
+gt_path = "/home/t722s/Desktop/Datasets/segvolTest/Case_label_00001.nii.gz" 
+class_label = 1
 
-gt_unprocessed = nib.load(gt_path).get_fdata()
-gt_unprocessed = np.where(gt_unprocessed == class_label, 1, 0)
-
-img, gt = read_im_gt(img_path, gt_path, class_label, RAS = True)
-
-# Set image to predict on 
+gt = nib.load(gt_path).get_fdata()
+gt = np.where(gt == class_label, 1, 0)
 inferer.set_image(img_path)
 
-# Experiment 
-pass_prev_prompts = SAMMed3DInferer.pass_prev_prompts
-seed = 3
-perf_bound = 0.9
-dof_bound = 18
+# Experiment: 5 points per volume
+seed = 11121
+inferer.set_image(img_path)
 
+prompt = get_pos_clicks3D(gt, 5, seed)
+print(prompt.coords)
+#prompt.coords = prompt.coords[:,::-1]
+segmentation = inferer.predict(prompt).get_fdata()
 
-dice_scores, dofs = iterate_3d(inferer, gt, gt_unprocessed, SAMMed3DInferer.pass_prev_prompts, perf_bound, dof_bound, seed, sammed3d=True)
-dice_scores
+print(compute_dice(segmentation, gt))

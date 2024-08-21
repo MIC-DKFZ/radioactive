@@ -150,7 +150,7 @@ def sliding_window_inference(
         - input must be channel-first and have a batch dim, supports N-D sliding window.
 
     """
-    print('sliding window inference for ROI')
+    # print('sliding window inference for ROI') # Modified from original; I commented this out.
     text = kwargs['text']
     use_box = kwargs['use_box']
     use_point = kwargs['use_point']
