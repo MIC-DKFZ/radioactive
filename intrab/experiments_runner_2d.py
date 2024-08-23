@@ -3,7 +3,7 @@ import os
 import json
 from datetime import datetime
 
-from experiments_2d import run_experiments_2d
+from intrab.experiments_2d import run_experiments_2d
 from intrab.model.SAM import SAMInferer
 from intrab.model.SAMMed2D import SAMMed2DInferer
 from intrab.model.MedSAM import MedSAMInferer

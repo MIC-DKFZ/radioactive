@@ -1,9 +1,11 @@
 import os
 import nibabel as nib
 import numpy as np
-from utils.analysis import compute_dice
+
 import json
 import argparse
+
+from intrab.utils.analysis import compute_dice
 
 if __name__ == '__main__':
     # Merge segmentations into one binary mask and obtain and save the merged dice

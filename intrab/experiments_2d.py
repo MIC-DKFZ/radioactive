@@ -3,8 +3,8 @@ import os
 import numpy as np
 import json
 import intrab.utils.analysis as analysis
-from utils.interactivity import iterate_2d
-from utils.image import read_reorient_nifti
+from intrab.utils.interactivity import iterate_2d
+from intrab.utils.image import read_reorient_nifti
 from tqdm import tqdm
 import warnings
 import shutil

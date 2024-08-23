@@ -2,9 +2,10 @@
 import os
 import numpy as np
 import json
+
+from intrab.utils.analysis import compute_dice
 from intrab.prompts.prompt_3d import get_bbox3d, get_pos_clicks3D
 from intrab.prompts.prompt_utils import get_bbox3d_sliced, get_pos_clicks2D_row_major
-from utils.analysis import compute_dice
 
 from tqdm import tqdm
 import shutil

@@ -2,7 +2,7 @@ import os
 import nibabel as nib
 import json
 import numpy as np
-from lesions_experiments_runner import get_imgs_gts
+from intrab.lesions_experiments_runner import get_imgs_gts
 
 # Obtain img, gt paths
 def preprocess_save_instances(dataset_dir):

@@ -4,8 +4,8 @@ import numpy as np
 import json
 import intrab.utils.analysis as analysis
 import intrab.prompts.prompt_3d as prUt
-from utils.interactivity import iterate_3d
-from utils.image import read_reorient_nifti
+from intrab.utils.interactivity import iterate_3d
+from intrab.utils.image import read_reorient_nifti
 from tqdm import tqdm
 import warnings
 

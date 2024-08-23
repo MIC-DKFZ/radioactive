@@ -1,10 +1,9 @@
+from utils.analysis import compute_dice
 from intrab.model.segvol import SegVolInferer
 
 from intrab.prompts.prompt_3d import get_pos_clicks3D
-from utils.analysis import compute_dice
 import numpy as np
 import nibabel as nib
-from importlib import reload
 
 
 # Obtain model, image, gt

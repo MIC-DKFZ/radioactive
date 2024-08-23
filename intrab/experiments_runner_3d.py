@@ -3,7 +3,7 @@ import os
 import json
 from datetime import datetime
 
-from experiments_3d import run_experiments_3d
+from intrab.experiments_3d import run_experiments_3d
 from intrab.model.SAMMed3D import SAMMed3DInferer
 
 inferer_registry = {
