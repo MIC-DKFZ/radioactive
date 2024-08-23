@@ -2,16 +2,36 @@ import argparse
 import os
 from datetime import datetime
 
-from lesions_experiments_2d import run_experiments_2d
-from utils.class_SAM import SAMInferer
-from classes.SAMMed2DClass import SAMMed2DInferer
-from classes.MedSAMClass import MedSAMInferer
+from lesions_experiments import run_experiments, run_postprocess
+
+def sam_lazy(checkpoint_path, device):
+    from utils.class_SAM import SAMInferer
+    return SAMInferer(checkpoint_path, device)
+
+def sammed2d_lazy(checkpoint_path, device):
+    from utils.class_SAMMed2D import SAMMed2DInferer
+    return SAMMed2DInferer(checkpoint_path, device)
+
+def medsam_lazy(checkpoint_path, device):
+    from utils.class_MedSAM import MedSAMInferer
+    return MedSAMInferer(checkpoint_path, device)
+
+def segvol_lazy(checkpoint_path, device):
+    from utils.class_segvol import SegVolInferer
+    return SegVolInferer(checkpoint_path, device)
+
+def sammed3d_lazy(checkpoint_path, device):
+    from utils.class_SAMMed3D import SAMMed3DInferer
+    return SAMMed3DInferer(checkpoint_path, device)
 
 inferer_registry = {
-    'sam': SAMInferer,
-    'sammed2d': SAMMed2DInferer,
-    'medsam': MedSAMInferer
+    'sam': sam_lazy,
+    'sammed2d': sammed2d_lazy,
+    'medsam': medsam_lazy,
+    'segvol': segvol_lazy,
+    'sammed3d': sammed3d_lazy
 }
+
 def get_imgs_gts(dataset_dir): 
     imgs_gts = {'Tr': [], 'Ts': []}
     for suffix in ['Tr', 'Ts']:
@@ -43,7 +63,9 @@ def get_imgs_gts_sub(dataset_dir):
 checkpoint_registry = {
     'sam': '/home/t722s/Desktop/UniversalModels/TrainedModels/sam_vit_h_4b8939.pth',
     'medsam': '/home/t722s/Desktop/UniversalModels/TrainedModels/medsam_vit_b.pth',
-    'sammed2d': '/home/t722s/Desktop/UniversalModels/TrainedModels/sam-med2d_b.pth'
+    'sammed2d': '/home/t722s/Desktop/UniversalModels/TrainedModels/sam-med2d_b.pth',
+    'segvol': '/home/t722s/Desktop/UniversalModels/TrainedModels/SegVol_v1.pth',
+    'sammed3d': '/home/t722s/Desktop/UniversalModels/TrainedModels/sam_med3d_turbo.pth'
 }
 
 if __name__ == '__main__':
@@ -61,9 +83,10 @@ if __name__ == '__main__':
     # results_dir = args.results_dir
 
     # Testing parameters:
-    dataset_dir = '/home/t722s/Desktop/Datasets/Adrenal-ACC-Ki67_sub/'
-    model_name = 'sam'
-    results_dir = '/home/t722s/Desktop/ExperimentResults_lesions'
+    dataset_dir = '/home/t722s/Desktop/Datasets/melanoma_HD_sub/'
+    #dataset_dir = '/home/t722s/Desktop/Datasets/Dataset350_AbdomenAtlasJHU_2img'
+    model_name = 'segvol'
+    results_dir_all = '/home/t722s/Desktop/ExperimentResults_lesions'
     
     # results_dir = '/media/t722s/2.0 TB Hard Disk/lesions_experiments/'
     
@@ -71,15 +94,18 @@ if __name__ == '__main__':
     dataset_name = os.path.basename(dataset_dir.removesuffix('/'))
 
     # Get (img path, gt path) pairs
-    results_path = os.path.join(results_dir, model_name + '_' + dataset_name) # leave out time stamping  + '_' + datetime.now().strftime("%Y%m%d_%H%M"))
-    results_path = os.path.join(results_dir, model_name + '_' + dataset_name + '_' + datetime.now().strftime("%Y%m%d_%H%M"))
+    results_dir = os.path.join(results_dir_all, dataset_name, model_name) # leave out time stamping  + '_' + datetime.now().strftime("%Y%m%d_%H%M"))
+    #results_path = os.path.join(results_dir, model_name + '_' + dataset_name + '_' + datetime.now().strftime("%Y%m%d_%H%M"))
     imgs_gts = get_imgs_gts(dataset_dir)
-    # imgs_gts = {'Tr': [('/home/t722s/Desktop/Datasets/melanoma_HD/imagesTr/0001996954_Follow-Up_2_0000.nii.gz', '/home/t722s/Desktop/Datasets/melanoma_HD/labelsTr/0001996954_Follow-Up_2.nii.gz')],
-    #             'Ts': []} # TESTING: CUDA OUT OF MEMORY
+    # imgs_gts = {'Tr': [('/home/t722s/Desktop/Datasets/Dataset350_AbdomenAtlasJHU_2img/imagesTr/BDMAP_00000001_0000.nii.gz', '/home/t722s/Desktop/Datasets/Dataset350_AbdomenAtlasJHU_2img/labelsTr/BDMAP_00000001.nii.gz')],
+    #             'Ts': []} # TESTING: Identify with notebooks
 
     # Load the model
     checkpoint_path = checkpoint_registry[model_name]
     inferer = inferer_registry[model_name](checkpoint_path, device)
 
     # Run experiments
-    run_experiments_2d(inferer, imgs_gts, results_path, save_segs = True)
+    exp_names = run_experiments(inferer, imgs_gts, results_dir, save_segs = True)
+
+    # Merge instance segmentations and obtain merged dice
+    run_postprocess(results_dir, exp_names, dataset_dir)

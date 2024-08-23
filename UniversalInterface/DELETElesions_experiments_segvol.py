@@ -2,16 +2,16 @@
 import os
 import numpy as np
 import json
-import utils.analysis as anUt
-import utils.prompt as prUt
+import utils.analysis as analysis
+import utils.prompt as prompt
+from utils.prompt import _get_bbox3d
+from utils.prompt_3d import get_pos_clicks3D
 from utils.image import read_reorient_nifti
 from tqdm import tqdm
+import nibabel as nib
 import shutil
 
-def run_experiments_2d(inferer, imgs_gts, results_dir, save_segs = False):
-
-    inferer.verbose = False # No need for progress bars per inference
-
+def run_experiments_3d(inferer, imgs_gts, results_dir, save_segs = False):
     if os.path.exists(results_dir):
         shutil.rmtree(results_dir)
     os.makedirs(results_dir, exist_ok=True)
@@ -20,7 +20,7 @@ def run_experiments_2d(inferer, imgs_gts, results_dir, save_segs = False):
     experiments = {}
 
     experiments.update({
-        'bbox3d_sliced': lambda organ_mask: prUt.get_bbox3d_sliced(organ_mask)
+        'bbox3d': lambda organ_mask: _get_bbox3d(organ_mask)
     })
 
     if save_segs:
@@ -42,8 +42,8 @@ def run_experiments_2d(inferer, imgs_gts, results_dir, save_segs = False):
     for suffix in ['Tr', 'Ts']:
         for img_path, gt_path in tqdm(imgs_gts[suffix], desc = 'looping through files\n', leave = False):
             base_name = os.path.basename(gt_path)
-            img, _ = read_reorient_nifti(img_path, np.float32)
-            gt, inv_transform = read_reorient_nifti(gt_path, np.uint8)
+            gt = nib.load(gt_path).get_fdata()
+            #gt, inv_transform = read_reorient_nifti(gt_path, np.uint8, RAS = True)
 
             instances_present = np.unique(gt)
             instances_present = instances_present[instances_present!=0] # remove background
@@ -56,23 +56,18 @@ def run_experiments_2d(inferer, imgs_gts, results_dir, save_segs = False):
                 for exp_name, prompting_func in experiments.items():
                     prompt = prompting_func(organ_mask)
                     try:
-                        segmentation = inferer.predict(img, prompt, use_stored_embeddings=True)
-                        dice_score = anUt.compute_dice(segmentation, organ_mask)
+                        segmentation = inferer.predict(img_path, prompt, 'box')
+                        dice_score = analysis.compute_dice(segmentation.get_fdata(), organ_mask)
+
+                        if save_segs:
+                            save_path = os.path.join(results_dir, 'segmentations' + suffix, base_name.removesuffix('.nii.gz'), 'instance_' + str(instance) + '_seg.nii.gz')
+                            segmentation.to_filename(save_path)
                     except: 
                         dice_score = None
                         status = 'Some segmentations failed'
                     results[suffix][base_name][str(instance)] = dice_score
-                    
-                    if save_segs:
-                        seg_orig_ori = inv_transform(segmentation) # Reorient segmentation
-                        save_path = os.path.join(results_dir, 'segmentations' + suffix, base_name.removesuffix('.nii.gz'), 'instance_' + str(instance) + '_seg.nii.gz')
-                        seg_orig_ori.to_filename(save_path)
-
-
-            inferer.clear_embeddings()
 
     # Save results 
-    
     results_path = os.path.join(results_dir, 'results.json')
     with open(results_path, 'w') as f:
         json.dump(results, f, indent=4)

@@ -2,8 +2,8 @@
 import os
 import numpy as np
 import json
-import utils.analysis as anUt
-import utils.prompt as prUt
+import utils.analysis as analysis
+import utils.prompt as prompt
 from utils.interactivity import iterate_2d
 from utils.image import read_reorient_nifti
 from tqdm import tqdm
@@ -27,25 +27,25 @@ def run_experiments_2d(inferer, imgs_gts, results_dir, label_dict,
 
     if 'points' in prompt_types:
         experiments.update({
-            'random_points': lambda organ_mask: prUt.get_pos_clicks2D_row_major(organ_mask, exp_params.n_click_random_points, seed=seed),
-            'point_interpolation': lambda organ_mask: prUt.point_interpolation(prUt.get_fg_points_from_cc_centers(organ_mask, exp_params.n_slice_point_interpolation)),
-            'point_propagation': lambda img, organ_mask, slices_to_infer: prUt.point_propagation(inferer, img, prUt.get_seed_point(organ_mask, exp_params.n_seed_points_point_propagation, seed), 
+            'random_points': lambda organ_mask: prompt.get_pos_clicks2D_row_major(organ_mask, exp_params.n_click_random_points, seed=seed),
+            'point_interpolation': lambda organ_mask: prompt.point_interpolation(prompt.get_fg_points_from_cc_centers(organ_mask, exp_params.n_slice_point_interpolation)),
+            'point_propagation': lambda img, organ_mask, slices_to_infer: prompt.point_propagation(inferer, img, prompt.get_seed_point(organ_mask, exp_params.n_seed_points_point_propagation, seed), 
                                                                 slices_to_infer, seed, exp_params.n_points_propagation, verbose = False),
         })
 
     if 'boxes' in prompt_types:
         experiments.update({
-            'bounding_boxes': lambda organ_mask: prUt.get_minimal_boxes_row_major(organ_mask),
-            'bbox3d_sliced': lambda organ_mask: prUt.get_bbox3d_sliced(organ_mask),
-            'box_interpolation': lambda organ_mask: prUt.box_interpolation(prUt.get_seed_boxes(organ_mask, exp_params.n_slice_box_interpolation)),
-            'box_propagation': lambda img, organ_mask, slices_to_infer: prUt.box_propagation(inferer, img, prUt.get_seed_box(organ_mask), slices_to_infer, use_stored_embeddings=True, verbose = False)
+            'bounding_boxes': lambda organ_mask: prompt.get_minimal_boxes_row_major(organ_mask),
+            'bbox3d_sliced': lambda organ_mask: prompt.get_bbox3d_sliced(organ_mask),
+            'box_interpolation': lambda organ_mask: prompt.box_interpolation(prompt.get_seed_boxes(organ_mask, exp_params.n_slice_box_interpolation)),
+            'box_propagation': lambda img, organ_mask, slices_to_infer: prompt.box_propagation(inferer, img, prompt.get_seed_box(organ_mask), slices_to_infer, use_stored_embeddings=True, verbose = False)
         })
 
     interactive_experiments = {}
     if 'interactive' in prompt_types:
         interactive_experiments.update({
-            'point_interpolation_interactive': lambda organ_mask: prUt.point_interpolation(prUt.get_fg_points_from_cc_centers(organ_mask, exp_params.n_slice_point_interpolation)),
-            'point_propagation_interactive': lambda img, organ_mask, slices_to_infer: prUt.point_propagation(inferer, img, prUt.get_seed_point(organ_mask, exp_params.n_seed_points_point_propagation, seed), 
+            'point_interpolation_interactive': lambda organ_mask: prompt.point_interpolation(prompt.get_fg_points_from_cc_centers(organ_mask, exp_params.n_slice_point_interpolation)),
+            'point_propagation_interactive': lambda img, organ_mask, slices_to_infer: prompt.point_propagation(inferer, img, prompt.get_seed_point(organ_mask, exp_params.n_seed_points_point_propagation, seed), 
                                                                 slices_to_infer, seed, exp_params.n_points_propagation, use_stored_embeddings=True, verbose = False, return_low_res_logits = True),
         })
 
@@ -93,7 +93,7 @@ def run_experiments_2d(inferer, imgs_gts, results_dir, label_dict,
                 else:
                     prompt = prompting_func(organ_mask)
                     segmentation = inferer.predict(img, prompt, use_stored_embeddings=True)
-                dice_score = anUt.compute_dice(segmentation, organ_mask)
+                dice_score = analysis.compute_dice(segmentation, organ_mask)
                 results[exp_name][target][base_name] = dice_score
                 
                 if save_segs:

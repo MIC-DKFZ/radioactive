@@ -27,6 +27,8 @@ def load_sammed2d(checkpoint_path, device = 'cuda'):
 
 class SAMMed2DInferer(Inferer):
     pass_prev_prompts = True # Flag to track whether in interactive steps previous prompts should be passed, or only the mask and the new prompt
+    dim = 2
+    supported_prompts = ['box', 'point', 'mask']
 
     def __init__(self, checkpoint_path, device):
         self.model = load_sammed2d(checkpoint_path, device)

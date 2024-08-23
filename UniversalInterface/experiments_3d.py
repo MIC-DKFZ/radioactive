@@ -2,7 +2,7 @@
 import os
 import numpy as np
 import json
-import utils.analysis as anUt
+import utils.analysis as analysis
 import utils.prompt_3d as prUt
 from utils.interactivity import iterate_3d
 from utils.image import read_reorient_nifti
@@ -72,7 +72,7 @@ def run_experiments_3d(inferer, imgs_gts, results_dir, label_dict,
             for exp_name, prompting_func in tqdm(experiments.items(), desc = 'looping through non_interactive experiments', leave = False):
                 prompt = prompting_func(organ_mask)
                 segmentation = inferer.predict(img, prompt)
-                dice_score = anUt.compute_dice(segmentation, organ_mask)
+                dice_score = analysis.compute_dice(segmentation, organ_mask)
                 results[exp_name][target][base_name] = dice_score
 
                 if save_segs:

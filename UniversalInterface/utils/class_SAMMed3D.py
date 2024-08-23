@@ -25,7 +25,8 @@ def load_sammed3d(checkpoint_path, device = 'cuda'):
     return (sam_model_tune)
 
 class SAMMed3DInferer(Inferer):
-    supported_prompts = (Points,)
+    dim = 3
+    supported_prompts = ('point',)
     required_shape = (128, 128, 128) # Hard code to match training
     offset_mode = 'center' # Changing this will require siginificant reworking of code; currently doesn't matter anyway since the other method doesn't work
     pass_prev_prompts = True
@@ -170,6 +171,7 @@ class SAMMed3DInferer(Inferer):
         return cropping_params, padding_params, window_list
 
     def preprocess_prompt(self, pts_prompt, cropping_params, padding_params):
+
         coords = pts_prompt.coords
         labels = pts_prompt.labels
 
@@ -196,18 +198,7 @@ class SAMMed3DInferer(Inferer):
         if not self.image_set:
             raise RuntimeError('Must first set image!')
 
-        # ######
-        # prompt = deepcopy(prompt) 
-        # # Prompts were generated in RAS, bring to original orientation. Must do it here since the generated cropping and padding params depend on the prompt.
-        # coords = prompt.coords
-
-        # coords_mask = np.zeros_like(self.img).astype(float)
-        # coords_mask[*coords.T] = 1 # And now on the coords_mask as well
-
-        # coords_mask_inv = self.inv_transform(coords_mask).get_fdata()
-        # coords_inv = np.array(np.where(coords_mask_inv == 1)).T
-        # prompt = Points(coords = coords_inv, labels = prompt.labels)
-        # #########
+        prompt.coords = prompt.coords[:,::-1] # Points are in xyz, but must be in zyx to align to image in row-major format.
 
         if use_stored_patching:
             if (self.stored_cropping_params is None) or (self.stored_padding_params is None) or (self.stored_patch_list is None):

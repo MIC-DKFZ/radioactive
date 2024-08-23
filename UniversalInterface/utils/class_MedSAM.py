@@ -18,6 +18,9 @@ def load_medsam(checkpoint_path, device = 'cuda'):
 
     
 class MedSAMInferer(Inferer):
+    dim = 2
+    supported_prompts = ['box']
+
     def __init__(self, checkpoint_path, device):
         self.model = load_medsam(checkpoint_path, device)
         self.logit_threshold = 0.5 

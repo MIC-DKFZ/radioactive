@@ -101,6 +101,8 @@ def load_segvol(checkpoint_path):
 class SegVolInferer(Inferer):
     supported_prompts = (Points,) # TODO: Implement boxes
     pass_prev_prompts = True 
+    dim = 3
+    supported_prompts = ['box', 'point']
 
     def __init__(self, checkpoint_path, device = 'cuda'):
         if device != 'cuda': 
@@ -110,7 +112,7 @@ class SegVolInferer(Inferer):
         self.inputs = None
         self.mask_threshold = 0 
         self.infer_overlap = 0.5
-        self.verbose = True
+        self.verbose = True # Not used anywhere, kept for alignment with 2d models.
         self.image_set = False
 
         self.spatial_size = (32, 256, 256)

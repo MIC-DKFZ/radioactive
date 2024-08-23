@@ -6,7 +6,7 @@ import json
 import argparse
 
 if __name__ == '__main__':
-    # Merge segmentations into one binary mask
+    # Merge segmentations into one binary mask and obtain and save the merged dice
     # results_dir = '/home/t722s/Desktop/ExperimentResults_lesions/sam_melanoma_HD_20240729_1724/'
     # dataset_dir = '/home/t722s/Desktop/Datasets/melanoma_HD'
 
@@ -37,14 +37,15 @@ if __name__ == '__main__':
 
     results['summary_results'] = {}
     
-    total_dice_all_aggregated = []
+    total_dice_all = []
     for split in ['Tr', 'Ts']:
-        total_dice_all = []
+        total_dice_split = []
         # Obtain folders of segmentations
         seg_dir_parent = os.path.join(results_dir, 'segmentations' + split)
         if not os.path.exists(seg_dir_parent):
             continue
 
+        os.makedirs(os.path.join(seg_dir_parent, 'merged'), exist_ok=True) # make folder to store merged niftis in.
         seg_dirs = [os.path.join(seg_dir_parent, f) for f in os.listdir(seg_dir_parent)]
 
         for seg_dir in seg_dirs:
@@ -78,25 +79,25 @@ if __name__ == '__main__':
 
                 ## Save image
                 merged_nifti = nib.Nifti1Image(merged_image, affine=img.affine, header=img.header)
-                merged_nifti.to_filename(os.path.join(seg_dir, 'merged_seg.nii.gz'))
+                merged_nifti.to_filename(os.path.join(seg_dir_parent, 'merged', gt_basename))
 
                 # Obtain new dice scores
                 ## Obtain and binarize gt
                 gt_path = os.path.join(dataset_dir, 'labels' + split, gt_basename)
                 gt = nib.load(gt_path).get_fdata().astype(np.uint8)
                 gt = np.where(gt > 0, 1, 0)
+
                 total_dice = compute_dice(gt, merged_image)
-                total_dice_all.append(total_dice)
+                total_dice_split.append(total_dice)
             except:
                 total_dice = None
 
             results[split][gt_basename]['all'] = total_dice
 
-        results['summary_results'][split] = np.mean(total_dice_all)
-        total_dice_all_aggregated.extend(total_dice_all)
+        results['summary_results'][split] = np.mean(total_dice_split)
+        total_dice_all.extend(total_dice_split)
 
-    results['summary_results']['aggregated'] = np.mean(total_dice_all_aggregated)
-            
+    results['summary_results']['all_splits'] = np.mean(total_dice_all)
 
     with open(os.path.join(results_dir, 'results.json'), 'w') as f:
         json.dump(results, f, indent = 4)

@@ -25,6 +25,8 @@ def load_sam(checkpoint_path, device = 'cuda', image_size = 1024):
     
 class SAMInferer(Inferer):
     pass_prev_prompts = True # In supplied demos, sam doesn't take previous prompts, but this vastly increases performance when the model greatly oversegments, for example.
+    dim = 2
+    supported_prompts = ['box', 'point', 'mask']
 
     def __init__(self, checkpoint_path, device):
         self.model = load_sam(checkpoint_path, device)

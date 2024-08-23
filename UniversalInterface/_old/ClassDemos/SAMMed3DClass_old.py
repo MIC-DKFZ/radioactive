@@ -7,7 +7,7 @@ from copy import deepcopy
 from utils.base_classes import Points, Inferer, SegmenterWrapper
 
 import utils.image as imUt
-import utils.prompt as prUt
+import utils.prompt as prompt
 
 SAM3D = TypeVar('SAM3D')
 
@@ -82,7 +82,7 @@ class SAMMed3DInferer(Inferer):
     
     def preprocess_prompt(self, prompt, crop_params: list, pad_params: list): 
         if isinstance(prompt, Points):
-            prompt.value['coords'] = prUt.crop_pad_coords(prompt.value['coords'], crop_params, pad_params)
+            prompt.value['coords'] = prompt.crop_pad_coords(prompt.value['coords'], crop_params, pad_params)
 
             prompt.value['coords'] = torch.from_numpy(prompt.value['coords']).unsqueeze(0).to(self.device) # Must have shape B, N, 3
             prompt.value['labels'] = torch.tensor(prompt.value['labels']).unsqueeze(0).to(self.device)
@@ -100,7 +100,7 @@ class SAMMed3DInferer(Inferer):
             raise ValueError(f'Unsupported prompt type: got {type(prompt)}')
         img, prompt = deepcopy(img), deepcopy(prompt)
 
-        self.crop_pad_center = prUt.get_crop_pad_center_from_points(prompt)
+        self.crop_pad_center = prompt.get_crop_pad_center_from_points(prompt)
         self.crop_params, self.pad_params = imUt.get_crop_pad_params(img, self.crop_pad_center, self.required_shape)
         prompt = self.preprocess_prompt(prompt, self.crop_params, self.pad_params)
         img = self.preprocess_img(img, self.crop_params, self.pad_params)
