@@ -2,21 +2,20 @@ import numpy as np
 import nibabel as nib
 from nibabel.orientations import io_orientation, ornt_transform
 
-def read_im_gt(img_path, gt_path, reorient, organ_label = None, RAS = False):
+def read_im_gt(img_path, gt_path, organ_label = None, RAS = False):
     img, gt = nib.load(img_path), nib.load(gt_path)
-    if reorient:
-        img, gt = img, gt  # Initialize variables to hold potentially reoriented images
+    img_ras, gt_ras = img, gt  # Initialize variables to hold potentially reoriented images
 
-        # Check if gt, image are already in RAS+ 
-        if nib.aff2axcodes(img.affine) != ('R', 'A', 'S'):
-            img = nib.as_closest_canonical(img)
+    # Check if gt, image are already in RAS+ 
+    if nib.aff2axcodes(img.affine) != ('R', 'A', 'S'):
+        img_ras = nib.as_closest_canonical(img)
 
-        if nib.aff2axcodes(gt.affine) != ('R', 'A', 'S'):
-            gt = nib.as_closest_canonical(gt)
+    if nib.aff2axcodes(gt.affine) != ('R', 'A', 'S'):
+        gt_ras = nib.as_closest_canonical(gt)
 
-    img_data = img.get_fdata().astype(np.float32)
-    gt_data = gt.get_fdata().astype(int)
-
+    img_data = img_ras.get_fdata().astype(np.float32)
+    gt_data = gt_ras.get_fdata().astype(int)
+    
 
     # Ensure organ is binary
     if organ_label is None:

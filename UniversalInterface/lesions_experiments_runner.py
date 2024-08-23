@@ -85,7 +85,7 @@ if __name__ == '__main__':
     # Testing parameters:
     dataset_dir = '/home/t722s/Desktop/Datasets/melanoma_HD_sub/'
     #dataset_dir = '/home/t722s/Desktop/Datasets/Dataset350_AbdomenAtlasJHU_2img'
-    model_name = 'segvol'
+    model_name = 'sammed2d'
     results_dir_all = '/home/t722s/Desktop/ExperimentResults_lesions'
     
     # results_dir = '/media/t722s/2.0 TB Hard Disk/lesions_experiments/'
@@ -94,18 +94,18 @@ if __name__ == '__main__':
     dataset_name = os.path.basename(dataset_dir.removesuffix('/'))
 
     # Get (img path, gt path) pairs
-    results_dir = os.path.join(results_dir_all, dataset_name, model_name) # leave out time stamping  + '_' + datetime.now().strftime("%Y%m%d_%H%M"))
-    #results_path = os.path.join(results_dir, model_name + '_' + dataset_name + '_' + datetime.now().strftime("%Y%m%d_%H%M"))
+    results_dir = os.path.join(results_dir_all, dataset_name, model_name) # leave out time stamping  
+    #results_dir = os.path.join(results_dir_all, dataset_name, model_name + '_' + datetime.now().strftime("%Y%m%d_%H%M"))
     imgs_gts = get_imgs_gts(dataset_dir)
-    # imgs_gts = {'Tr': [('/home/t722s/Desktop/Datasets/Dataset350_AbdomenAtlasJHU_2img/imagesTr/BDMAP_00000001_0000.nii.gz', '/home/t722s/Desktop/Datasets/Dataset350_AbdomenAtlasJHU_2img/labelsTr/BDMAP_00000001.nii.gz')],
-    #             'Ts': []} # TESTING: Identify with notebooks
 
     # Load the model
     checkpoint_path = checkpoint_registry[model_name]
     inferer = inferer_registry[model_name](checkpoint_path, device)
 
     # Run experiments
-    exp_names = run_experiments(inferer, imgs_gts, results_dir, save_segs = True)
+    exp_names = run_experiments(inferer, imgs_gts, dataset_dir, results_dir, target_is_lesion=True, save_segs = True)
 
+    # TESTING
+    # exp_names = ['bbox3d']
     # Merge instance segmentations and obtain merged dice
     run_postprocess(results_dir, exp_names, dataset_dir)
