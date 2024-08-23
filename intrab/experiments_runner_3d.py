@@ -75,7 +75,7 @@ if __name__ == "__main__":
         n_click_random_points=5,
         dof_bound=24,
         perf_bound=0.85,
-    )
+    )  # ToDO: Make this also a namespace so parameters are transparently available.
     device = "cuda"
     seed = 11121
     label_overwrite = None

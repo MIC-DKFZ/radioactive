@@ -86,7 +86,7 @@ if __name__ == "__main__":
         n_points_propagation=5,
         dof_bound=60,
         perf_bound=0.85,
-    )
+    )  # Todo: Make this a dataclass instead, so attributes are transparently available
     device = "cuda"
     seed = 11121
     label_overwrite = None

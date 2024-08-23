@@ -7,6 +7,10 @@ import argparse
 
 from intrab.utils.analysis import compute_dice
 
+
+# ToDo: What does this snippet do? 
+#   Needs to be integrated into the normal workflow and not be just a standalone script.
+#   At least split into more functional parts.
 if __name__ == '__main__':
     # Merge segmentations into one binary mask and obtain and save the merged dice
     # results_dir = '/home/t722s/Desktop/ExperimentResults_lesions/sam_melanoma_HD_20240729_1724/'

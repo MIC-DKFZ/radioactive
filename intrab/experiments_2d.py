@@ -1,5 +1,6 @@
 # Experiments content
 import os
+from model.inferer import Inferer
 import numpy as np
 import json
 import intrab.utils.analysis as analysis
@@ -11,7 +12,7 @@ import shutil
 
 
 def run_experiments_2d(
-    inferer,
+    inferer: Inferer,
     imgs_gts,
     results_dir,
     label_dict,
