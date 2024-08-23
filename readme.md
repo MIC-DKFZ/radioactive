@@ -1,8 +1,15 @@
-# Universal Models
-This repository will contain a baselining framework and implementations for a few models to usef or baselining
+# **IntRa** Bench: Introducing the **Int**eractive **Ra**diology Benchmark
+The IntRa Bench provides the medical segmentation field a comprehensive benchmark, that fairly compares existing open-set interactive segmentatio methods on a broad-range of tasks and modalities. 
+The benchmark is intended to provide users with a clear understanding of how to best prompt existing methods and provides developers with a extendaable framework to easily compare their newly developed methods against the currently available methods.
 
-## Models
-### SAM-Adapted
+## Installing the Benchmark
+ToDo
+
+## Extending the Benchmark
+ToDo
+
+## Currently supported models
+ToDo
 
 [SAM](https://github.com/facebookresearch/segment-anything) (WIP, branch: sam)
 
