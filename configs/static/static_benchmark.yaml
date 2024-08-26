@@ -1,0 +1,31 @@
+# Holds all information needed to run experiments.
+n_seeds: 5
+models:
+  - "medsam"
+  - "sam"
+
+
+experiments:
+  - name: Static Experiment
+    dataset: 
+      name: DatasetAXY
+      path: /path/to/dataset
+    prompt_config:
+      
+
+
+raw_results_filename: vision_augment_final.parquet # Must end with .parquet. The full results of all comparisons are stored in the results directory with this name
+
+table_creation:
+  save_full_df: True
+  full_df_filename: vision_augment_final.csv
+  # ---
+  save_aggregated_df: True
+  row_index: similarity_measure # The key to use as the row index in the table.
+  columns: # The keys to use as columns (can be list[str] or a str)
+    - identifier
+    - representation_dataset
+    - quality_measure
+    - architecture
+  value_key: value # The key specifying the value that fills the table (non-header/index values)
+  filename: vision_augment_final.xlsx # Can be [.xlsx / .csv / .tex] file extension

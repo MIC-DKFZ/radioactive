@@ -48,9 +48,9 @@ classifiers = [
 [tool.black]
 line-length = 118
 
-[tool.setuptools.packages.find]
-where = ["intrab"]
-namespaces = false
+# [tool.setuptools.packages.find]
+# where = ["intrab"]
+# namespaces = false
 
 [project.urls]
 "Homepage" = "https://git.dkfz.de/mic/personal/group2/timothyt/universal-models"

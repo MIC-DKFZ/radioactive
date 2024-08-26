@@ -5,7 +5,7 @@ from skimage.morphology import dilation, ball
 from intrab.prompts.prompt import Boxes3D, Points
 
 
-def get_crop_pad_center_from_points(points):
+def get_crop_pad_center_from_points(points: Points):
     bbox_min = points.coords.T.min(
         axis=1
     )  # Get an array of two points: the minimal and maximal vertices of the minimal cube parallel to the axes bounding the points
