@@ -11,9 +11,9 @@ from torch.nn import functional as F
 
 from typing import Any, Dict, List, Tuple
 
-from .image_encoder import ImageEncoderViT
-from .mask_decoder import MaskDecoder
-from .prompt_encoder import PromptEncoder
+from intrab.utils.MedSAM_segment_anything.modeling.image_encoder import ImageEncoderViT
+from intrab.utils.MedSAM_segment_anything.modeling.mask_decoder import MaskDecoder
+from intrab.utils.MedSAM_segment_anything.modeling.prompt_encoder import PromptEncoder
 
 
 class Sam(nn.Module):

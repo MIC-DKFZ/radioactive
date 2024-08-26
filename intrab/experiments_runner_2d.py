@@ -3,18 +3,10 @@ import os
 import json
 from datetime import datetime
 
-from intrab.experiments_2d import run_experiments_2d
-from intrab.model.SAM import SAMInferer
-from intrab.model.SAMMed2D import SAMMed2DInferer
-from intrab.model.MedSAM import MedSAMInferer
-from intrab.model.SAMMed3D import SAMMed3DInferer
+from prompts.prompt_hparams import PromptConfig2D
+from intrab.model.model_utils import inferer_registry
 
-inferer_registry = {
-    "sam": SAMInferer,
-    "sammed2d": SAMMed2DInferer,
-    "medsam": MedSAMInferer,
-    "sammed3d": SAMMed3DInferer,
-}
+from intrab.experiments_2d import run_experiments_2d
 
 
 def get_img_gts_jhu(dataset_dir):
@@ -78,7 +70,7 @@ if __name__ == "__main__":
     model_name = "medsam"
     results_dir = "/home/t722s/Desktop/ExperimentResults"
 
-    exp_params = Namespace(
+    exp_params = PromptConfig2D(
         n_click_random_points=5,
         n_slice_point_interpolation=5,
         n_slice_box_interpolation=5,
@@ -86,7 +78,7 @@ if __name__ == "__main__":
         n_points_propagation=5,
         dof_bound=60,
         perf_bound=0.85,
-    )  # Todo: Make this a dataclass instead, so attributes are transparently available
+    )
     device = "cuda"
     seed = 11121
     label_overwrite = None
