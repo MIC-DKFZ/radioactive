@@ -1,11 +1,11 @@
 from argparse import Namespace
 from intrab.model.inferer import Inferer
 from intrab.prompts.prompt import Boxes3D, Points
-from utils.SegVol_segment_anything.network.model import SegVol
+from intrab.utils.SegVol_segment_anything.network.model import SegVol
 import torch
 import os
 import sys
-from utils.SegVol_segment_anything.monai_inferers_utils import (
+from intrab.utils.SegVol_segment_anything.monai_inferers_utils import (
     build_binary_points,
     build_binary_cube,
     logits2roi_coor,
@@ -17,7 +17,7 @@ import nibabel as nib
 import monai.transforms as transforms
 from copy import deepcopy
 
-from utils.SegVol_segment_anything import sam_model_registry
+from intrab.utils.SegVol_segment_anything import sam_model_registry
 
 
 class MinMaxNormalization(transforms.Transform):
@@ -108,10 +108,10 @@ def load_segvol(checkpoint_path):
 
 
 class SegVolInferer(Inferer):
-    supported_prompts = (Points,)  # TODO: Implement boxes
+
     pass_prev_prompts = True
     dim = 3
-    supported_prompts = ["box", "point"]
+    supported_prompts = ("box", "point")
 
     def __init__(self, checkpoint_path, device="cuda"):
         if device != "cuda":
@@ -144,6 +144,8 @@ class SegVolInferer(Inferer):
         self.img_loader = transforms.LoadImage()
 
     def set_image(self, img_path):
+        if self._image_already_loaded(img_path=img_path):
+            return
         item = {}
         # generate ct_voxel_ndarray
         img, metadata = self.img_loader(img_path)

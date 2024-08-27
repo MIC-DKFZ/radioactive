@@ -1,0 +1,29 @@
+# Holds all information needed to run experiments.
+seeds:
+  - 11121
+models:
+  - "medsam"
+  - "sam"
+  - "sammed2d"
+
+# - "sammed3d"
+# - "sammed3d_turbo"
+# - "segvol"
+
+prompting:
+  type: "static"
+  prompt_styles:
+    - "NPointsPer2DSlicePrompter"
+    - "PointInterpolationPrompter"
+    - "PointPropagationPrompter"
+    - "BoxPer2DSlice"
+    - "BoxPer2dSliceFrom3DBox"
+    - "BoxInterpolationPrompter"
+    - "BoxPropagation"
+  # ToDo: Add the hyperparameters for the prompters in here to have them properly defined and not depend on the defaults.
+
+# List of dataset that will be compared in the next run of the benchmark.
+datasets:
+  - identifier: 223
+    type: "organ"  # Choose from 'organ' or 'lesion'; When lesion we average over all lesions, otherwise across organs.
+    excluded_classes: [0] # List of classes to exclude from the dataset -- 0 is generally background 

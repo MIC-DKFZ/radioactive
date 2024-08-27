@@ -1,3 +1,4 @@
+from loguru import logger
 import numpy as np
 from copy import deepcopy
 from tqdm import tqdm
@@ -8,7 +9,9 @@ from scipy.spatial import cKDTree
 from scipy.interpolate import interp1d
 import warnings
 
-from intrab.prompts.prompt import Prompt
+from intrab.model.inferer import Inferer
+from intrab.prompts.prompt import PromptStep
+from intrab.prompts.prompt_hparams import PromptConfig
 
 # def get_neg_clicks_3D(gt, n_clicks, border_distance = 10): # Warning: dilation function is VERY slow! ~ 13 seconds on my machine
 #     struct_element = ball(border_distance)
@@ -31,6 +34,9 @@ from intrab.prompts.prompt import Prompt
 
 
 def get_pos_clicks2D_row_major(gt, n_clicks, seed=None):
+    """
+    Receives a groundtruth and a number of clicks (per slice) and generates a dictionary of point coordinates for each slice
+    """
 
     if seed is not None:
         np.random.seed(seed)
@@ -66,7 +72,7 @@ def get_pos_clicks2D_row_major(gt, n_clicks, seed=None):
         pos_coords = np.vstack([pos_coords, pos_clicks_slice])
 
     pos_coords = pos_coords[:, [2, 1, 0]]  # gt is in row-major zyx, so need to reorder to get points in xyz.
-    point_prompt = Prompt(point_prompts=(pos_coords, np.array([1] * len(pos_coords))))
+    point_prompt = PromptStep(point_prompts=(pos_coords, np.array([1] * len(pos_coords))))
     return point_prompt
 
 
@@ -96,7 +102,7 @@ def get_bbox3d_sliced(mask_volume: np.ndarray):
     box_dict = {
         slice_idx: np.array((bbox3d[0][2], bbox3d[0][1], bbox3d[1][2], bbox3d[1][1])) for slice_idx in slices_to_infer
     }  # reverse order to get xyxy
-    box_prompt = Prompt(box_prompts=box_dict)
+    box_prompt = PromptStep(box_prompts=box_dict)
     return box_prompt
 
 
@@ -138,7 +144,7 @@ def get_minimal_boxes_row_major(gt, delta_x=0, delta_y=0):
     box_dict = {
         slice_idx: box + np.array([-delta_x, -delta_y, delta_x, delta_y]) for slice_idx, box in box_dict.items()
     }
-    box_prompt = Prompt(box_prompts=box_dict)
+    box_prompt = PromptStep(box_prompts=box_dict)
     return box_prompt
 
 
@@ -239,7 +245,7 @@ def point_interpolation(gt, n_slices, interpolation="linear"):
     simulated_clicks = get_fg_points_from_cc_centers(gt, n_slices)
     coords = interpolate_points(simulated_clicks, kind=interpolation).astype(int)
     coords = coords[:, [2, 1, 0]]  # Gt is in row-major; need to reorder to xyz
-    point_prompt = Prompt(point_prompts=(coords, np.array([1] * len(coords))))
+    point_prompt = PromptStep(point_prompts=(coords, np.array([1] * len(coords))))
     return point_prompt
 
 
@@ -262,37 +268,53 @@ def get_fg_points_from_slice(slice, n_clicks, seed=None):
     return pos_clicks_slice
 
 
-def get_seed_boxes(gt, n):
+def get_seed_boxes(gt, n) -> PromptStep:
     z_indices = np.where(np.any(gt, axis=(1, 2)))[0]
     min_z, max_z = np.min(z_indices), np.max(z_indices)
-    selected_slices = np.linspace(min_z, max_z, num=n, dtype=int)
+    if n > 1:
+        selected_slices = np.linspace(min_z, max_z, num=n, dtype=int)
+        # This can contain duplicates or slices without foreground (if not continuous foreground)
+        actually_selected_slices = []
+        for sel_sli in selected_slices:
+            if sel_sli in z_indices:
+                actually_selected_slices.append(sel_sli)
+            else:
+                actually_selected_slices.append(z_indices[np.argmin(np.abs(z_indices - sel_sli))])
 
-    bbox_dict = {slice_idx: _get_bbox2d_row_major(gt[slice_idx]) for slice_idx in selected_slices}
+    if n == 1:
+        median_index = int(np.median(z_indices))
+        if median_index not in z_indices:
+            median_index = z_indices[np.argmin(np.abs(median_index - z_indices))]
+        actually_selected_slices = (median_index,)
+    # ToDo: Make sure the boxes are actually interpolated from within the z_indices, where there is foreground to pull from
 
-    return bbox_dict
+    # This de-duplicates the prompts of the same key.
+    bbox_dict = {slice_idx: _get_bbox2d_row_major(gt[slice_idx]) for slice_idx in actually_selected_slices}
+
+    return PromptStep(box_prompts=bbox_dict)
 
 
-def box_interpolation(seed_boxes):
+def box_interpolation(seed_boxes: PromptStep):
     """
     Takes n equally spaced slices starting at z_min and ending at z_max, where z_min is the lowest transverse slice of gt containing fg, and z_max similarly with highest,
     finds the largest connected component of fg, takes the center of its bounding box and takes the nearest fg point. Simulates a clinician clicking in the 'center of the main mass of the roi' per slice
     """
 
-    bbox_mins = np.array([(slice_idx, bbox[0], bbox[1]) for slice_idx, bbox in seed_boxes.items()])
+    bbox_mins = np.array([(slice_idx, bbox[0], bbox[1]) for slice_idx, bbox in seed_boxes.boxes.items()])
     bbox_mins_interpolated = interpolate_points(bbox_mins)
 
-    bbox_maxs = np.array([(slice_idx, bbox[2], bbox[3]) for slice_idx, bbox in seed_boxes.items()])
+    bbox_maxs = np.array([(slice_idx, bbox[2], bbox[3]) for slice_idx, bbox in seed_boxes.boxes.items()])
     bbox_maxs_interpolated = interpolate_points(bbox_maxs)
 
     bbox_np_interpolated = np.concatenate((bbox_mins_interpolated, bbox_maxs_interpolated[:, 1:]), axis=1).astype(int)
 
     bbox_dict_interpolated = {row[0]: row[1:] for row in bbox_np_interpolated}
-    box_prompt = Prompt(box_prompts=bbox_dict_interpolated)
+    box_prompt = PromptStep(box_prompts=bbox_dict_interpolated)
 
     return box_prompt
 
 
-def get_seed_point(gt, n_clicks, seed):
+def get_seed_point(gt, n_clicks, seed) -> PromptStep:
     slices_to_infer = np.where(np.any(gt, axis=(1, 2)))[0]
     middle_idx = np.median(slices_to_infer).astype(int)
 
@@ -302,16 +324,12 @@ def get_seed_point(gt, n_clicks, seed):
     z_col = np.full((n_clicks, 1), middle_idx)
     pos_coords = np.hstack([z_col, pos_clicks_slice])
     pos_coords = pos_coords[:, [2, 1, 0]]  # zyx -> xyz
-    pts_prompt = Prompt(point_prompts=(pos_coords, [1] * n_clicks))
+    pts_prompt = PromptStep(point_prompts=(pos_coords, [1] * n_clicks))
 
     return pts_prompt
 
 
-def point_propagation(
-    inferer, seed_prompt, slices_to_infer, seed=None, n_clicks=5, verbose=True, return_low_res_logits=False
-):
-    if not inferer.image_set:
-        raise RuntimeError("Must first set image!")
+def point_propagation(inferer: Inferer, seed_prompt, slices_to_infer, seed=None, n_clicks=5, verbose=True):
     if seed:
         np.random.seed(seed)
     verbose_state = inferer.verbose  # Make inferer not verbose for this experiment
@@ -327,7 +345,7 @@ def point_propagation(
     middle_idx = np.median(slices_to_infer).astype(int)
 
     # Infer middle slice
-    slice_seg, slice_low_res_logits = inferer.predict(pts_prompt, return_low_res_logits=True, transform=False)
+    slice_seg, slice_low_res_logits = inferer.predict(pts_prompt, transform=False)
     low_res_logits[middle_idx] = slice_low_res_logits[middle_idx]
     segmentation[middle_idx] = slice_seg[middle_idx]
 
@@ -338,19 +356,19 @@ def point_propagation(
     pos_coords = np.hstack([z_col, seed_prompt.coords[:, 1:]])
     pos_coords = pos_coords[:, [2, 1, 0]]  # Change from zyx to xyz
     downwards_coords.append(pos_coords)
-    pts_prompt = Prompt(point_prompts=(pos_coords, [1] * len(seed_prompt.coords)))
+    pts_prompt = PromptStep(point_prompts=(pos_coords, [1] * len(seed_prompt.coords)))
 
     downwards_iter = range(middle_idx - 1, slices_to_infer.min() - 1, -1)
     if verbose:
         downwards_iter = tqdm(downwards_iter, desc="Propagating down")
 
     for slice_idx in downwards_iter:
-        slice_seg, slice_low_res_logits = inferer.predict(pts_prompt, return_low_res_logits=True, transform=False)
+        slice_seg, slice_low_res_logits = inferer.predict(pts_prompt, transform=False)
         low_res_logits[slice_idx] = slice_low_res_logits[slice_idx]
         segmentation[slice_idx] = slice_seg[slice_idx]
 
         if np.all(segmentation[slice_idx] == 0):  # Terminate if no fg generated
-            warnings.warn("\nTerminate early: no fg generated")
+            logger.debug("No prediction despite prompt given. Stopping propagation.")
             break
 
         # Update prompt
@@ -363,7 +381,7 @@ def point_propagation(
         pos_coords = np.hstack([z_col, pos_clicks_slice])
         pos_coords = pos_coords[:, [2, 1, 0]]  # Change from zyx to xyz
         downwards_coords.append(pos_coords)
-        pts_prompt = Prompt(point_prompts=(pos_coords, [1] * n_clicks))
+        pts_prompt = PromptStep(point_prompts=(pos_coords, [1] * n_clicks))
 
     # Upward branch
     ## Modify seed prompt to exist one axial slice up
@@ -372,19 +390,19 @@ def point_propagation(
     pos_coords = np.hstack([z_col, seed_prompt.coords[:, 1:]])
     pos_coords = pos_coords[:, [2, 1, 0]]  # Change from zyx to xyz
     upward_coords.append(pos_coords)
-    pts_prompt = Prompt(point_prompts=(pos_coords, [1] * len(seed_prompt.coords)))
+    pts_prompt = PromptStep(point_prompts=(pos_coords, [1] * len(seed_prompt.coords)))
 
     upwards_iter = range(middle_idx + 1, slices_to_infer.max() + 1)
     if verbose:
         upwards_iter = tqdm(upwards_iter, desc="Propagating up")
 
     for slice_idx in upwards_iter:
-        slice_seg, slice_low_res_logits = inferer.predict(pts_prompt, return_low_res_logits=True, transform=False)
+        slice_seg, slice_low_res_logits = inferer.predict(pts_prompt, transform=False)
         low_res_logits[slice_idx] = slice_low_res_logits[slice_idx]
         segmentation[slice_idx] = slice_seg[slice_idx]
 
         if np.all(segmentation[slice_idx] == 0):  # Terminate if no fg generated
-            warnings.warn("\nTerminate early: no fg generated")
+            logger.debug("No prediction despite box prompt given. Stopping propagation.")
             break
 
         # Update prompt
@@ -397,7 +415,7 @@ def point_propagation(
         pos_coords = np.hstack([z_col, pos_clicks_slice])
         pos_coords = pos_coords[:, [2, 1, 0]]  # Change from zyx to xyz
         upward_coords.append(pos_coords)
-        pts_prompt = Prompt(point_prompts=(pos_coords, [1] * n_clicks))
+        pts_prompt = PromptStep(point_prompts=(pos_coords, [1] * n_clicks))
 
     inferer.verbose = verbose_state  # Return inferer verbosity to initial state
 
@@ -406,7 +424,7 @@ def point_propagation(
     coords = coords[
         is_in_slices_inferred
     ]  # Removes extraneous prompts on bottom_slice-1 and top_slice+1 that weren't used.
-    prompt = Prompt(point_prompts=(coords, [1] * len(coords)))
+    prompt = PromptStep(point_prompts=(coords, [1] * len(coords)))
 
     if return_low_res_logits:
         return segmentation, low_res_logits, prompt
@@ -420,17 +438,18 @@ def get_seed_box(gt):
 
     bbox_slice = _get_bbox2d_row_major(gt[middle_idx])
     box_dict = {middle_idx: bbox_slice}
-    box_prompt = Prompt(box_prompts=box_dict)
+    box_prompt = PromptStep(box_prompts=box_dict)
 
     return box_prompt
 
 
-def box_propagation(inferer, seed_box, slices_to_infer, verbose=True, return_low_res_logits=False):
-    if not inferer.image_set:
-        raise RuntimeError("Must first set image!")
-
-    verbose_state = inferer.verbose  # Make inferer not verbose for this experiment
-    inferer.verbose = False
+# ToDo: Add a test that verifies that the segmentation of the
+#   box prompts are the same when run twice.
+def box_propagation(inferer: Inferer, seed_box: PromptStep, slices_to_infer) -> PromptStep:
+    """
+    Propagate a seed box prompt through the slices to infer in a 3D volume.
+    Returns all the box prompts that were generated to pass to a single predict call.
+    """
 
     # Initialise segmentation to store total result
     segmentation = np.zeros_like(inferer.img).astype(np.uint8)
@@ -441,58 +460,54 @@ def box_propagation(inferer, seed_box, slices_to_infer, verbose=True, return_low
     middle_idx = np.median(slices_to_infer).astype(int)
 
     # Infer middle slice
-    slice_seg, slice_low_res_logits = inferer.predict(box_prompt, return_low_res_logits=True, transform=False)
+    slice_seg, slice_low_res_logits = inferer.predict(box_prompt, transform=False)
     low_res_logits[middle_idx] = slice_low_res_logits[middle_idx]
     segmentation[middle_idx] = slice_seg[middle_idx]
 
     # Downwards branch
     ## Modify seed prompt to exist one axial slice down
     all_boxes[middle_idx - 1] = all_boxes[middle_idx]
-    box_prompt = Prompt(box_prompts={k - 1: v for k, v in seed_box.boxes.items()})
+    box_prompt = PromptStep(box_prompts={k - 1: v for k, v in seed_box.boxes.items()})
 
     downwards_iter = range(middle_idx - 1, slices_to_infer.min() - 1, -1)
-    if verbose:
-        downwards_iter = tqdm(downwards_iter, desc="Propagating down")
 
     for slice_idx in downwards_iter:
-        slice_seg, slice_low_res_logits = inferer.predict(box_prompt, return_low_res_logits=True, transform=False)
+        slice_seg, slice_low_res_logits = inferer.predict(box_prompt, transform=False)
         low_res_logits[slice_idx] = slice_low_res_logits[slice_idx]
 
         segmentation[slice_idx] = slice_seg[slice_idx]
 
         if np.all(segmentation[slice_idx] == 0):  # Terminate if no fg generated
-            warnings.warn("\nTerminate early: no fg generated")
+            logger.debug("No prediction despite prompt given. Stopping propagation.")
             break
 
         # Update prompt
         bbox_slice = _get_bbox2d_row_major(segmentation[slice_idx])
         all_boxes[slice_idx - 1] = bbox_slice
-        box_prompt = Prompt(
+        box_prompt = PromptStep(
             box_prompts={slice_idx - 1: bbox_slice}
         )  # Notice the -1: this is the prompt for one slice down
 
     # Upward branch
     ## Modify seed prompt to exist one axial slice up
     all_boxes[middle_idx + 1] = all_boxes[middle_idx]
-    box_prompt = Prompt(box_prompts={k + 1: v for k, v in seed_box.boxes.items()})
+    box_prompt = PromptStep(box_prompts={k + 1: v for k, v in seed_box.boxes.items()})
 
     upwards_iter = range(middle_idx + 1, slices_to_infer.max() + 1)
-    if verbose:
-        upwards_iter = tqdm(upwards_iter, desc="Propagating up")
 
     for slice_idx in upwards_iter:
-        slice_seg, slice_low_res_logits = inferer.predict(box_prompt, return_low_res_logits=True, transform=False)
+        slice_seg, slice_low_res_logits = inferer.predict(box_prompt, transform=False)
         low_res_logits[slice_idx] = slice_low_res_logits[slice_idx]
         segmentation[slice_idx] = slice_seg[slice_idx]
 
         if np.all(segmentation[slice_idx] == 0):  # Terminate if no fg generated
-            warnings.warn("\nTerminate early: no fg generated")
+            logger.debug("No prediction despite prompt given. Stopping propagation.")
             break
 
         # Update prompt
         bbox_slice = _get_bbox2d_row_major(segmentation[slice_idx])
         all_boxes[slice_idx + 1] = bbox_slice
-        box_prompt = Prompt(
+        box_prompt = PromptStep(
             box_prompts={slice_idx + 1: bbox_slice}
         )  # Notice the +1: this is the prompt for one slice up
 
@@ -500,10 +515,6 @@ def box_propagation(inferer, seed_box, slices_to_infer, verbose=True, return_low
         k: all_boxes[k] for k in slices_to_infer if k in all_boxes.keys()
     }  # Removes top and bottom box - they weren't used. 'if clause' in case propagation terminated early.
 
-    all_boxes = Prompt(box_prompts=all_boxes)
-    inferer.verbose = verbose_state  # Return inferer verbosity to initial state
+    all_boxes = PromptStep(box_prompts=all_boxes)
 
-    if return_low_res_logits:
-        return segmentation, low_res_logits, all_boxes
-    else:
-        return segmentation, all_boxes
+    return all_boxes

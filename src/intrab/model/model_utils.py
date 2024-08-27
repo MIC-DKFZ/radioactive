@@ -1,6 +1,21 @@
+from pathlib import Path
 from typing import Literal
 
-from model.inferer import Inferer
+from intrab.prompts.prompt_hparams import PromptConfig
+from intrab.prompts.prompter import (
+    BoxInterpolationPrompter,
+    BoxPer2DSlice,
+    BoxPer2dSliceFrom3DBox,
+    BoxPropagation,
+    NPointsPer2DSlicePrompter,
+    PointInterpolationPrompter,
+    PointPropagationPrompter,
+    Prompter,
+    static_prompt_styles,
+)
+
+from intrab.utils.paths import get_model_path
+from intrab.model.inferer import Inferer
 from intrab.model.SAM import SAMInferer
 from intrab.model.SAMMed2D import SAMMed2DInferer
 from intrab.model.MedSAM import MedSAMInferer
@@ -8,36 +23,79 @@ from intrab.model.SAMMed3D import SAMMed3DInferer
 from intrab.model.segvol import SegVolInferer
 
 
-model_registry = Literal["sam", "sammed2d", "medsam", "sammed3d", "sammed3d_turbo", "medsam", "segvol"]
+model_registry = Literal["sam", "sammed2d", "sammed3d", "sammed3d_turbo", "medsam", "segvol"]
 
 inferer_registry: dict[model_registry, Inferer] = {
     "sam": SAMInferer,
     "sammed2d": SAMMed2DInferer,
     "medsam": MedSAMInferer,
     "sammed3d": SAMMed3DInferer,
+    "sammed3d_turbo": SAMMed3DInferer,
+    "segvol": SegVolInferer,
 }
 
 
-def sam_lazy(checkpoint_path, device):
-    from intrab.model.SAM import SAMInferer
-
-    return SAMInferer(checkpoint_path, device)
-
-
-def sammed2d_lazy(checkpoint_path, device):
-    return SAMMed2DInferer(checkpoint_path, device)
-
-
-def medsam_lazy(checkpoint_path, device):
-
-    return MedSAMInferer(checkpoint_path, device)
+checkpoint_registry: dict[model_registry, Path] = {
+    "sam": get_model_path() / "sam_vit_h_4b8939.pth",
+    "medsam": get_model_path() / "medsam_vit_b.pth",
+    "sammed2d": get_model_path() / "sam-med2d_b.pth",
+    "segvol": get_model_path() / "SegVol_v1.pth",
+    "sammed3d": get_model_path() / "sam_med3d.pth",
+    "sammed3d_turbo": get_model_path() / "sam_med3d_turbo.pth",
+}
 
 
-def segvol_lazy(checkpoint_path, device):
-
-    return SegVolInferer(checkpoint_path, device)
-
-
-def sammed3d_lazy(checkpoint_path, device):
-
-    return SAMMed3DInferer(checkpoint_path, device)
+def get_wanted_supported_prompters(
+    inferer: Inferer,
+    pro_conf: PromptConfig,
+    wanted_prompt_styles: list[static_prompt_styles],
+    seed: int,
+) -> list[Prompter]:
+    prompters = []
+    if "point" in inferer.supported_prompts:
+        if "NPointsPer2DSlicePrompter" in wanted_prompt_styles:
+            prompters.append(
+                NPointsPer2DSlicePrompter(
+                    inferer,
+                    n_points_per_slice=pro_conf.twoD_n_click_random_points,
+                    seed=seed,
+                )
+            )
+        if "PointInterpolationPrompter" in wanted_prompt_styles:
+            prompters.append(
+                PointInterpolationPrompter(
+                    inferer,
+                    n_slice_point_interpolation=pro_conf.twoD_n_slice_point_interpolation,
+                    seed=seed,
+                )
+            )
+        if "PointPropagationPrompter" in wanted_prompt_styles:
+            prompters.append(
+                PointPropagationPrompter(
+                    inferer,
+                    n_seed_points_point_propagation=pro_conf.twoD_n_seed_points_point_propagation,
+                    n_points_propagation=pro_conf.twoD_n_points_propagation,
+                    seed=seed,
+                )
+            )
+    if "box" in inferer.supported_prompts:
+        if "BoxPer2DSlice" in wanted_prompt_styles:
+            prompters.append(
+                BoxPer2DSlice(
+                    inferer,
+                    seed=seed,
+                )
+            )
+        if "BoxPer2dSliceFrom3DBox" in wanted_prompt_styles:
+            prompters.append(BoxPer2dSliceFrom3DBox(inferer, seed))
+        if "BoxInterpolationPrompter" in wanted_prompt_styles:
+            prompters.append(
+                BoxInterpolationPrompter(
+                    inferer,
+                    seed,
+                    n_slice_box_interpolation=pro_conf.twoD_n_slice_box_interpolation,
+                )
+            )
+        if "BoxPropagation" in wanted_prompt_styles:
+            prompters.append(BoxPropagation(inferer, seed))
+    return prompters

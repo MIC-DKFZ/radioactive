@@ -9,11 +9,11 @@ from nibabel.orientations import io_orientation, ornt_transform
 import warnings
 
 from intrab.model.inferer import Inferer
-from intrab.prompts.prompt import Prompt
-from utils.SAMMed3D_segment_anything.build_sam import sam_model_registry as registry_sam
+from intrab.prompts.prompt import PromptStep
+from intrab.utils.SAMMed3D_segment_anything.build_sam import sam_model_registry as registry_sam
 
 
-from utils.transforms import ResizeLongestSide
+from intrab.utils.transforms import ResizeLongestSide
 
 
 def load_sam(checkpoint_path, device="cuda", image_size=1024):
@@ -29,7 +29,7 @@ def load_sam(checkpoint_path, device="cuda", image_size=1024):
 class SAMInferer(Inferer):
     pass_prev_prompts = True  # In supplied demos, sam doesn't take previous prompts, but this vastly increases performance when the model greatly oversegments, for example.
     dim = 2
-    supported_prompts = ["box", "point", "mask"]
+    supported_prompts = ("box", "point", "mask")
 
     def __init__(self, checkpoint_path, device):
         self.model = load_sam(checkpoint_path, device)
@@ -72,6 +72,8 @@ class SAMInferer(Inferer):
         return best_mask
 
     def set_image(self, img_path):
+        if self._image_already_loaded(img_path=img_path):
+            return
         if self.image_embeddings_dict:
             self.image_embeddings_dict = {}
         img = nib.load(img_path)
@@ -202,8 +204,8 @@ class SAMInferer(Inferer):
 
         return segmentation
 
-    def predict(self, prompt, mask_dict={}, return_logits=False, return_low_res_logits=False, transform=True):
-        if not (isinstance(prompt, Prompt)):
+    def predict(self, prompt, mask_dict={}, return_logits=False, transform=True):
+        if not (isinstance(prompt, PromptStep)):
             raise TypeError(f"Prompts must be supplied as an instance of the Prompt class.")
         if prompt.has_boxes and prompt.has_points:
             warnings.warn("Both point and box prompts have been supplied; the model has not been trained on this.")
@@ -256,10 +258,9 @@ class SAMInferer(Inferer):
             )  # Add batch dimensions
             self.slice_lowres_outputs[slice_idx] = slice_raw_outputs
 
-        if return_low_res_logits:
-            low_res_logits = {
-                k: torch.sigmoid(v).squeeze().cpu().numpy() for k, v in self.slice_lowres_outputs.items()
-            }
+        low_res_logits = {
+            k: torch.sigmoid(v).squeeze().cpu().numpy() for k, v in self.slice_lowres_outputs.items()
+        }
 
         segmentation = self.postprocess_slices(self.slice_lowres_outputs, return_logits)
 
@@ -267,7 +268,4 @@ class SAMInferer(Inferer):
         if transform == True:
             segmentation = self.inv_trans(segmentation)
 
-        if return_low_res_logits:
-            return segmentation, low_res_logits
-        else:
-            return segmentation
+        return segmentation, low_res_logits

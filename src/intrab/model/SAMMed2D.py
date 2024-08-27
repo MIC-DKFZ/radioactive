@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Sequence
 import torch
 import numpy as np
 import torch.nn.functional as F
@@ -12,8 +12,8 @@ import nibabel as nib
 from nibabel.orientations import io_orientation, ornt_transform
 import warnings
 
-from utils.SAMMed2D_segment_anything import sam_model_registry as registry_sammed2d
-from intrab.prompts.prompt import Prompt
+from intrab.utils.SAMMed2D_segment_anything import sam_model_registry as registry_sammed2d
+from intrab.prompts.prompt import PromptStep
 from intrab.model.inferer import Inferer
 
 
@@ -31,7 +31,7 @@ def load_sammed2d(checkpoint_path, device="cuda"):
 class SAMMed2DInferer(Inferer):
     pass_prev_prompts = True  # Flag to track whether in interactive steps previous prompts should be passed, or only the mask and the new prompt
     dim = 2
-    supported_prompts: str = Literal["box", "point", "mask"]
+    supported_prompts: Sequence[str] = ("box", "point", "mask")
 
     def __init__(self, checkpoint_path, device):
         self.model = load_sammed2d(checkpoint_path, device)
@@ -41,7 +41,6 @@ class SAMMed2DInferer(Inferer):
         self.new_size = (self.model.image_encoder.img_size, self.model.image_encoder.img_size)
         self.image_embeddings_dict = {}
         self.multimask_output = True  # Hardcoded to match defaults from original
-        self.image_set = False
         self.verbose = True  # Can change directly if desired
 
         self.pixel_mean, self.pixel_std = (
@@ -50,6 +49,8 @@ class SAMMed2DInferer(Inferer):
         )
 
     def set_image(self, img_path):
+        if self._image_already_loaded(img_path=img_path):
+            return
         if self.image_embeddings_dict:
             self.image_embeddings_dict = {}
         img = nib.load(img_path)
@@ -212,8 +213,8 @@ class SAMMed2DInferer(Inferer):
         return segmentation
 
     @torch.no_grad()
-    def predict(self, prompt, mask_dict={}, return_logits=False, return_low_res_logits=False, transform=True):
-        if not (isinstance(prompt, Prompt)):
+    def predict(self, prompt, mask_dict={}, return_logits=False, transform=True):
+        if not (isinstance(prompt, PromptStep)):
             raise TypeError(f"Prompts must be supplied as an instance of the Prompt class.")
         if prompt.has_boxes and prompt.has_points:
             warnings.warn("Both point and box prompts have been supplied; the model has not been trained on this.")
@@ -267,10 +268,10 @@ class SAMMed2DInferer(Inferer):
             )
             self.slice_lowres_outputs[slice_idx] = slice_raw_outputs
 
-        if return_low_res_logits:
-            low_res_logits = {
-                k: torch.sigmoid(v).squeeze().cpu().numpy() for k, v in self.slice_lowres_outputs.items()
-            }
+
+        low_res_logits = {
+            k: torch.sigmoid(v).squeeze().cpu().numpy() for k, v in self.slice_lowres_outputs.items()
+        }
 
         segmentation = self.postprocess_slices(self.slice_lowres_outputs, return_logits)
 
@@ -278,7 +279,4 @@ class SAMMed2DInferer(Inferer):
         if transform == True:
             segmentation = self.inv_trans(segmentation)
 
-        if return_low_res_logits:
-            return segmentation, low_res_logits
-        else:
-            return segmentation
+        return segmentation, low_res_logits

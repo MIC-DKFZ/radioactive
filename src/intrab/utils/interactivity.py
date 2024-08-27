@@ -5,7 +5,7 @@ from skimage.measure import find_contours
 from skimage.measure import label as ski_label
 import warnings
 
-from intrab.prompts.prompt import Points, Prompt
+from intrab.prompts.prompt import Points, PromptStep
 from intrab.prompts.prompt_3d import get_pos_clicks3D
 from intrab.prompts.prompt_utils import get_fg_points_from_cc_centers, interpolate_points
 from intrab.utils.analysis import compute_dice
@@ -180,13 +180,13 @@ def iterate_2d(
                     ## Add to old prompt
                     coords = np.concatenate([prompt.coords, fp_coords_3d], axis=0)
                     labels = np.concatenate([prompt.labels, [0] * len(fp_coords_3d)])
-                    prompt = Prompt(point_prompts=(coords, labels))
+                    prompt = PromptStep(point_prompts=(coords, labels))
 
                     ## Subset to prompts only on the slices with new prompts
                     fix_slice_mask = np.isin(prompt.coords[:, 2], improve_slices)
-                    new_prompt = Prompt(point_prompts=(coords[fix_slice_mask], labels[fix_slice_mask]))
+                    new_prompt = PromptStep(point_prompts=(coords[fix_slice_mask], labels[fix_slice_mask]))
                 else:
-                    new_prompt = Prompt(point_prompts=(fp_coords_3d, [0] * len(fp_coords_3d)))
+                    new_prompt = PromptStep(point_prompts=(fp_coords_3d, [0] * len(fp_coords_3d)))
 
         if generate_positive_prompts:
             if not has_generated_positive_prompt:
@@ -218,18 +218,16 @@ def iterate_2d(
                 # Add to old prompt
                 coords = np.concatenate([prompt.coords, new_coords], axis=0)
                 labels = np.concatenate([prompt.labels, [1] * len(new_coords)])
-                new_prompt = Prompt(point_prompts=(coords, labels))
+                new_prompt = PromptStep(point_prompts=(coords, labels))
                 new_prompt = prompt
             else:
-                prompt = Prompt(point_prompts=(new_coords, [1] * len(new_coords)))
+                prompt = PromptStep(point_prompts=(new_coords, [1] * len(new_coords)))
                 new_prompt = prompt
 
             improve_slices = slices_inferred  # improve all slices
 
         # Generate new segmentation and integrate into old one
-        new_seg, low_res_logits = inferer.predict(
-            new_prompt, low_res_logits, return_low_res_logits=True, transform=False
-        )
+        new_seg, low_res_logits = inferer.predict(new_prompt, low_res_logits, transform=False)
         prompts.append(new_prompt)
         segmentation[improve_slices] = new_seg[improve_slices]
         segmentations.append(segmentation.copy())
@@ -280,7 +278,7 @@ def iterate_3d(
     # Obtain initial segmentation
 
     prompt = get_pos_clicks3D(gt_unprocessed, n, seed=seed)
-    segmentation, logits = inferer.predict(prompt, store_patching=True, return_low_res_logits=True, transform=False)
+    segmentation, logits = inferer.predict(prompt, store_patching=True, transform=False)
 
     gt_to_compare = gt_unprocessed
     # For SAMMed3D, must sample for new prompts only in a 128x128x128 crop around the initial prompt.
@@ -315,7 +313,7 @@ def iterate_3d(
         prompts.append(prompt)
 
         segmentation, logits = inferer.predict(
-            prompt, use_stored_patching=True, return_low_res_logits=True, prev_low_res_logits=logits, transform=False
+            prompt, use_stored_patching=True, prev_low_res_logits=logits, transform=False
         )
 
         prompts.append(prompt)

@@ -1,139 +1,76 @@
-from argparse import Namespace
-import os
-import json
-from datetime import datetime
+from pathlib import Path
 
-from prompts.prompt_hparams import PromptConfig2D
-from intrab.model.model_utils import inferer_registry
+import torch
+
+from intrab.model.inferer import Inferer
+from intrab.prompts.prompt_hparams import PromptConfig
+from intrab.model.model_utils import inferer_registry, checkpoint_registry, model_registry
 
 from intrab.experiments_2d import run_experiments_2d
-
-
-def get_img_gts_jhu(dataset_dir):
-    images_dir = os.path.join(dataset_dir, "imagesTr")
-    labels_dir = os.path.join(dataset_dir, "labelsTr")
-    imgs_gts = [
-        (
-            os.path.join(images_dir, img_path),
-            os.path.join(labels_dir, img_path.removesuffix("_0000.nii.gz") + ".nii.gz"),
-        )
-        for img_path in os.listdir(images_dir)  # Adjust the extension as needed
-        if os.path.exists(os.path.join(labels_dir, img_path.rstrip("_0000.nii.gz") + ".nii.gz"))
-    ]
-    return imgs_gts
-
-
-def get_imgs_gts_amos(dataset_dir):
-    images_dir = os.path.join(dataset_dir, "imagesTs")
-    labels_dir = os.path.join(dataset_dir, "labelsTs")
-    imgs_gts = [
-        (os.path.join(images_dir, img_path), os.path.join(labels_dir, os.path.basename(img_path)))
-        for img_path in os.listdir(images_dir)  # Adjust the extension as needed
-        if os.path.exists(os.path.join(labels_dir, os.path.basename(img_path)))
-    ]
-    return imgs_gts
-
-
-def get_imgs_gts_segrap(dataset_dir):
-    images_dir = os.path.join(dataset_dir, "imagesTr")
-    labels_dir = os.path.join(dataset_dir, "labelsTr")
-    imgs_gts = [
-        (
-            os.path.join(images_dir, img_path),
-            os.path.join(labels_dir, img_path.removesuffix("_0000.nii.gz") + ".nii.gz"),
-        )
-        for img_path in os.listdir(images_dir)  # Adjust the extension as needed
-        if os.path.exists(os.path.join(labels_dir, img_path.removesuffix("_0000.nii.gz") + ".nii.gz"))
-    ]
-    return imgs_gts
-
-
-checkpoint_registry = {
-    "sam": "/home/t722s/Desktop/UniversalModels/TrainedModels/sam_vit_h_4b8939.pth",
-    "medsam": "/home/t722s/Desktop/UniversalModels/TrainedModels/medsam_vit_b.pth",
-    "sammed2d": "/home/t722s/Desktop/UniversalModels/TrainedModels/sam-med2d_b.pth",
-}
-
-dataset_registry = {
-    "abdomenAtlas": {
-        "dir": "/home/t722s/Desktop/Datasets/Dataset350_AbdomenAtlasJHU_2img/",
-        "dataset_func": get_img_gts_jhu,
-    },
-    "segrap": {"dir": "/home/t722s/Desktop/Datasets/segrapSub/", "dataset_func": get_imgs_gts_segrap},
-}
+from intrab.utils.io import get_labels_from_dataset_json, get_dataset_path_by_id, get_img_gts, read_yaml_config
+from intrab.utils.paths import get_results_path
+from argparse import ArgumentParser
+from loguru import logger
 
 if __name__ == "__main__":
     # Setup
     # warnings.filterwarnings('error')
-
-    dataset_name = "abdomenAtlas"
-    model_name = "medsam"
-    results_dir = "/home/t722s/Desktop/ExperimentResults"
-
-    exp_params = PromptConfig2D(
-        n_click_random_points=5,
-        n_slice_point_interpolation=5,
-        n_slice_box_interpolation=5,
-        n_seed_points_point_propagation=5,
-        n_points_propagation=5,
-        dof_bound=60,
-        perf_bound=0.85,
+    parser = ArgumentParser()
+    parser.add_argument(
+        "-c",
+        "--config",
+        type=str,
+        required=True,
+        help="Path to a configuration '.yaml' file to run the experiments with.",
     )
-    device = "cuda"
-    seed = 11121
-    label_overwrite = None
-    experiment_overwrite = None
+    args = parser.parse_args()
 
-    # prompt_types = ['points', 'boxes', 'interactive']
-    prompt_types = ["boxes"]
+    # Load the configuration file
+    config = read_yaml_config(args.config)
+    if torch.cuda.is_available():
+        device: str = "cuda"
+    else:
+        device: str = "cpu"
 
-    label_overwrite = {
-        "kidney_left": 3,
-    }
-
-    # label_overwrite = {
-    #     "background": 0,
-    #     "aorta": 1,
-    #     "gall_bladder": 2,
-    #     "kidney_left": 3,
-    #     "kidney_right": 4,
-    #     "liver": 5,
-    #     "pancreas": 6,
-    #     "postcava": 7,
-    #     "spleen": 8,
-    #     "stomach": 9
-    # }
-
-    # experiment_overwrite = ['random_points']
-
-    # Get (img path, gt path) pairs
-    results_path = os.path.join(
-        results_dir, model_name + "_" + dataset_name + "_" + datetime.now().strftime("%Y%m%d_%H%M")
+    # ToDo: Include this in the configuration file.
+    exp_params = PromptConfig(
+        twoD_n_click_random_points=5,
+        twoD_n_slice_point_interpolation=5,
+        twoD_n_slice_box_interpolation=5,
+        twoD_n_seed_points_point_propagation=5,
+        twoD_n_points_propagation=5,
+        twoD_dof_bound=60,
+        twoD_perf_bound=0.85,
     )
-    dataset_func, dataset_dir = dataset_registry[dataset_name]["dataset_func"], dataset_registry[dataset_name]["dir"]
-    imgs_gts = dataset_func(dataset_dir)
 
-    # Get dataset dict if missing
-    with open(os.path.join(dataset_dir, "dataset.json"), "r") as f:
-        dataset_info = json.load(f)
-    label_dict = dataset_info["labels"]
-
-    if label_overwrite:
-        label_dict = label_overwrite
-
-    # Load the model
-    checkpoint_path = checkpoint_registry[model_name]
-    inferer = inferer_registry[model_name](checkpoint_path, device)
-
-    # Run experiments
-    run_experiments_2d(
-        inferer,
-        imgs_gts,
-        results_path,
-        label_dict,
-        exp_params,
-        prompt_types,
-        seed=1,
-        experiment_overwrite=experiment_overwrite,
-        save_segs=True,
-    )
+    # Potentially move the seeds inside to not create new models each seed, but save that time.
+    wanted_prompt_styles = config["prompting"]["prompt_styles"]
+    for seed in config["seeds"]:
+        model_name: model_registry
+        for dataset in config["datasets"]:
+            logger.info(f"Loading dataset {dataset["identifier"]:03d}")
+            dataset_root: Path = get_dataset_path_by_id(dataset["identifier"])
+            logger.info(f"Dataset loaded from {dataset_root}")
+            dataset_name: str = dataset_root.name
+            # ToDo: Add the excluded class ids here.
+            label_dict: dict[str, int] = get_labels_from_dataset_json(dataset_root)
+            imgs_gts: list[tuple[str, str]] = get_img_gts(dataset_root)
+            logger.info(f"Found {len(imgs_gts)} image-groundtruth pairs")
+            for model_name in config["models"]:
+                # Get dataset and the corresponding img, groundtruth Pairs
+                results_path = Path(get_results_path() / (model_name + "_" + dataset_name))
+                # Load the model
+                checkpoint_path: Path = checkpoint_registry[model_name]
+                logger.info(f"Instantiating '{model_name}' with checkpoint '{checkpoint_path}'")
+                inferer: Inferer = inferer_registry[model_name](checkpoint_path, device)
+                
+                run_experiments_2d(
+                    inferer,
+                    imgs_gts,
+                    results_path,
+                    label_dict,
+                    exp_params,
+                    wanted_prompt_styles,
+                    seed=1,
+                    experiment_overwrite=None,
+                )

@@ -36,8 +36,12 @@ class Boxes3D:
         return self.bbox[idx]
 
 
-class Prompt:
-    def __init__(self, point_prompts: Points = None, box_prompts: Boxes = None):
+class PromptStep:
+    def __init__(
+        self,
+        point_prompts: Points | tuple[np.ndarray, np.ndarray] = None,
+        box_prompts: Boxes | dict[int, np.ndarray] = None,
+    ):
         """
         Initialise either empty, with points or with boxes.
         Points must be supplied as a pair (coords, labels), with coords nx3 containing the coordinates (xyz) of the prompts, or as a Points object
@@ -46,31 +50,31 @@ class Prompt:
         # Default initiation
         self.coords = np.empty((0, 3))
         self.labels = np.empty(0)
-        self.points = (self.coords, self.labels)
+
         self.boxes = {}
         self.has_points = self.has_boxes = False
 
         # Handle point initiation
         if isinstance(point_prompts, Points):
             self.coords, self.labels = point_prompts.coords, point_prompts.labels
-            self.points = (self.coords, self.labels)
+            self.has_points = True
+
         elif point_prompts is not None:
             self.coords, self.labels = np.array(point_prompts[0]), np.array(point_prompts[1])
-            self.points = (self.coords, self.labels)
-
-        if len(self.labels) > 0:
             self.has_points = True
 
         # Handle box initiation
         if isinstance(box_prompts, Boxes):
             self.boxes = self.boxes.value
+            self.has_boxes = True
         elif box_prompts is not None:
             self.boxes = box_prompts
-        if len(self.boxes.keys()) > 0:
             self.has_boxes = True
 
         # Process into dictionary
-        self.slices_to_infer = self.get_slices_to_infer()
+        self.slices_to_infer = self.get_slices_to_infer(self.coords, self.boxes)
+
+    def get_dict(self):
         self.prompts_dict = {}
         for slice_idx in self.slices_to_infer:  # Only useful if the prompts are supplied in the or
             slice_box = self.boxes[slice_idx] if slice_idx in self.boxes.keys() else None
@@ -89,8 +93,9 @@ class Prompt:
     def __setitem__(self, index, value):
         self.prompts_dict[index] = value
 
-    def get_slices_to_infer(self):
-        points_zs = set(self.coords[:, 2])
-        boxes_zs = set(self.boxes.keys())
+    @staticmethod
+    def get_slices_to_infer(coords, boxes):
+        points_zs = set(coords[:, 2])
+        boxes_zs = set(boxes.keys())
         slices_to_infer = points_zs.union(boxes_zs)
         return slices_to_infer
