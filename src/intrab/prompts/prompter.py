@@ -30,6 +30,7 @@ from intrab.utils.interactivity import gen_contour_fp_scribble
 
 
 class Prompter:
+    is_static: bool = True
     def __init__(self, inferer: Inferer, seed: int = 11111):
         self.inferer: Inferer = inferer
         self.groundtruth: None = None

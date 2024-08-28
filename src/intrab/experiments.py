@@ -103,8 +103,12 @@ def run_experiments(
                 # disable=True,
             ):
                 prompter.set_groundtruth(binary_gt)
-                prediction, _ = prompter.predict_image(image_path=img_path)
-                prediction.to_filename(results_dir / prompter.name / target / base_name)
+                if prompter.is_static:
+                    prediction, _ = prompter.predict_image(image_path=img_path)
+                    prediction.to_filename(results_dir / prompter.name / target / base_name)
+                else:
+                    # do something else
+                    pass
 
             # # Now handle interactive experiments
             # for exp_name, prompting_func in tqdm(
