@@ -3,10 +3,12 @@ from typing import Literal
 
 from intrab.prompts.prompt_hparams import PromptConfig
 from intrab.prompts.prompter import (
+    Box3DVolumePrompter,
     BoxInterpolationPrompter,
-    BoxPer2DSlice,
-    BoxPer2dSliceFrom3DBox,
-    BoxPropagation,
+    BoxPer2DSlicePrompter,
+    BoxPer2dSliceFrom3DBoxPrompter,
+    BoxPropagationPrompter,
+    NPoints3DVolumePrompter,
     NPointsPer2DSlicePrompter,
     PointInterpolationPrompter,
     PointPropagationPrompter,
@@ -52,50 +54,58 @@ def get_wanted_supported_prompters(
     seed: int,
 ) -> list[Prompter]:
     prompters = []
-    if "point" in inferer.supported_prompts:
-        if "NPointsPer2DSlicePrompter" in wanted_prompt_styles:
-            prompters.append(
-                NPointsPer2DSlicePrompter(
-                    inferer,
-                    n_points_per_slice=pro_conf.twoD_n_click_random_points,
-                    seed=seed,
+    if inferer.dim == 2:
+        if "point" in inferer.supported_prompts:
+            if "NPointsPer2DSlicePrompter" in wanted_prompt_styles:
+                prompters.append(
+                    NPointsPer2DSlicePrompter(
+                        inferer,
+                        n_points_per_slice=pro_conf.twoD_n_click_random_points,
+                        seed=seed,
+                    )
                 )
-            )
-        if "PointInterpolationPrompter" in wanted_prompt_styles:
-            prompters.append(
-                PointInterpolationPrompter(
-                    inferer,
-                    n_slice_point_interpolation=pro_conf.twoD_n_slice_point_interpolation,
-                    seed=seed,
+            if "PointInterpolationPrompter" in wanted_prompt_styles:
+                prompters.append(
+                    PointInterpolationPrompter(
+                        inferer,
+                        n_slice_point_interpolation=pro_conf.twoD_n_slice_point_interpolation,
+                        seed=seed,
+                    )
                 )
-            )
-        if "PointPropagationPrompter" in wanted_prompt_styles:
-            prompters.append(
-                PointPropagationPrompter(
-                    inferer,
-                    n_seed_points_point_propagation=pro_conf.twoD_n_seed_points_point_propagation,
-                    n_points_propagation=pro_conf.twoD_n_points_propagation,
-                    seed=seed,
+            if "PointPropagationPrompter" in wanted_prompt_styles:
+                prompters.append(
+                    PointPropagationPrompter(
+                        inferer,
+                        n_seed_points_point_propagation=pro_conf.twoD_n_seed_points_point_propagation,
+                        n_points_propagation=pro_conf.twoD_n_points_propagation,
+                        seed=seed,
+                    )
                 )
-            )
-    if "box" in inferer.supported_prompts:
-        if "BoxPer2DSlice" in wanted_prompt_styles:
-            prompters.append(
-                BoxPer2DSlice(
-                    inferer,
-                    seed=seed,
+        if "box" in inferer.supported_prompts:
+            if "BoxPer2DSlice" in wanted_prompt_styles:
+                prompters.append(
+                    BoxPer2DSlicePrompter(
+                        inferer,
+                        seed=seed,
+                    )
                 )
-            )
-        if "BoxPer2dSliceFrom3DBox" in wanted_prompt_styles:
-            prompters.append(BoxPer2dSliceFrom3DBox(inferer, seed))
-        if "BoxInterpolationPrompter" in wanted_prompt_styles:
-            prompters.append(
-                BoxInterpolationPrompter(
-                    inferer,
-                    seed,
-                    n_slice_box_interpolation=pro_conf.twoD_n_slice_box_interpolation,
+            if "BoxPer2dSliceFrom3DBox" in wanted_prompt_styles:
+                prompters.append(BoxPer2dSliceFrom3DBoxPrompter(inferer, seed))
+            if "BoxInterpolationPrompter" in wanted_prompt_styles:
+                prompters.append(
+                    BoxInterpolationPrompter(
+                        inferer,
+                        seed,
+                        n_slice_box_interpolation=pro_conf.twoD_n_slice_box_interpolation,
+                    )
                 )
-            )
-        if "BoxPropagation" in wanted_prompt_styles:
-            prompters.append(BoxPropagation(inferer, seed))
+            if "BoxPropagation" in wanted_prompt_styles:
+                prompters.append(BoxPropagationPrompter(inferer, seed))
+    elif inferer.dim == 3:
+        if "point" in inferer.supported_prompts:
+            prompters.append(NPoints3DVolumePrompter(inferer, seed, n_points=pro_conf.threeD_n_click_random_points))
+        if "box" in inferer.supported_prompts:
+            prompters.append(Box3DVolumePrompter(inferer, seed))
+    else:
+        raise ValueError(f"Inferer dimension '{inferer.dim}' not supported. Choose from [2, 3]")
     return prompters
