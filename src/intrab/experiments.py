@@ -18,6 +18,9 @@ import nibabel as nib
 from tqdm import tqdm
 import shutil
 
+from intrab.utils.io import binarize_gt
+from nneval.evaluate_semantic import semantic_evaluation
+
 
 # ToDo: Make this run_organ_experiments
 def run_experiments(
@@ -63,16 +66,20 @@ def run_experiments(
     ]
 
     # Initialize results dictionary
-    results = []
 
     # Loop through all image and label pairs
+    target_names: set[str] = []
     for img_path, gt_path in tqdm(imgs_gts, desc="looping through files\n"):
         base_name = os.path.basename(gt_path)
         multi_class_gt = inferer.get_transformed_groundtruth(gt_path)
 
         # Loop through each organ label except the background
         for target, target_label in tqdm(targets.items(), desc="looping through organs\n"):
+            target_name: str = target + "__" + target_label
+            target_names.add(target_name)
             binary_gt = np.where(multi_class_gt == target_label, 1, 0)
+            # Save the binarised ground truth next to the predictions for easy access -- Needed for evaluation
+            binarize_gt(gt_path, target_label).to_filename(results_dir / "binarised_gts" / target_name / base_name)
 
             if np.all(binary_gt == 0):
                 logger.debug(f"Skipping {gt_path} missing segmentation for {target}")
@@ -96,15 +103,18 @@ def run_experiments(
                 prompter.set_groundtruth(binary_gt)
                 if prompter.is_static:
                     prediction, _ = prompter.predict_image(image_path=img_path)
-                    prediction.to_filename(results_dir / prompter.name / target / base_name)
+                    prediction.to_filename(results_dir / prompter.name / target_name / base_name)
                 else:
                     # do something else
                     pass
 
-    # Save results
-
-    results_path = os.path.join(results_dir, "results.json")
-    with open(results_path, "w") as f:
-        json.dump(results, f, indent=4)
-
-    print(f"Results saved to {results_dir}")
+    # We always run the semantic eval on the created folders directly.
+    for target_name in target_names:
+        for prompter in prompters:
+            if prompter.is_static:
+                semantic_evaluation(
+                    semantic_pd_path=results_dir / "binarised_gts" / target_name,
+                    semantic_gt_path=results_dir / prompter.name / target_name,
+                    output_path=results_dir / prompter.name,
+                    classes_of_interest=(1,),
+                )
