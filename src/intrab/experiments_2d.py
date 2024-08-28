@@ -30,7 +30,12 @@ def run_experiments_2d(
     seed,
     experiment_overwrite=None,
     results_overwrite: bool = False,
+    debug: bool = False,
 ):
+    if debug:
+        logger.warning("Debug mode activated. Only running on the first three images.")
+        imgs_gts = imgs_gts[:3]
+
     results_dir: Path
     if os.path.exists(results_dir):
         if results_overwrite:

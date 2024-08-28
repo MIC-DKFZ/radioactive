@@ -36,7 +36,6 @@ class Inferer(ABC):
 
     # ToDo: Check if this should be an abstract method.
     #   Currently MedSAM did not have this.
-    @abstractmethod
     def postprocess_mask(self, mask):
         """Any necessary postprocessing steps"""
         pass
@@ -60,6 +59,6 @@ class Inferer(ABC):
         pass
 
     @abstractmethod
-    def get_transformed_groundtruth(self, gt_path, dtype: np.dtype = np.uint8) -> np.ndarray:
+    def get_transformed_groundtruth(self, gt_path) -> np.ndarray:
         """Transform the groundtruth to the model's coordinate system"""
         pass
