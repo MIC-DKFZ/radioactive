@@ -3,8 +3,9 @@ import numpy as np
 
 class Points:
     def __init__(self, coords, labels):
-        self.coords = np.array(coords)
-        self.labels = np.array(labels)
+
+        self.coords = np.array(coords)  # Nx3  [x, y, z]
+        self.labels = np.array(labels)  # N    [0 or 1]
 
     def get_slices_to_infer(self):
         unique_zs = set(self.coords[:, 2])
@@ -48,8 +49,8 @@ class PromptStep:
         Boxes must be supplied as a dictionary of z_slice: (x_min, y_min, x_max, y_max) or as a Boxes object
         """
         # Default initiation
-        self.coords = np.empty((0, 3))
-        self.labels = np.empty(0)
+        self.coords: np.ndarray | None = None
+        self.labels: np.ndarray | None = None
 
         self.boxes = {}
         self.has_points = self.has_boxes = False
@@ -71,12 +72,9 @@ class PromptStep:
             self.boxes = box_prompts
             self.has_boxes = True
 
-        # Process into dictionary
-        self.slices_to_infer = self.get_slices_to_infer(self.coords, self.boxes)
-
     def get_dict(self):
         self.prompts_dict = {}
-        for slice_idx in self.slices_to_infer:  # Only useful if the prompts are supplied in the or
+        for slice_idx in self.get_slices_to_infer():  # Only useful if the prompts are supplied in the or
             slice_box = self.boxes[slice_idx] if slice_idx in self.boxes.keys() else None
 
             slice_coords_mask = self.coords[:, 2] == slice_idx
@@ -93,9 +91,14 @@ class PromptStep:
     def __setitem__(self, index, value):
         self.prompts_dict[index] = value
 
-    @staticmethod
-    def get_slices_to_infer(coords, boxes):
-        points_zs = set(coords[:, 2])
-        boxes_zs = set(boxes.keys())
+    def get_slices_to_infer(
+        self,
+    ) -> set[int]:
+        points_zs = set()
+        if self.coords is not None:
+            points_zs = set(self.coords[:, 2])
+        boxes_zs = set()
+        if self.boxes is not None:
+            boxes_zs = set(self.boxes.keys())
         slices_to_infer = points_zs.union(boxes_zs)
         return slices_to_infer
