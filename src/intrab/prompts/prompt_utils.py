@@ -443,6 +443,48 @@ def get_seed_box(gt):
     return box_prompt
 
 
+def propagate_box(inferer: Inferer, seed_box: PromptStep, slices_to_infer: list[int], upwards: bool) -> dict:
+    """"""
+    if upwards:
+
+        def get_slices_to_do(current_slice, slices_to_infer):
+            max_slice = slices_to_infer.max()
+            return list(range(current_slice + 1, max_slice + 1))
+
+    else:
+
+        def get_slices_to_do(current_slice, slices_to_infer):
+            min_slice = slices_to_infer.min()
+            return list(range(current_slice - 1, min_slice - 1, -1))
+
+    assert len(seed_box.boxes) == 1, "Seed box must contain only one box prompt."
+    start_slice = list(seed_box.boxes.keys())[0]
+    todo_slices = get_slices_to_do(start_slice, slices_to_infer)
+    if len(todo_slices) == 0:
+        return {}
+    all_boxes = {}
+    # This is the prompt given for the median slice. It is directly transferred to the one above or below.
+    #   The segmentation is used to get the box for the slice after, if it should be inferred.
+    current_prompt = seed_box
+    for cnt, slice_idx in enumerate(todo_slices):
+        # We extract the box coordinates either from the segmentation or the initial box.
+        current_box = list(current_prompt.boxes.values())[0]
+        current_prompt = PromptStep(box_prompts={slice_idx: current_box})
+        # Save the current box prompt
+        all_boxes.update(current_prompt.boxes)
+
+        # If there is no next slice to infer, we can stop here.
+        if cnt != len(todo_slices) - 1:
+            segmentation = inferer.predict(current_prompt, transform=False)[0]
+            if np.all(segmentation[slice_idx] == 0):  # Terminate if no fg generated
+                logger.debug("No prediction despite prompt given. Stopping propagation.")
+                break
+            bbox_slice = _get_bbox2d_row_major(segmentation)
+            current_prompt = PromptStep(box_prompts={0: bbox_slice})
+            # The slice index is 0 deliberately as it is never needed.
+    return all_boxes
+
+
 # ToDo: Add a test that verifies that the segmentation of the
 #   box prompts are the same when run twice.
 def box_propagation(inferer: Inferer, seed_box: PromptStep, slices_to_infer) -> PromptStep:
@@ -452,69 +494,13 @@ def box_propagation(inferer: Inferer, seed_box: PromptStep, slices_to_infer) -> 
     """
 
     # Initialise segmentation to store total result
-    segmentation = np.zeros_like(inferer.img).astype(np.uint8)
-    low_res_logits = {}
+    # segmentation = np.zeros_like(inferer.img).astype(np.uint8)
 
-    box_prompt = deepcopy(seed_box)
-    all_boxes = seed_box.boxes  # Update throughout the loops to keep track of all box prompts
-    middle_idx = np.median(slices_to_infer).astype(int)
-
-    # Infer middle slice
-    slice_seg, slice_low_res_logits = inferer.predict(box_prompt, transform=False)
-    low_res_logits[middle_idx] = slice_low_res_logits[middle_idx]
-    segmentation[middle_idx] = slice_seg[middle_idx]
-
-    # Downwards branch
-    ## Modify seed prompt to exist one axial slice down
-    all_boxes[middle_idx - 1] = all_boxes[middle_idx]
-    box_prompt = PromptStep(box_prompts={k - 1: v for k, v in seed_box.boxes.items()})
-
-    downwards_iter = range(middle_idx - 1, slices_to_infer.min() - 1, -1)
-
-    for slice_idx in downwards_iter:
-        slice_seg, slice_low_res_logits = inferer.predict(box_prompt, transform=False)
-        low_res_logits[slice_idx] = slice_low_res_logits[slice_idx]
-
-        segmentation[slice_idx] = slice_seg[slice_idx]
-
-        if np.all(segmentation[slice_idx] == 0):  # Terminate if no fg generated
-            logger.debug("No prediction despite prompt given. Stopping propagation.")
-            break
-
-        # Update prompt
-        bbox_slice = _get_bbox2d_row_major(segmentation[slice_idx])
-        all_boxes[slice_idx - 1] = bbox_slice
-        box_prompt = PromptStep(
-            box_prompts={slice_idx - 1: bbox_slice}
-        )  # Notice the -1: this is the prompt for one slice down
-
-    # Upward branch
-    ## Modify seed prompt to exist one axial slice up
-    all_boxes[middle_idx + 1] = all_boxes[middle_idx]
-    box_prompt = PromptStep(box_prompts={k + 1: v for k, v in seed_box.boxes.items()})
-
-    upwards_iter = range(middle_idx + 1, slices_to_infer.max() + 1)
-
-    for slice_idx in upwards_iter:
-        slice_seg, slice_low_res_logits = inferer.predict(box_prompt, transform=False)
-        low_res_logits[slice_idx] = slice_low_res_logits[slice_idx]
-        segmentation[slice_idx] = slice_seg[slice_idx]
-
-        if np.all(segmentation[slice_idx] == 0):  # Terminate if no fg generated
-            logger.debug("No prediction despite prompt given. Stopping propagation.")
-            break
-
-        # Update prompt
-        bbox_slice = _get_bbox2d_row_major(segmentation[slice_idx])
-        all_boxes[slice_idx + 1] = bbox_slice
-        box_prompt = PromptStep(
-            box_prompts={slice_idx + 1: bbox_slice}
-        )  # Notice the +1: this is the prompt for one slice up
-
-    all_boxes = {
-        k: all_boxes[k] for k in slices_to_infer if k in all_boxes.keys()
-    }  # Removes top and bottom box - they weren't used. 'if clause' in case propagation terminated early.
-
-    all_boxes = PromptStep(box_prompts=all_boxes)
-
-    return all_boxes
+    # box_prompt = deepcopy(seed_box)
+    # all_boxes =   # Update throughout the loops to keep track of all box prompts
+    # middle_idx = np.median(slices_to_infer).astype(int)
+    upwards_boxes = propagate_box(inferer, seed_box, slices_to_infer, upwards=True)
+    downward_boxes = propagate_box(inferer, seed_box, slices_to_infer, upwards=False)
+    # Combine all boxes
+    all_boxes = {**seed_box.boxes, **upwards_boxes, **downward_boxes}
+    return PromptStep(box_prompts=all_boxes)
