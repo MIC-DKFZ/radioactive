@@ -54,15 +54,6 @@ def run_experiments(
         + "Right now this is assumed to be correct"
     )
 
-    # # Debugging: Overwrite experiments
-    # if experiment_overwrite:
-    #     experiments = {ex: experiments[ex] for ex in experiment_overwrite if ex in experiments.keys()}
-    #     interactive_experiments = {
-    #         ex: experiments[ex] for ex in experiment_overwrite if ex in interactive_experiments.keys()
-    #     }
-    # for p in prompters:
-    #     results_dir / p.name
-    # Todo: Remove when exclusion happens earlier.
     targets: dict = {k.replace("/", "_"): v for k, v in label_dict.items() if k != "background"}
 
     [
@@ -109,73 +100,6 @@ def run_experiments(
                 else:
                     # do something else
                     pass
-
-            # # Now handle interactive experiments
-            # for exp_name, prompting_func in tqdm(
-            #     interactive_experiments.items(), desc="looping through interactive experiments", leave=False
-            # ):
-            #     # Set the few things that differ depending on the seed method
-            #     if exp_name in ["point_propagation_interactive", "box_propagation_interactive"]:
-            #         segmentation, low_res_masks, prompt = prompting_func(img, organ_mask, slices_to_infer)
-            #         init_dof = 5
-            #     else:
-            #         prompt = prompting_func(organ_mask)
-            #         segmentation, low_res_masks = inferer.predict(
-            #             img, prompt, return_low_res_logits=True, use_stored_embeddings=True
-            #         )
-            #         init_dof = 9
-
-            #     if save_segs:
-            #         dice_scores, dofs, segmentations, prompts = iterate_2d(
-            #             inferer,
-            #             img,
-            #             organ_mask,
-            #             segmentation,
-            #             low_res_masks,
-            #             prompt,
-            #             inferer.pass_prev_prompts,
-            #             use_stored_embeddings=True,
-            #             scribble_length=0.6,
-            #             contour_distance=3,
-            #             disk_size_range=(0, 3),
-            #             init_dof=init_dof,
-            #             perf_bound=exp_params.perf_bound,
-            #             dof_bound=exp_params.dof_bound,
-            #             seed=seed,
-            #             verbose=False,
-            #             detailed=True,
-            #         )
-            #     else:
-            #         dice_scores, dofs = iterate_2d(
-            #             inferer,
-            #             img,
-            #             organ_mask,
-            #             segmentation,
-            #             low_res_masks,
-            #             prompt,
-            #             inferer.pass_prev_prompts,
-            #             use_stored_embeddings=True,
-            #             scribble_length=0.6,
-            #             contour_distance=3,
-            #             disk_size_range=(0, 3),
-            #             init_dof=init_dof,
-            #             perf_bound=exp_params.perf_bound,
-            #             dof_bound=exp_params.dof_bound,
-            #             seed=seed,
-            #             verbose=False,
-            #         )
-
-            #     results[exp_name][target][base_name] = {"dof": dofs, "dice_scores": dice_scores}
-
-            #     if save_segs:
-            #         for i, segmentation in enumerate(segmentations):
-            #             seg_orig_ori = inv_transform(segmentation)  # Reorient segmentation
-            #             save_path = os.path.join(results_dir, exp_name, target, base_name).replace(
-            #                 ".nii.gz", f"_seg_{i}.nii.gz"
-            #             )
-            #             seg_orig_ori.to_filename(save_path)
-
-            # inferer.clear_embeddings()
 
     # Save results
 
