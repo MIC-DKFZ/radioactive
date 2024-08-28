@@ -20,7 +20,7 @@ import shutil
 
 
 # ToDo: Make this run_organ_experiments
-def run_experiments_2d(
+def run_experiments(
     inferer: Inferer,
     imgs_gts: list[tuple[str, str]],
     results_dir: Path,
