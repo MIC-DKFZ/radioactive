@@ -36,6 +36,7 @@ dependencies = [
     'segment_anything',
     'pre-commit',
     'nbstripout',
+    'nneval',
 ]
 
 readme = "README.md"
