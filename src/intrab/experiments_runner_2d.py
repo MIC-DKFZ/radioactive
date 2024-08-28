@@ -6,7 +6,7 @@ from intrab.model.inferer import Inferer
 from intrab.prompts.prompt_hparams import PromptConfig
 from intrab.model.model_utils import inferer_registry, checkpoint_registry, model_registry
 
-from intrab.experiments_2d import run_experiments_2d
+from intrab.experiments import run_experiments
 from intrab.utils.io import get_labels_from_dataset_json, get_dataset_path_by_id, get_img_gts, read_yaml_config
 from intrab.utils.paths import get_results_path
 from argparse import ArgumentParser
@@ -64,7 +64,7 @@ if __name__ == "__main__":
                 logger.info(f"Instantiating '{model_name}' with checkpoint '{checkpoint_path}'")
                 inferer: Inferer = inferer_registry[model_name](checkpoint_path, device)
                 
-                run_experiments_2d(
+                run_experiments(
                     inferer,
                     imgs_gts,
                     results_path,
@@ -73,4 +73,5 @@ if __name__ == "__main__":
                     wanted_prompt_styles,
                     seed=1,
                     experiment_overwrite=None,
+                    debug=True
                 )
