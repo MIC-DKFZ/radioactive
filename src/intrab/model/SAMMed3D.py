@@ -8,6 +8,7 @@ import nibabel as nib
 
 
 from intrab.model.inferer import Inferer
+from intrab.prompts.prompt import PromptStep
 from intrab.utils.SAMMed3D_segment_anything.build_sam3D import build_sam3D_vit_b_ori
 
 SAM3D = TypeVar("SAM3D")
@@ -28,13 +29,13 @@ def load_sammed3d(checkpoint_path, device="cuda"):
 # ToDo: Make sure the spacing is correct for SAMMed3D
 class SAMMed3DInferer(Inferer):
     dim = 3
-    supported_prompts = ("point",)
+    supported_prompts = ("point", "mask")
     required_shape = (128, 128, 128)  # Hard code to match training
     offset_mode = "center"  # Changing this will require siginificant reworking of code; currently doesn't matter anyway since the other method doesn't work
     pass_prev_prompts = True
 
-    def __init__(self, model, use_only_first_point=False):
-        self.model = model
+    def __init__(self, checkpoint, device="cuda", use_only_first_point=True):
+        super().__init__(checkpoint, device, device="cuda")
         self.use_only_first_point = use_only_first_point
         self.stored_cropping_params, self.stored_padding_params, self.stored_patch_list = None, None, None
 
@@ -57,11 +58,15 @@ class SAMMed3DInferer(Inferer):
 
         return low_res_logits
 
+    def load_model(self, checkpoint_path, device):
+        return load_sammed3d(checkpoint_path, device)
+
     def set_image(self, img_path):
         if self._image_already_loaded(img_path=img_path):
             return
         # Original code: the ToCanonical function doesn't work without metadata anyway, so it efectively only reads in the image. For ease of preserving metadata, I use nib
         img = nib.load(img_path)
+        # ToDo: Preprocess the image 
         img_data = img.get_fdata()
         self.img = img_data
         self.affine = img.affine
@@ -70,7 +75,13 @@ class SAMMed3DInferer(Inferer):
     def clear_embeddings(self):
         self.stored_cropping_params, self.stored_padding_params, self.stored_patch_list = None, None, None
 
-    def preprocess_into_patches(self, img3D, prompt=None, cheat=False, gt=None):
+    def transform_to_model_coords(self, some_array: np.ndarray) -> np.ndarray:
+        return super().transform_to_model_coords(some_array)
+
+    def get_transformed_groundtruth(self, gt_path) -> np.ndarray:
+        return super().get_transformed_groundtruth(gt_path)
+
+    def preprocess_img(self, img3D, prompt=None, cheat=False, gt=None):
         img3D = torch.from_numpy(img3D)
 
         subject = tio.Subject(image=tio.ScalarImage(tensor=img3D.unsqueeze(0)))
@@ -217,8 +228,7 @@ class SAMMed3DInferer(Inferer):
     @torch.no_grad()
     def predict(
         self,
-        prompt,
-        prev_low_res_logits=None,
+        prompt: PromptStep,
         cheat=False,
         gt=None,
         store_patching=False,
@@ -245,7 +255,7 @@ class SAMMed3DInferer(Inferer):
                 self.stored_patch_list,
             )
         else:  # If stored patchings shouldn't be used, generate new ones
-            cropping_params, padding_params, patch_list = self.preprocess_into_patches(self.img, prompt, cheat, gt)
+            cropping_params, padding_params, patch_list = self.preprocess_img(self.img, prompt, cheat, gt)
         if (
             store_patching and not use_stored_patching
         ):  # store patching if desired. If use_stored_patching, this would do nothing
@@ -294,7 +304,4 @@ class SAMMed3DInferer(Inferer):
         if transform:
             pred = nib.Nifti1Image(pred, self.affine)
 
-        if return_low_res_logits:
-            return pred, low_res_logits.cpu().squeeze()
-        else:
-            return pred
+        return pred, low_res_logits.cpu().squeeze()

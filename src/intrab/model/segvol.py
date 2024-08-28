@@ -300,8 +300,7 @@ class SegVolInferer(Inferer):
         return segmentation
 
     def predict(self, prompt, text_prompt=None, return_logits=False, transform=True, seed=1):
-        raise NotImplementedError("To be updated.")
-        if not self.image_set:
+        if self.loaded_image is None:
             raise RuntimeError("Must first set image!")
 
         if not isinstance(prompt, (Boxes3D, Points)):

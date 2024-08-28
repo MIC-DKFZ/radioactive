@@ -178,7 +178,7 @@ class SAMInferer(Inferer):
             - Modify in line with the interpolation
             - Collect into a dictionary of slice:slice prompt
         """
-        preprocessed_prompts_dict = {slice_idx: {"point": None, "box": None} for slice_idx in prompt.slices_to_infer}
+        preprocessed_prompts_dict = {slice_idx: {"point": None, "box": None} for slice_idx in prompt.get_slices_to_infer()}
 
         if prompt.has_points:
             coords = prompt.coords
@@ -192,7 +192,7 @@ class SAMInferer(Inferer):
 
             # Collate
 
-            for slice_idx in prompt.slices_to_infer:
+            for slice_idx in prompt.get_slices_to_infer():
                 slice_coords_mask = coords_resized[:, 2] == slice_idx
                 slice_coords, slice_labs = (
                     coords_resized[slice_coords_mask, :2],
@@ -240,12 +240,12 @@ class SAMInferer(Inferer):
 
         return segmentation
 
-    def predict(self, prompt, mask_dict={}, return_logits=False, transform=True):
+    def predict(self, prompt: PromptStep, mask_dict={}, return_logits=False, transform=True):
         if not (isinstance(prompt, PromptStep)):
             raise TypeError(f"Prompts must be supplied as an instance of the Prompt class.")
         if prompt.has_boxes and prompt.has_points:
             warnings.warn("Both point and box prompts have been supplied; the model has not been trained on this.")
-        slices_to_infer = prompt.slices_to_infer
+        slices_to_infer = prompt.get_slices_to_infer()
 
 
         prompt = deepcopy(prompt)
@@ -264,8 +264,7 @@ class SAMInferer(Inferer):
         slices_processed = self.preprocess_img(self.img, slices_to_process)
 
         self.slice_lowres_outputs = {}
-        if self.verbose:
-            slices_to_infer = tqdm(slices_to_infer, desc="Performing inference on slices")
+
         for slice_idx in slices_to_infer:
             if slice_idx in self.image_embeddings_dict.keys():
                 image_embedding = self.image_embeddings_dict[slice_idx].to(self.device)

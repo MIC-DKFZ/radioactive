@@ -151,7 +151,7 @@ class MedSAMInferer(Inferer):
         return slices_processed
 
     def preprocess_prompt(self, prompt):
-        preprocessed_prompts_dict = {slice_idx: {"point": None, "box": None} for slice_idx in prompt.slices_to_infer}
+        preprocessed_prompts_dict = {slice_idx: {"point": None, "box": None} for slice_idx in prompt.get_slices_to_infer()}
 
         if prompt.has_boxes:
             for slice_idx, box in prompt.boxes.items():
@@ -198,7 +198,7 @@ class MedSAMInferer(Inferer):
         if self.loaded_image is None:
             raise RuntimeError("Need to set an image to predict on!")
 
-        slices_to_infer = prompt.slices_to_infer
+        slices_to_infer = prompt.get_slices_to_infer()
 
         preprocessed_prompt_dict = self.preprocess_prompt(prompt)
 

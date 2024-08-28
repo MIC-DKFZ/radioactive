@@ -4,7 +4,6 @@ import torch
 import numpy as np
 import torch.nn.functional as F
 from copy import deepcopy
-from tqdm import tqdm
 from albumentations.pytorch import ToTensorV2
 import albumentations as A
 import cv2
@@ -18,9 +17,9 @@ from intrab.prompts.prompt import PromptStep
 from intrab.model.inferer import Inferer
 
 
-def load_sammed2d(checkpoint_path, device="cuda"):
+def load_sammed2d(checkpoint_path, image_size, device="cuda"):
     args = Namespace()
-    args.image_size = 256
+    args.image_size = image_size
     args.encoder_adapter = True
     args.sam_checkpoint = checkpoint_path
     model = registry_sammed2d["vit_b"](args).to(device)
@@ -35,19 +34,20 @@ class SAMMed2DInferer(Inferer):
     supported_prompts: Sequence[str] = ("box", "point", "mask")
 
     def __init__(self, checkpoint_path, device):
-        self.model = load_sammed2d(checkpoint_path, device)
-        self.inputs = None
+        super().__init__(checkpoint_path, device)
         self.logit_threshold = 0  # Hardcoded
-        self.device = self.model.device
-        self.new_size = (self.model.image_encoder.img_size, self.model.image_encoder.img_size)
+        image_size = 256
+        self.new_size = (image_size, image_size)
         self.image_embeddings_dict = {}
         self.multimask_output = True  # Hardcoded to match defaults from original
-        self.verbose = True  # Can change directly if desired
 
         self.pixel_mean, self.pixel_std = (
             self.model.pixel_mean.squeeze().cpu().numpy(),
             self.model.pixel_std.squeeze().cpu().numpy(),
         )
+
+    def load_model(self, checkpoint_path, device):
+        return load_sammed2d(checkpoint_path, self.new_size[0], device)
 
     def set_image_old(self, img_path):
         if self._image_already_loaded(img_path=img_path):
@@ -123,7 +123,7 @@ class SAMMed2DInferer(Inferer):
             image_pe=self.model.prompt_encoder.get_dense_pe(),
             sparse_prompt_embeddings=sparse_embeddings,
             dense_prompt_embeddings=dense_embeddings,
-            multimask_output=True,
+            multimask_output=self.multimask_output,
         )
 
         if self.multimask_output:
@@ -186,7 +186,9 @@ class SAMMed2DInferer(Inferer):
             - Collect into a dictionary of slice:slice prompt
         """
 
-        preprocessed_prompts_dict = {slice_idx: {"point": None, "box": None} for slice_idx in prompt.slices_to_infer}
+        preprocessed_prompts_dict = {
+            slice_idx: {"point": None, "box": None} for slice_idx in prompt.get_slices_to_infer()
+        }
 
         if prompt.has_points:
             coords, labs = prompt.coords, prompt.labels
@@ -200,7 +202,7 @@ class SAMMed2DInferer(Inferer):
             labs = torch.as_tensor(labs, dtype=int)
 
             # Collate
-            for slice_idx in prompt.slices_to_infer:
+            for slice_idx in prompt.get_slices_to_infer():
                 slice_coords_mask = coords_resized[:, 2] == slice_idx
                 slice_coords, slice_labs = (
                     coords_resized[slice_coords_mask, :2],
@@ -253,13 +255,10 @@ class SAMMed2DInferer(Inferer):
             raise TypeError(f"Prompts must be supplied as an instance of the Prompt class.")
         if prompt.has_boxes and prompt.has_points:
             warnings.warn("Both point and box prompts have been supplied; the model has not been trained on this.")
-        slices_to_infer = prompt.slices_to_infer
+        slices_to_infer = prompt.get_slices_to_infer()
 
         if not self.image_set:
             raise RuntimeError("Need to set an image to predict on!")
-
-        if self.verbose and self.image_embeddings_dict != {}:
-            print("Using previously generated image embeddings")
 
         prompt = deepcopy(prompt)
 
@@ -274,8 +273,6 @@ class SAMMed2DInferer(Inferer):
         slices_processed = self.preprocess_img(self.img, slices_to_process)
 
         self.slice_lowres_outputs = {}
-        if self.verbose:
-            slices_to_infer = tqdm(slices_to_infer, desc="Performing inference on slices")
         for slice_idx in slices_to_infer:
             # Get image embedding (either create it, or read it if stored and desired)
             if slice_idx in self.image_embeddings_dict.keys():
@@ -303,10 +300,7 @@ class SAMMed2DInferer(Inferer):
             )
             self.slice_lowres_outputs[slice_idx] = slice_raw_outputs
 
-
-        low_res_logits = {
-            k: torch.sigmoid(v).squeeze().cpu().numpy() for k, v in self.slice_lowres_outputs.items()
-        }
+        low_res_logits = {k: torch.sigmoid(v).squeeze().cpu().numpy() for k, v in self.slice_lowres_outputs.items()}
 
         segmentation = self.postprocess_slices(self.slice_lowres_outputs, return_logits)
 
