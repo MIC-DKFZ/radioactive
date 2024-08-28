@@ -65,17 +65,22 @@ def run_experiments(
         for target in targets.keys()
     ]
 
+    [
+        Path(results_dir / "binarised_gts" / (target + "__" + f"{target_label}")).mkdir(exist_ok=True, parents=True)
+        for target, target_label in targets.items()
+    ]
+
     # Initialize results dictionary
 
     # Loop through all image and label pairs
-    target_names: set[str] = []
+    target_names: set[str] = set()
     for img_path, gt_path in tqdm(imgs_gts, desc="looping through files\n"):
         base_name = os.path.basename(gt_path)
         multi_class_gt = inferer.get_transformed_groundtruth(gt_path)
 
         # Loop through each organ label except the background
         for target, target_label in tqdm(targets.items(), desc="looping through organs\n"):
-            target_name: str = target + "__" + target_label
+            target_name: str = target + "__" + f"{target_label}"
             target_names.add(target_name)
             binary_gt = np.where(multi_class_gt == target_label, 1, 0)
             # Save the binarised ground truth next to the predictions for easy access -- Needed for evaluation
