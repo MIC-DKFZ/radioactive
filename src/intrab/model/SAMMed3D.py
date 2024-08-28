@@ -227,8 +227,6 @@ class SAMMed3DInferer(Inferer):
     ):  # If iterating, use previous patching, previous embeddings
         if not isinstance(prompt, SAMMed3DInferer.supported_prompts):
             raise ValueError(f"Unsupported prompt type: got {type(prompt)}")
-        if not self.image_set:
-            raise RuntimeError("Must first set image!")
 
         prompt.coords = prompt.coords[
             :, ::-1

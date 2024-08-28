@@ -122,7 +122,6 @@ class SegVolInferer(Inferer):
         self.mask_threshold = 0
         self.infer_overlap = 0.5
         self.verbose = True  # Not used anywhere, kept for alignment with 2d models.
-        self.image_set = False
 
         self.spatial_size = (32, 256, 256)
         self.transform = transforms.Compose(
@@ -166,8 +165,6 @@ class SegVolInferer(Inferer):
         image, image_zoom_out = item["image"].float().unsqueeze(0), item["zoom_out_image"].float().unsqueeze(0)
         image_single = image[0, 0]  #
         self.cropped_shape = image_single.shape
-
-        self.image_set = True
         self.img, self.img_zoom_out = image_single, image_zoom_out
 
     def preprocess_prompt(self, prompt, prompt_type, text_prompt=None):
@@ -303,6 +300,7 @@ class SegVolInferer(Inferer):
         return segmentation
 
     def predict(self, prompt, text_prompt=None, return_logits=False, transform=True, seed=1):
+        raise NotImplementedError("To be updated.")
         if not self.image_set:
             raise RuntimeError("Must first set image!")
 

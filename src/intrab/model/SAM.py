@@ -33,6 +33,7 @@ class SAMInferer(Inferer):
     supported_prompts = ("box", "point", "mask")
 
     def __init__(self, checkpoint_path, device):
+        super(SAMInferer, self).__init__(checkpoint_path, device)
         self.prev_mask = None
         self.target_volume_shape = 128  # Hardcoded to match training
         self.target_slice_shape = 256  # Hardcoded to match training
@@ -40,7 +41,6 @@ class SAMInferer(Inferer):
         self.mask_threshold = 0
         self.device = device
         self.image_embeddings_dict = {}
-        self.image_set = False
         self.verbose = True
 
         self.pixel_mean = self.model.pixel_mean
@@ -100,7 +100,6 @@ class SAMInferer(Inferer):
             return seg_orig_ori
 
         self.img, self.inv_trans = img_data, inv_trans
-        self.image_set = True
 
     def set_image(self, img_path: Path):
         if self._image_already_loaded(img_path=img_path):
@@ -248,8 +247,6 @@ class SAMInferer(Inferer):
             warnings.warn("Both point and box prompts have been supplied; the model has not been trained on this.")
         slices_to_infer = prompt.slices_to_infer
 
-        if not self.image_set:
-            raise RuntimeError("Need to set an image to predict on!")
 
         prompt = deepcopy(prompt)
 
