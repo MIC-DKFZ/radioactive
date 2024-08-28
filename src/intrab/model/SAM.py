@@ -1,3 +1,4 @@
+from pathlib import Path
 import torch
 import numpy as np
 import torch.nn.functional as F
@@ -32,7 +33,6 @@ class SAMInferer(Inferer):
     supported_prompts = ("box", "point", "mask")
 
     def __init__(self, checkpoint_path, device):
-        self.model = load_sam(checkpoint_path, device)
         self.prev_mask = None
         self.target_volume_shape = 128  # Hardcoded to match training
         self.target_slice_shape = 256  # Hardcoded to match training
@@ -47,6 +47,9 @@ class SAMInferer(Inferer):
         self.pixel_std = self.model.pixel_std
         self.transform = ResizeLongestSide(self.model.image_encoder.img_size)
         self.input_size = None
+
+    def load_model(self, checkpoint_path, device):
+        return load_sam(checkpoint_path, device)
 
     @torch.no_grad()
     def segment(self, points, box, mask, image_embedding):
@@ -71,7 +74,7 @@ class SAMInferer(Inferer):
 
         return best_mask
 
-    def set_image(self, img_path):
+    def set_image_old(self, img_path):
         if self._image_already_loaded(img_path=img_path):
             return
         if self.image_embeddings_dict:
@@ -98,6 +101,40 @@ class SAMInferer(Inferer):
 
         self.img, self.inv_trans = img_data, inv_trans
         self.image_set = True
+
+    def set_image(self, img_path: Path):
+        if self._image_already_loaded(img_path=img_path):
+            return
+        # Load in and reorient to RAS
+        if self.image_embeddings_dict:
+            self.image_embeddings_dict = {}
+
+        self.img, self.inv_trans = self.transform_to_model_coords(img_path)
+        self.loaded_image = img_path
+
+    def transform_to_model_coords(self, nifti_path: Path) -> np.ndarray:
+        nifti: nib.Nifti1Image = nib.load(nifti_path)
+        orientation_old = io_orientation(nifti.affine)
+
+        if nib.aff2axcodes(nifti.affine) != ("R", "A", "S"):
+            nifti = nib.as_closest_canonical(nifti)
+        orientation_new = io_orientation(nifti.affine)
+        orientation_transform = ornt_transform(orientation_new, orientation_old)
+        data = nifti.get_fdata()
+        data = data.transpose(2, 1, 0)  # Reorient to zyx
+
+        def inv_trans(arr: np.ndarray):
+            arr = arr.transpose(2, 1, 0)
+            arr_nib = nib.Nifti1Image(arr, nifti.affine)
+            arr_orig_ori = arr_nib.as_reoriented(orientation_transform)
+            return arr_orig_ori
+
+        # Return the data in the new format and transformation function
+        return data, inv_trans
+
+    def get_transformed_groundtruth(self, gt_path: Path) -> np.ndarray:
+        gt_data, _ = self.transform_to_model_coords(gt_path)
+        return gt_data
 
     def preprocess_img(self, img, slices_to_process):
         """
@@ -258,9 +295,7 @@ class SAMInferer(Inferer):
             )  # Add batch dimensions
             self.slice_lowres_outputs[slice_idx] = slice_raw_outputs
 
-        low_res_logits = {
-            k: torch.sigmoid(v).squeeze().cpu().numpy() for k, v in self.slice_lowres_outputs.items()
-        }
+        low_res_logits = {k: torch.sigmoid(v).squeeze().cpu().numpy() for k, v in self.slice_lowres_outputs.items()}
 
         segmentation = self.postprocess_slices(self.slice_lowres_outputs, return_logits)
 
