@@ -258,7 +258,7 @@ class SAMMed2DInferer(Inferer):
             warnings.warn("Both point and box prompts have been supplied; the model has not been trained on this.")
         slices_to_infer = prompt.get_slices_to_infer()
 
-        if not self.image_set:
+        if self.loaded_image is None:
             raise RuntimeError("Need to set an image to predict on!")
 
         prompt = deepcopy(prompt)
