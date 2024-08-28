@@ -34,10 +34,11 @@ class SAMMed2DInferer(Inferer):
     supported_prompts: Sequence[str] = ("box", "point", "mask")
 
     def __init__(self, checkpoint_path, device):
-        super().__init__(checkpoint_path, device)
-        self.logit_threshold = 0  # Hardcoded
         image_size = 256
         self.new_size = (image_size, image_size)
+        super().__init__(checkpoint_path, device)
+        self.logit_threshold = 0  # Hardcoded
+
         self.image_embeddings_dict = {}
         self.multimask_output = True  # Hardcoded to match defaults from original
 
