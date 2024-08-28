@@ -92,7 +92,7 @@ def run_experiments(
                 logger.debug(f"Skipping {gt_path} missing segmentation for {target}")
                 img = nib.load(gt_path)
                 empty_gt = nib.Nifti1Image(binary_gt.astype(np.float32), img.affine)
-                empty_gt.to_filename(results_dir / prompter.name / target / base_name)
+                empty_gt.to_filename(results_dir / prompter.name / target_name / base_name)
                 continue
 
             # ToDo: Include again, Just temporary measure to see if inference works.
@@ -125,5 +125,5 @@ def run_experiments(
                         semantic_gt_path=results_dir / prompter.name / target_name,
                         output_path=results_dir / prompter.name,
                         classes_of_interest=(1,),
-                        output_name=target_name
+                        output_name=target_name,
                     )
