@@ -1,16 +1,14 @@
 from loguru import logger
 import numpy as np
 from copy import deepcopy
-from tqdm import tqdm
 
 # from skimage.morphology import dilation, ball
 from skimage.measure import label
 from scipy.spatial import cKDTree
 from scipy.interpolate import interp1d
-import warnings
 
 from intrab.model.inferer import Inferer
-from intrab.prompts.prompt import PromptStep
+from intrab.prompts.prompt import Points, PromptStep
 from intrab.prompts.prompt_hparams import PromptConfig
 
 # def get_neg_clicks_3D(gt, n_clicks, border_distance = 10): # Warning: dilation function is VERY slow! ~ 13 seconds on my machine
@@ -31,6 +29,51 @@ from intrab.prompts.prompt_hparams import PromptConfig
 
 #     neg_coords = Points(coords = neg_coords, labels =  [0]*len(neg_coords))
 #     return(neg_coords)
+
+
+def increment(values: np.ndarray, upwards: bool):
+    return (values + 1) if upwards else (values - 1)
+
+
+def get_actual_indices_of_selected_indices(
+    proposed_slices: list[int], z_indices_with_foreground: list[int]
+) -> list[int]:
+    """Makes sure that the proposed slices are actually containing foreground.
+    This is only necessary for cases where organs are not one continuous volume, but have gaps in between slices."""
+    actually_selected_slices = []
+    for sel_sli in proposed_slices:
+        if sel_sli in z_indices_with_foreground:
+            actually_selected_slices.append(sel_sli)
+        else:
+            actually_selected_slices.append(
+                z_indices_with_foreground[np.argmin(np.abs(z_indices_with_foreground - sel_sli))]
+            )
+    return actually_selected_slices
+
+
+def get_slices_to_do(
+    current_slice, slices_to_infer, upwards: bool, include_start: bool = False, include_end: bool = False
+):
+    start_offset = 0 if include_start else 1
+    end_offset = 1 if include_end else 0
+
+    if upwards:
+        max_slice = slices_to_infer.max()
+        return list(range(current_slice + start_offset, max_slice + end_offset))
+    else:
+        min_slice = slices_to_infer.min()
+        return list(range(current_slice - start_offset, min_slice - end_offset, -1))
+
+
+def get_2d_bbox_of_gt_slice(mask):  # Bbox function only used in this function
+    i_any = np.any(mask, axis=1)
+    j_any = np.any(mask, axis=0)
+    i_min, i_max = np.where(i_any)[0][[0, -1]]
+    j_min, j_max = np.where(j_any)[0][[0, -1]]
+    bb_min = np.array([i_min, j_min])
+    bb_max = np.array([i_max, j_max])
+
+    return bb_min, bb_max
 
 
 def get_pos_clicks2D_row_major(gt, n_clicks, seed=None):
@@ -179,29 +222,35 @@ def get_largest_CC(segmentation):
     return largestCC.astype(int)
 
 
-def get_fg_points_from_cc_centers(gt, n):
-    def get_bbox(mask):  # Bbox function only used in this function
-        i_any = np.any(mask, axis=1)
-        j_any = np.any(mask, axis=0)
-        i_min, i_max = np.where(i_any)[0][[0, -1]]
-        j_min, j_max = np.where(j_any)[0][[0, -1]]
-        bb_min = np.array([i_min, j_min])
-        bb_max = np.array([i_max, j_max])
-
-        return bb_min, bb_max
-
+def get_fg_point_from_cc_center(gt_slice: np.ndarray) -> np.ndarray:
     """
-    Takes n equally spaced slices starting at z_min and ending at z_max, where z_min is the lowest transverse slice of gt containing fg, and z_max similarly with highest, 
+    Extract the nearest foreground point from the center of mass of the largest connected component.
+
+    :param gt_slice: A 2D binary mask.
+    :return: The nearest foreground point index [x, y].  <-- To be verified
+    """
+    largest_cc = get_largest_CC(gt_slice)
+    fg_indices = np.where(largest_cc)
+    fg_mean_indices = np.mean(fg_indices, axis=1).round().astype(int)
+    # ToDo: verify x,y are not flipped.
+    nearest_fg_point = get_nearest_fg_point(fg_mean_indices, largest_cc)
+    return nearest_fg_point
+
+
+def get_fg_points_from_cc_centers(gt, n):
+    """
+    Takes n equally spaced slices starting at z_min and ending at z_max, where z_min is the lowest transverse slice of gt containing fg, and z_max similarly with highest,
     finds the largest connected component of fg, takes the center of its bounding box and takes the nearest fg point. Simulates a clinician clicking in the 'center of the main mass of the roi' per slice
     """
     z_indices = np.where(np.any(gt, axis=(1, 2)))[0]
     min_z, max_z = np.min(z_indices), np.max(z_indices)
     selected_slices = np.linspace(min_z, max_z, num=n, dtype=int)
+    selected_slices = get_actual_indices_of_selected_indices(selected_slices, z_indices)
 
     corrected_points = np.empty([n, 3], dtype=int)
     for i, z in enumerate(selected_slices):  # selected_slices:
         largest_cc = get_largest_CC(gt[z])
-        bbox_min, bbox_max = get_bbox(largest_cc)
+        bbox_min, bbox_max = get_2d_bbox_of_gt_slice(largest_cc)
 
         slice_fg_center = np.vstack([bbox_min, bbox_max]).mean(axis=0).round()
 
@@ -249,6 +298,10 @@ def point_interpolation(gt, n_slices, interpolation="linear"):
     return point_prompt
 
 
+# ToDo: Add an additional function that takes the center-of-mass of the largest component.
+#   Or a random point from a strongly eroded version of the groundtruth.
+
+
 def get_fg_points_from_slice(slice, n_clicks, seed=None):
     if seed:
         np.random.seed(seed)
@@ -274,12 +327,7 @@ def get_seed_boxes(gt, n) -> PromptStep:
     if n > 1:
         selected_slices = np.linspace(min_z, max_z, num=n, dtype=int)
         # This can contain duplicates or slices without foreground (if not continuous foreground)
-        actually_selected_slices = []
-        for sel_sli in selected_slices:
-            if sel_sli in z_indices:
-                actually_selected_slices.append(sel_sli)
-            else:
-                actually_selected_slices.append(z_indices[np.argmin(np.abs(z_indices - sel_sli))])
+        actually_selected_slices = get_actual_indices_of_selected_indices(selected_slices, z_indices)
 
     if n == 1:
         median_index = int(np.median(z_indices))
@@ -316,6 +364,7 @@ def box_interpolation(seed_boxes: PromptStep):
 
 def get_seed_point(gt, n_clicks, seed) -> PromptStep:
     slices_to_infer = np.where(np.any(gt, axis=(1, 2)))[0]
+    # ToDo: Maybe pull not always the median slice.
     middle_idx = np.median(slices_to_infer).astype(int)
 
     pos_clicks_slice = get_fg_points_from_slice(gt[middle_idx], n_clicks, seed)
@@ -329,11 +378,50 @@ def get_seed_point(gt, n_clicks, seed) -> PromptStep:
     return pts_prompt
 
 
-def point_propagation(inferer: Inferer, seed_prompt, slices_to_infer, seed=None, n_clicks=5, verbose=True):
+def propagate_point(
+    inferer: Inferer, seed_prompt: PromptStep, slices_to_infer: list[int], upwards: bool, seed: int, n_clicks=5
+) -> tuple[np.ndarray, np.ndarray]:
+
+    # assert len(seed_prompt.coords) == 1, "Seed point must contain only one point prompt."
+    start_slice = seed_prompt.coords[0][-1]
+    # The todo slices INCLUDES the seed slice. This is different from the box propagation.
+    slices_todo = get_slices_to_do(start_slice, slices_to_infer, upwards, include_start=True, include_end=False)
+
+    # Get the coordinates of the next point prompt -- Used to get the next slice's Prompt
+    all_coords = [seed_prompt.coords]
+    all_labels = [seed_prompt.labels]
+    current_prompt = seed_prompt
+    for slice in slices_todo:
+        current_seg, _ = inferer.predict(current_prompt, transform=False)
+        point_coords = get_fg_points_from_slice(current_seg, n_clicks=n_clicks, seed=seed)
+        coords_xyz = point_coords[:, ::-1]  # zyx to xyz
+        coords_xyz[:, -1] = increment(coords_xyz[:, -1], upwards)  # Increment the z-coordinate
+        labels = np.ones_like(point_coords[:, 0])
+        all_coords.append(coords_xyz)
+        all_labels.append(labels)
+        current_prompt = PromptStep(Points(coords=coords_xyz, labels=labels))
+    return np.concatenate(all_coords, axis=0), np.concatenate(all_labels, axis=0)
+
+
+def point_propagation(
+    inferer: Inferer, seed_prompt: PromptStep, slices_to_infer, seed=None, n_clicks: int = 5
+) -> PromptStep:
+
+    upwards_coords, upward_labels = propagate_point(
+        inferer, seed_prompt, slices_to_infer, upwards=True, seed=seed, n_clicks=n_clicks
+    )
+    downward_coords, downward_labels = propagate_point(
+        inferer, seed_prompt, slices_to_infer, upwards=False, seed=seed, n_clicks=n_clicks
+    )
+    # Skip the first slice as it it the seed slice for both upwards and downwards
+    all_coords = np.concatenate((upwards_coords, downward_coords[n_clicks:]), axis=0)
+    all_labels = np.concatenate((upward_labels, downward_labels[n_clicks:]), axis=0)
+    return PromptStep(Points(coords=all_coords, labels=all_labels))
+
+
+def point_propagation_old(inferer: Inferer, seed_prompt: PromptStep, slices_to_infer, seed=None, n_clicks=5):
     if seed:
         np.random.seed(seed)
-    verbose_state = inferer.verbose  # Make inferer not verbose for this experiment
-    inferer.verbose = False
 
     seed_coords = [seed_prompt.coords]  # keep track of all points
 
@@ -359,8 +447,6 @@ def point_propagation(inferer: Inferer, seed_prompt, slices_to_infer, seed=None,
     pts_prompt = PromptStep(point_prompts=(pos_coords, [1] * len(seed_prompt.coords)))
 
     downwards_iter = range(middle_idx - 1, slices_to_infer.min() - 1, -1)
-    if verbose:
-        downwards_iter = tqdm(downwards_iter, desc="Propagating down")
 
     for slice_idx in downwards_iter:
         slice_seg, slice_low_res_logits = inferer.predict(pts_prompt, transform=False)
@@ -375,9 +461,8 @@ def point_propagation(inferer: Inferer, seed_prompt, slices_to_infer, seed=None,
         pos_clicks_slice = get_fg_points_from_slice(slice_seg[slice_idx], n_clicks)
 
         # Put coords in 3d context
-        z_col = np.full(
-            (n_clicks, 1), slice_idx - 1
-        )  # create z column to add. Note slice_idx-1: these are the prompts for the next slice down
+        z_col = np.full((n_clicks, 1), slice_idx - 1)
+        # create z column to add. Note slice_idx-1: these are the prompts for the next slice down
         pos_coords = np.hstack([z_col, pos_clicks_slice])
         pos_coords = pos_coords[:, [2, 1, 0]]  # Change from zyx to xyz
         downwards_coords.append(pos_coords)
@@ -393,8 +478,6 @@ def point_propagation(inferer: Inferer, seed_prompt, slices_to_infer, seed=None,
     pts_prompt = PromptStep(point_prompts=(pos_coords, [1] * len(seed_prompt.coords)))
 
     upwards_iter = range(middle_idx + 1, slices_to_infer.max() + 1)
-    if verbose:
-        upwards_iter = tqdm(upwards_iter, desc="Propagating up")
 
     for slice_idx in upwards_iter:
         slice_seg, slice_low_res_logits = inferer.predict(pts_prompt, transform=False)
@@ -417,8 +500,6 @@ def point_propagation(inferer: Inferer, seed_prompt, slices_to_infer, seed=None,
         upward_coords.append(pos_coords)
         pts_prompt = PromptStep(point_prompts=(pos_coords, [1] * n_clicks))
 
-    inferer.verbose = verbose_state  # Return inferer verbosity to initial state
-
     coords = np.concatenate(downwards_coords[::-1] + seed_coords + upward_coords, axis=0)
     is_in_slices_inferred = np.isin(coords[:, 0], slices_to_infer)
     coords = coords[
@@ -434,6 +515,8 @@ def point_propagation(inferer: Inferer, seed_prompt, slices_to_infer, seed=None,
 
 def get_seed_box(gt):
     slices_to_infer = np.where(np.any(gt, axis=(1, 2)))[0]
+    # ToDo: Maybe pull not always the median slice.
+    #   Make this jittered between 30-70 percent of the volume
     middle_idx = np.median(slices_to_infer).astype(int)
 
     bbox_slice = _get_bbox2d_row_major(gt[middle_idx])
@@ -445,28 +528,28 @@ def get_seed_box(gt):
 
 def propagate_box(inferer: Inferer, seed_box: PromptStep, slices_to_infer: list[int], upwards: bool) -> dict:
     """"""
-    if upwards:
+    # if upwards:
 
-        def get_slices_to_do(current_slice, slices_to_infer):
-            max_slice = slices_to_infer.max()
-            return list(range(current_slice + 1, max_slice + 1))
+    #     def get_slices_to_do(current_slice, slices_to_infer):
+    #         max_slice = slices_to_infer.max()
+    #         return list(range(current_slice + 1, max_slice + 1))
 
-    else:
+    # else:
 
-        def get_slices_to_do(current_slice, slices_to_infer):
-            min_slice = slices_to_infer.min()
-            return list(range(current_slice - 1, min_slice - 1, -1))
+    #     def get_slices_to_do(current_slice, slices_to_infer):
+    #         min_slice = slices_to_infer.min()
+    #         return list(range(current_slice - 1, min_slice - 1, -1))
 
     assert len(seed_box.boxes) == 1, "Seed box must contain only one box prompt."
     start_slice = list(seed_box.boxes.keys())[0]
-    todo_slices = get_slices_to_do(start_slice, slices_to_infer)
-    if len(todo_slices) == 0:
+    slices_todo = get_slices_to_do(start_slice, slices_to_infer, upwards, include_start=False, include_end=True)
+    if len(slices_todo) == 0:
         return {}
     all_boxes = {}
     # This is the prompt given for the median slice. It is directly transferred to the one above or below.
     #   The segmentation is used to get the box for the slice after, if it should be inferred.
     current_prompt = seed_box
-    for cnt, slice_idx in enumerate(todo_slices):
+    for cnt, slice_idx in enumerate(slices_todo):
         # We extract the box coordinates either from the segmentation or the initial box.
         current_box = list(current_prompt.boxes.values())[0]
         current_prompt = PromptStep(box_prompts={slice_idx: current_box})
@@ -474,7 +557,7 @@ def propagate_box(inferer: Inferer, seed_box: PromptStep, slices_to_infer: list[
         all_boxes.update(current_prompt.boxes)
 
         # If there is no next slice to infer, we can stop here.
-        if cnt != len(todo_slices) - 1:
+        if cnt != len(slices_todo) - 1:
             segmentation = inferer.predict(current_prompt, transform=False)[0]
             if np.all(segmentation[slice_idx] == 0):  # Terminate if no fg generated
                 logger.debug("No prediction despite prompt given. Stopping propagation.")
