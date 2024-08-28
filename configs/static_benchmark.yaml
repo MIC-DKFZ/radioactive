@@ -2,13 +2,12 @@
 seeds:
   - 11121
 models:
-  - "medsam"
-  - "sam"
-  - "sammed2d"
-
-# - "sammed3d"
-# - "sammed3d_turbo"
-# - "segvol"
+  # - "sam"
+  # - "sammed2d"
+  # - "medsam"
+  # - "sammed3d"
+  # - "sammed3d_turbo"
+  - "segvol"
 
 prompting:
   type: "static"
@@ -16,10 +15,12 @@ prompting:
     - "NPointsPer2DSlicePrompter"
     - "PointInterpolationPrompter"
     - "PointPropagationPrompter"
-    - "BoxPer2DSlice"
-    - "BoxPer2dSliceFrom3DBox"
+    - "BoxPer2DSlicePrompter"
+    - "BoxPer2dSliceFrom3DBoxPrompter"
     - "BoxInterpolationPrompter"
-    - "BoxPropagation"
+    - "BoxPropagationPrompter"
+    - "NPoints3DVolumePrompter"
+    - "Box3DVolumePrompter"
   # ToDo: Add the hyperparameters for the prompters in here to have them properly defined and not depend on the defaults.
 
 # List of dataset that will be compared in the next run of the benchmark.

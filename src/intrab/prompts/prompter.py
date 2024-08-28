@@ -5,6 +5,7 @@ import numpy as np
 
 from intrab.model.inferer import Inferer
 from intrab.prompts.prompt import PromptStep
+from intrab.prompts.prompt_3d import get_pos_clicks3D, get_bbox3d
 from intrab.prompts.prompt_utils import (
     box_interpolation,
     box_propagation,
@@ -76,8 +77,10 @@ class PointInterpolationPrompter(Prompter):
         :return: str (Path to the predicted segmentation)
         """
         self.inferer.set_image(image_path)
-        fg_points = get_fg_points_from_cc_centers(self.groundtruth, self.n_slice_point_interpolation, self.seed)
-        point_prompts: PromptStep = point_interpolation(prompts=fg_points)
+        point_prompts: PromptStep = point_interpolation(
+            gt=self.groundtruth,
+            n_slices=self.n_slice_point_interpolation,
+        )
 
         return self.inferer.predict(point_prompts)
 
@@ -109,13 +112,12 @@ class PointPropagationPrompter(Prompter):
             slices_to_infer,
             self.seed,
             self.n_points_propagation,
-            verbose=False,
         )
         # use_point_prompt holds the points that were used in each slice, and originate from the seed prompt.
         return self.inferer.predict(all_point_prompts)
 
 
-class BoxPer2DSlice(Prompter):
+class BoxPer2DSlicePrompter(Prompter):
 
     def predict_image(self, image_path: Path) -> tuple[Nifti1Image, dict[int, np.ndarray]]:
         """
@@ -130,7 +132,7 @@ class BoxPer2DSlice(Prompter):
         return self.inferer.predict(prompts)
 
 
-class BoxPer2dSliceFrom3DBox(Prompter):
+class BoxPer2dSliceFrom3DBoxPrompter(Prompter):
 
     def predict_image(self, image_path: Path) -> tuple[Nifti1Image, dict[int, np.ndarray]]:
         self.inferer.set_image(image_path)
@@ -162,7 +164,7 @@ class BoxInterpolationPrompter(Prompter):
         return self.inferer.predict(prompts)
 
 
-class BoxPropagation(Prompter):
+class BoxPropagationPrompter(Prompter):
 
     def predict_image(self, image_path: Path) -> tuple[Nifti1Image, dict[int, np.ndarray]]:
         self.inferer.set_image(image_path)
@@ -173,12 +175,34 @@ class BoxPropagation(Prompter):
         return self.inferer.predict(all_box_prompts)
 
 
+class NPoints3DVolumePrompter(Prompter):
+
+    def __init__(self, inferer: Inferer, seed: int = 11111, n_points: int = 5):
+        super().__init__(inferer, seed)
+        self.n_points = n_points
+
+    def predict_image(self, image_path: Path) -> tuple[Nifti1Image, dict[int, np.ndarray]]:
+        self.inferer.set_image(image_path)
+        point_prompt = get_pos_clicks3D(self.groundtruth, n_clicks=self.n_points, seed=self.seed)
+        return self.inferer.predict(point_prompt)
+
+
+class Box3DVolumePrompter(Prompter):
+
+    def predict_image(self, image_path: Path) -> tuple[Nifti1Image, dict[int, np.ndarray]]:
+        self.inferer.set_image(image_path)
+        point_prompt = get_bbox3d(self.groundtruth)
+        return self.inferer.predict(point_prompt)
+
+
 static_prompt_styles = Literal[
     "NPointsPer2DSlicePrompter",
     "PointInterpolationPrompter",
     "PointPropagationPrompter",
-    "BoxPer2DSlice",
-    "BoxPer2dSliceFrom3DBox",
+    "BoxPer2DSlicePrompter",
+    "BoxPer2dSliceFrom3DBoxPrompter",
     "BoxInterpolationPrompter",
-    "BoxPropagation",
+    "BoxPropagationPrompter",
+    "NPoints3DVolumePrompter",
+    "Box3DVolumePrompter",
 ]
