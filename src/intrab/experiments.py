@@ -67,7 +67,9 @@ def run_experiments(
                 logger.debug(f"Skipping {gt_path} missing segmentation for {target}")
                 img = nib.load(gt_path)
                 empty_gt = nib.Nifti1Image(binary_gt.astype(np.uint8), img.affine)
-                empty_gt.to_filename(filepath)
+                for prompter in prompters:
+                    filepath = results_dir / prompter.name / target_name / base_name
+                    empty_gt.to_filename(filepath)
             else:
                 for prompter in tqdm(
                     prompters,
