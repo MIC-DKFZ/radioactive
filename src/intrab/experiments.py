@@ -63,34 +63,26 @@ def run_experiments(
             # Save the binarised ground truth next to the predictions for easy access -- Needed for evaluation
             binarize_gt(gt_path, target_label).to_filename(results_dir / "binarised_gts" / target_name / base_name)
 
-            if np.all(binary_gt == 0):
-                logger.debug(f"Skipping {gt_path} missing segmentation for {target}")
-                img = nib.load(gt_path)
-                empty_gt = nib.Nifti1Image(binary_gt.astype(np.uint8), img.affine)
-                for prompter in prompters:
-                    filepath = results_dir / prompter.name / target_name / base_name
-                    empty_gt.to_filename(filepath)
-            else:
-                for prompter in tqdm(
-                    prompters,
-                    desc="Prompting with various prompters ...",
-                    leave=False,
-                    # disable=True,
-                ):
-                    filepath = results_dir / prompter.name / target_name / base_name
-                    if filepath.exists() and not results_overwrite:
-                        logger.debug(f"Skipping {gt_path} as it has already been processed.")
-                        continue
-                    prompter.set_groundtruth(binary_gt)
+            for prompter in tqdm(
+                prompters,
+                desc="Prompting with various prompters ...",
+                leave=False,
+                # disable=True,
+            ):
+                filepath = results_dir / prompter.name / target_name / base_name
+                if filepath.exists() and not results_overwrite:
+                    logger.debug(f"Skipping {gt_path} as it has already been processed.")
+                    continue
+                prompter.set_groundtruth(binary_gt)
 
-                    # Handle non-interactive experiments
-                    if prompter.is_static:
-                        prediction, _ = prompter.predict_image(image_path=img_path)
-                        prediction.to_filename(filepath)
-                    # Handle interactive experiments
-                    else:
-                        # do something else
-                        pass
+                # Handle non-interactive experiments
+                if prompter.is_static:
+                    prediction, _ = prompter.predict_image(image_path=img_path)
+                    prediction.to_filename(filepath)
+                # Handle interactive experiments
+                else:
+                    # do something else
+                    pass
 
     # We always run the semantic eval on the created folders directly.
     for target_name in target_names:

@@ -2,6 +2,7 @@ from abc import abstractmethod
 from pathlib import Path
 from typing import Literal
 import numpy as np
+import nibabel as nib
 
 from intrab.model.inferer import Inferer
 from intrab.prompts.prompt import PromptStep, merge_prompt_steps
@@ -48,9 +49,22 @@ class Prompter:
         # Load the groundtruth
         self.groundtruth = groundtruth
 
-    @abstractmethod
     def predict_image(self, image_path: Path) -> tuple[Nifti1Image, dict[int, np.ndarray]]:
         """Generate segmentation given prompt-style and model behavior."""
+        # If the groundtruth is all zeros, return an empty mask
+        if np.all(self.groundtruth == 0):
+            img = nib.load(image_path)
+            binary_gt = np.zeros_like(img.get_fdata())
+            empty_gt = nib.Nifti1Image(binary_gt.astype(np.uint8), img.affine)
+            return empty_gt, None
+
+        # Else predict the image
+        self.inferer.set_image(image_path)
+        prompt = self.get_prompt()
+        return self.inferer.predict(prompt)
+
+    @abstractmethod
+    def get_prompt(self) -> PromptStep:
         pass
 
 
@@ -59,17 +73,13 @@ class NPointsPer2DSlicePrompter(Prompter):
         super().__init__(inferer, seed)
         self.n_points_per_slice = n_points_per_slice
 
-    def predict_image(self, image_path: Path) -> tuple[Nifti1Image, dict[int, np.ndarray]]:
+    def get_prompt(self) -> PromptStep:
         """
         Generate segmentation given prompt-style and model behavior.
         :return: str (Path to the predicted segmentation)
         """
-        self.inferer.set_image(image_path)
         # Maybe name this SlicePrompts  to be less ambiguous
-        point_prompts_step: PromptStep = get_pos_clicks2D_row_major(
-            self.groundtruth, self.n_points_per_slice, self.seed
-        )
-        return self.inferer.predict(point_prompts_step)
+        return get_pos_clicks2D_row_major(self.groundtruth, self.n_points_per_slice, self.seed)
 
 
 class PointInterpolationPrompter(Prompter):
@@ -77,18 +87,12 @@ class PointInterpolationPrompter(Prompter):
         super().__init__(inferer, seed)
         self.n_slice_point_interpolation = n_slice_point_interpolation
 
-    def predict_image(self, image_path: Path) -> tuple[Nifti1Image, dict[int, np.ndarray]]:
+    def get_prompt(self) -> PromptStep:
         """
         Generate segmentation given prompt-style and model behavior.
         :return: str (Path to the predicted segmentation)
         """
-        self.inferer.set_image(image_path)
-        point_prompts: PromptStep = point_interpolation(
-            gt=self.groundtruth,
-            n_slices=self.n_slice_point_interpolation,
-        )
-
-        return self.inferer.predict(point_prompts)
+        return point_interpolation(gt=self.groundtruth, n_slices=self.n_slice_point_interpolation)
 
 
 class PointPropagationPrompter(Prompter):
@@ -103,12 +107,11 @@ class PointPropagationPrompter(Prompter):
         self.n_seed_points_point_propagation = n_seed_points_point_propagation
         self.n_points_propagation = n_points_propagation
 
-    def predict_image(self, image_path: Path) -> tuple[Nifti1Image, dict[int, np.ndarray]]:
+    def get_prompt(self) -> PromptStep:
         """
         Generate segmentation given prompt-style and model behavior.
         :return: str (Path to the predicted segmentation)
         """
-        self.inferer.set_image(image_path)
         seed_points_prompt = get_seed_point(self.groundtruth, self.n_seed_points_point_propagation, self.seed)
         slices_to_infer = np.where(np.any(self.groundtruth, axis=(1, 2)))[0]
 
@@ -120,33 +123,25 @@ class PointPropagationPrompter(Prompter):
             self.n_points_propagation,
         )
         # use_point_prompt holds the points that were used in each slice, and originate from the seed prompt.
-        return self.inferer.predict(all_point_prompts)
+        return all_point_prompts
 
 
 class BoxPer2DSlicePrompter(Prompter):
 
-    def predict_image(self, image_path: Path) -> tuple[Nifti1Image, dict[int, np.ndarray]]:
+    def get_prompt(self) -> PromptStep:
         """
         Generate segmentation given prompt-style and model behavior.
         :return: str (Path to the predicted segmentation)
         """
-        self.inferer.set_image(image_path)
 
-        prompts = get_minimal_boxes_row_major(self.groundtruth)
-
-        # use_point_prompt holds the points that were used in each slice, and originate from the seed prompt.
-        return self.inferer.predict(prompts)
+        return get_minimal_boxes_row_major(self.groundtruth)
 
 
 class BoxPer2dSliceFrom3DBoxPrompter(Prompter):
 
-    def predict_image(self, image_path: Path) -> tuple[Nifti1Image, dict[int, np.ndarray]]:
-        self.inferer.set_image(image_path)
+    def get_prompt(self) -> PromptStep:
 
-        prompts = get_bbox3d_sliced(self.groundtruth)
-
-        # use_point_prompt holds the points that were used in each slice, and originate from the seed prompt.
-        return self.inferer.predict(prompts)
+        return get_bbox3d_sliced(self.groundtruth)
 
 
 class BoxInterpolationPrompter(Prompter):
@@ -160,25 +155,18 @@ class BoxInterpolationPrompter(Prompter):
         super().__init__(inferer, seed)
         self.n_slice_box_interpolation = n_slice_box_interpolation
 
-    def predict_image(self, image_path: Path) -> tuple[Nifti1Image, dict[int, np.ndarray]]:
-        self.inferer.set_image(image_path)
-
+    def get_prompt(self) -> PromptStep:
         box_seed_prompt: PromptStep = get_seed_boxes(self.groundtruth, self.n_slice_box_interpolation)
-        prompts = box_interpolation(box_seed_prompt)
-
-        # use_point_prompt holds the points that were used in each slice, and originate from the seed prompt.
-        return self.inferer.predict(prompts)
+        return box_interpolation(box_seed_prompt)
 
 
 class BoxPropagationPrompter(Prompter):
 
-    def predict_image(self, image_path: Path) -> tuple[Nifti1Image, dict[int, np.ndarray]]:
-        self.inferer.set_image(image_path)
+    def get_prompt(self) -> tuple[Nifti1Image, dict[int, np.ndarray]]:
 
         median_box_seed_prompt: PromptStep = get_seed_boxes(self.groundtruth, 1)
         slices_to_infer = np.where(np.any(self.groundtruth, axis=(1, 2)))[0]
-        all_box_prompts = box_propagation(self.inferer, median_box_seed_prompt, slices_to_infer)
-        return self.inferer.predict(all_box_prompts)
+        return box_propagation(self.inferer, median_box_seed_prompt, slices_to_infer)
 
 
 class NPoints3DVolumePrompter(Prompter):
@@ -187,18 +175,14 @@ class NPoints3DVolumePrompter(Prompter):
         super().__init__(inferer, seed)
         self.n_points = n_points
 
-    def predict_image(self, image_path: Path) -> tuple[Nifti1Image, dict[int, np.ndarray]]:
-        self.inferer.set_image(image_path)
-        point_prompt = get_pos_clicks3D(self.groundtruth, n_clicks=self.n_points, seed=self.seed)
-        return self.inferer.predict(point_prompt)
+    def get_prompt(self) -> tuple[Nifti1Image, dict[int, np.ndarray]]:
+        return get_pos_clicks3D(self.groundtruth, n_clicks=self.n_points, seed=self.seed)
 
 
 class Box3DVolumePrompter(Prompter):
 
-    def predict_image(self, image_path: Path) -> tuple[Nifti1Image, dict[int, np.ndarray]]:
-        self.inferer.set_image(image_path)
-        point_prompt = get_bbox3d(self.groundtruth)
-        return self.inferer.predict(point_prompt)
+    def get_prompt(self) -> tuple[Nifti1Image, dict[int, np.ndarray]]:
+        return get_bbox3d(self.groundtruth)
 
 
 static_prompt_styles = Literal[
