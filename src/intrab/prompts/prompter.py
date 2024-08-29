@@ -21,8 +21,6 @@ from intrab.prompts.prompt_utils import (
     point_propagation,
 )
 
-from nibabel import Nifti1Image
-
 from intrab.utils.interactivity import gen_contour_fp_scribble
 from intrab.utils.result_data import PromptResult
 
@@ -49,11 +47,11 @@ class Prompter:
         # Load the groundtruth
         self.groundtruth = groundtruth
 
-    def predict_image(self, image_path: Path) -> tuple[Nifti1Image, dict[int, np.ndarray]]:
+    def predict_image(self, image_path: Path) -> tuple[nib.Nifti1Image, dict[int, np.ndarray]]:
         """Generate segmentation given prompt-style and model behavior."""
         # If the groundtruth is all zeros, return an empty mask
         if np.all(self.groundtruth == 0):
-            img = nib.load(image_path)
+            img: nib.Nifti1Image = nib.load(image_path)
             binary_gt = np.zeros_like(img.get_fdata())
             empty_gt = nib.Nifti1Image(binary_gt.astype(np.uint8), img.affine)
             return empty_gt, None
@@ -162,7 +160,7 @@ class BoxInterpolationPrompter(Prompter):
 
 class BoxPropagationPrompter(Prompter):
 
-    def get_prompt(self) -> tuple[Nifti1Image, dict[int, np.ndarray]]:
+    def get_prompt(self) -> tuple[nib.Nifti1Image, dict[int, np.ndarray]]:
 
         median_box_seed_prompt: PromptStep = get_seed_boxes(self.groundtruth, 1)
         slices_to_infer = np.where(np.any(self.groundtruth, axis=(1, 2)))[0]
@@ -175,13 +173,13 @@ class NPoints3DVolumePrompter(Prompter):
         super().__init__(inferer, seed)
         self.n_points = n_points
 
-    def get_prompt(self) -> tuple[Nifti1Image, dict[int, np.ndarray]]:
+    def get_prompt(self) -> tuple[nib.Nifti1Image, dict[int, np.ndarray]]:
         return get_pos_clicks3D(self.groundtruth, n_clicks=self.n_points, seed=self.seed)
 
 
 class Box3DVolumePrompter(Prompter):
 
-    def get_prompt(self) -> tuple[Nifti1Image, dict[int, np.ndarray]]:
+    def get_prompt(self) -> tuple[nib.Nifti1Image, dict[int, np.ndarray]]:
         return get_bbox3d(self.groundtruth)
 
 
@@ -387,7 +385,7 @@ class NPointsPer2DSliceInteractivePrompter(Prompter):
 
         return scribble
 
-    def predict_image(self, image_path: Path) -> list[tuple[Nifti1Image, int]]:
+    def predict_image(self, image_path: Path) -> list[tuple[nib.Nifti1Image, int]]:
         # Initialise tracking flags
         has_generated_positive_prompts = False
 
