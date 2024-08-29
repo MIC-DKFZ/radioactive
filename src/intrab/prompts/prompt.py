@@ -85,6 +85,10 @@ class PromptStep:
 
             self.prompts_dict[slice_idx] = {"box": slice_box, "points": (slice_coords, slice_labs)}
 
+    def get_dof(self):
+        """Get the degress of freedom of the current prompt step."""
+        raise NotImplementedError("This method hasn't been implemented yet.")
+
     def __getitem__(self, index):
         return self.prompts_dict[index]
 
@@ -102,18 +106,19 @@ class PromptStep:
             boxes_zs = set(self.boxes.keys())
         slices_to_infer = points_zs.union(boxes_zs)
         return slices_to_infer
-    
+
+
 def merge_prompt_steps(prompt1: PromptStep, prompt2: PromptStep) -> PromptStep:
     # Merge boxes
     boxes = prompt1.boxes
-    for slice_idx, bbox in prompt1.boxes.items(): # Check no slice gets two distinct boxes
+    for slice_idx, bbox in prompt1.boxes.items():  # Check no slice gets two distinct boxes
         if slice_idx in prompt2.boxes.keys() and prompt1.boxes[slice_idx] != prompt2.boxes[slice_idx]:
-            raise ValueError('Merging would cause having two distinct boxes on one slice, which is not permitted')
+            raise ValueError("Merging would cause having two distinct boxes on one slice, which is not permitted")
         boxes.update(prompt2.boxes)
 
     coords = np.concatenate([prompt1.coords, prompt2.coords], axis=0)
     labels = np.concatenate([prompt1.labels, prompt2.labels])
 
-    merged_prompt = PromptStep(point_prompts = (coords, labels), box_prompts = boxes)
+    merged_prompt = PromptStep(point_prompts=(coords, labels), box_prompts=boxes)
 
     return merged_prompt
