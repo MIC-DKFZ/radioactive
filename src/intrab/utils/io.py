@@ -5,7 +5,7 @@ from typing import get_args
 import yaml
 from intrab.model.model_utils import model_registry
 from intrab.utils.paths import get_dataset_path
-from intrab.prompts.prompter import static_prompt_styles
+from intrab.prompts.prompter import Prompter, static_prompt_styles
 from loguru import logger
 import nibabel as nib
 import numpy as np
@@ -110,6 +110,21 @@ def get_img_gts(dataset_dir):
     ]
     return list(sorted(imgs_gts, key=lambda x: x[0]))
 
+
+def verify_results_dir_exist(targets, results_dir, prompters: list[Prompter]):
+    """Creates all output paths if they don't exist"""
+    [
+        Path(results_dir / p.name / (f"{target_label:03d}" + "__" + target)).mkdir(exist_ok=True, parents=True)
+        for p in prompters
+        for target, target_label in targets.items()
+    ]
+
+    [
+        Path(results_dir / "binarised_gts" / (f"{target_label:03d}" + "__" + target)).mkdir(
+            exist_ok=True, parents=True
+        )
+        for target, target_label in targets.items()
+    ]
 
 def get_labels_from_dataset_json(dataset_dir: Path) -> dict[str:int]:
     """
