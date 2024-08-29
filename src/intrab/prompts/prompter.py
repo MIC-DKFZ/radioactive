@@ -22,6 +22,7 @@ from intrab.prompts.prompt_utils import (
 
 from nibabel import Nifti1Image
 
+from intrab.utils.analysis import compute_dice
 from intrab.utils.interactivity import gen_contour_fp_scribble
 
 # ToDo: Save the Prompt before feeding into the model.
@@ -278,7 +279,7 @@ class NPointsPer2DSliceInteractivePrompter(Prompter):
 
         return max_fp_idx
 
-    def generate_scribble(self, slice_gt, slice_seg, fp_mask) # Mostly a wrapper for gen_countour_fp_scribble, but handles an edge case where it could fail
+    def generate_scribble(self, slice_gt, slice_seg, fp_mask): # Mostly a wrapper for gen_countour_fp_scribble, but handles an edge case where it could fail
         if not np.any(slice_gt):  # There is no gt in the slice, but lots of fps. For now just draw a vertical line down the column with the most fps
             fp_mask = slice_seg  # All segmented fg voxels are false positives, slice_seg only contains false positives
             fp_per_column = np.sum(fp_mask, axis=0)
@@ -297,15 +298,61 @@ class NPointsPer2DSliceInteractivePrompter(Prompter):
             )
         
         return scribble
+    
+    def generate_positive_prompts(self, groundtruth, pred, fp_mask):
+        # Obtain contour scribble on worst sagittal slice
+        max_fp_idx = self.get_max_fp_sagittal_slice_idx(fp_mask)
+        
+        max_fp_slice = groundtruth[:, max_fp_idx]
+        slice_seg = pred[:, max_fp_idx]
 
-    def predict_images(self, image_path: Path) -> tuple[list[Nifti1Image], list[int]]:
-        # Initialise tracking flags
+        # Try to generate a 'scribble' containing lots of false positives
+
+        scribble = self.generate_scribble(max_fp_slice, slice_seg)
+
+        if scribble is None: # Scribble generation failed, get random negative click instead
+            return None, None
+
+        else:  # Otherwise subset scribble to false positives to generate new prompt
+            scribble_coords = np.where(scribble)
+            scribble_coords = np.array(scribble_coords).T
+
+            # Obtain false positive points and make new prompt
+            is_fp_mask = slice_seg[*scribble_coords.T].astype(bool)
+            fp_coords = scribble_coords[is_fp_mask]
+
+            ## Position fp_coords back into original 3d coordinate system
+            missing_axis = np.repeat(max_fp_idx, len(fp_coords))
+            fp_coords_3d = np.vstack([fp_coords[:, 0], missing_axis, fp_coords[:, 1]]).T
+            fp_coords_3d = fp_coords_3d[:, [2, 1, 0]]  # zyx -> xyz
+            new_negative_prompts = PromptStep(points_prompts = (fp_coords_3d, [0] * len(fp_coords_3d)))
+            improve_slices = np.unique(fp_coords_3d[:, 2])
+            dof += 3 * 4  # ToDo: To dicuss: assume drawing a scribble is as difficult as drawing four points
+
+            if self.inferer.pass_prev_prompts:  # new prompt includes old prompts
+                ## Add to old prompt
+                prompt_step_all = merge_prompt_steps(new_negative_prompts, prompt_step_all)
+                
+                ## Subset to prompts only on the slices with new prompts
+                fix_slice_mask = np.isin(new_negative_prompts.coords[:, 2], improve_slices)
+                coords_to_use, labels_to_use = prompt_step_all.coords[fix_slice_mask], prompt_step_all.labels[fix_slice_mask]
+                prompt_step_to_use = PromptStep(point_prompts = (coords_to_use, labels_to_use))
+            else:
+                prompt_step_to_use = new_negative_prompts
+
+            return prompt_step_to_use, improve_slices
+
+    def predict_image(self, image_path: Path) -> tuple[list[Nifti1Image], list[int]]:
+        # Initialise helper variables
         has_generated_positive_prompts = False
+        preds = []
+        dofs = []
 
         # Obtain initial prompt, segmentation, logits and dof
         prompt_step: PromptStep = get_pos_clicks2D_row_major( # Duplicate calculation - extract prompt from prompter?
             self.groundtruth, self.n_points_per_slice, self.seed
         )
+        prompt_step_all = prompt_step # will diverge from prompt_step if pass_prev_prompt flag is true
         slices_inferred = prompt_step.slices_to_infer
         base_prompter = NPointsPer2DSlicePrompter(self.inferer, self.seed, self.n_points_per_slice)
         pred, logits = base_prompter.predict_image(image_path)
@@ -322,46 +369,12 @@ class NPointsPer2DSliceInteractivePrompter(Prompter):
             generate_negative_prompts_flag = self.get_generate_negative_prompts_flag(fn_mask, fp_mask)
 
             if generate_negative_prompts_flag:
-                # Obtain contour scribble on worst sagittal slice
-                max_fp_idx = self.get_max_fp_sagittal_slice_idx(fp_mask)
-                
-                max_fp_slice = self.groundtruth[:, max_fp_idx]
-                slice_seg = pred[:, max_fp_idx]
+                prompt_step_to_use, improve_slices = self.generate_positive_prompts(self.groundtruth, pred, fp_mask)
+                if prompt_step_to_use is None: 
+                    prompt_gen_failed = True
 
-                # Try to generate a 'scribble' containing lots of false positives
-
-                scribble = self.generate_scribble(max_fp_slice, slice_seg)
-
-                if scribble is None: # Scribble generation failed, get random negative click instead
-                    generate_negative_prompts_flag = False  
-                else:  # Otherwise subset scribble to false positives to generate new prompt
-                    scribble_coords = np.where(scribble)
-                    scribble_coords = np.array(scribble_coords).T
-
-                    # Obtain false positive points and make new prompt
-                    is_fp_mask = slice_seg[*scribble_coords.T].astype(bool)
-                    fp_coords = scribble_coords[is_fp_mask]
-
-                    ## Position fp_coords back into original 3d coordinate system
-                    missing_axis = np.repeat(max_fp_idx, len(fp_coords))
-                    fp_coords_3d = np.vstack([fp_coords[:, 0], missing_axis, fp_coords[:, 1]]).T
-                    fp_coords_3d = fp_coords_3d[:, [2, 1, 0]]  # zyx -> xyz
-                    improve_slices = np.unique(fp_coords_3d[:, 2])
-                    dof += 3 * 4  # To dicuss: assume drawing a scribble is as difficult as drawing four points
-
-                    if pass_prev_prompts:  # new prompt includes old prompts
-                        ## Add to old prompt
-                        coords = np.concatenate([prompt.coords, fp_coords_3d], axis=0)
-                        labels = np.concatenate([prompt.labels, [0] * len(fp_coords_3d)])
-                        prompt = PromptStep(point_prompts=(coords, labels))
-
-                        ## Subset to prompts only on the slices with new prompts
-                        fix_slice_mask = np.isin(prompt.coords[:, 2], improve_slices)
-                        new_prompt = PromptStep(point_prompts=(coords[fix_slice_mask], labels[fix_slice_mask]))
-                    else:
-                        new_prompt = PromptStep(point_prompts=(fp_coords_3d, [0] * len(fp_coords_3d)))
-                
-            if not generate_negative_prompts_flag:
+            if not generate_negative_prompts_flag or prompt_gen_failed:
+                prompt_step_to_use, improve_slices = self.generate_negative_prompts()
                 # If running for the first time, generate universal bottom and top seed prompts for interpolation
                 if not has_generated_positive_prompts:
                     dof+=6 # Increase for needing to choose bottom_seed_prompt and top_seed_prompt
@@ -370,9 +383,24 @@ class NPointsPer2DSliceInteractivePrompter(Prompter):
 
                 new_positive_prompts, dof = self.gen_new_positive_prompts(pred, bottom_seed_prompt, top_seed_prompt, fn_mask, slices_inferred, dof)
                 if self.inferer.pass_prev_prompts:
-                    prompt_step = merge_prompt_steps(new_positive_prompts, prompt_step)
+                    prompt_step_all = merge_prompt_steps(new_positive_prompts, prompt_step_all)
+                    # Subset to prompts only on the slices with new prompts
+                    fix_slice_mask = np.isin(new_positive_prompts.coords[:, 2], improve_slices)
+                    coords_to_use, labels_to_use = prompt_step_all.coords[fix_slice_mask], prompt_step_all.labels[fix_slice_mask]
+                    prompt_step_to_use = PromptStep(point_prompts = (coords_to_use, labels_to_use))
                 else:
-                    prompt_step = new_positive_prompts
+                    prompt_step_to_use = new_positive_prompts
 
+            # Generate new segmentation and integrate into old one
+            new_seg, low_res_logits = self.inferer.predict(prompt_step_to_use, low_res_logits, transform=False)
 
+            pred[improve_slices] = new_seg[improve_slices]
+            dofs.append(dof)
+            preds.append(pred)
 
+            perf = compute_dice(pred, self.ground_truth)
+
+            if dof > self.dof_bound & perf > self.perf_bound:
+                break
+
+        return preds, dofs

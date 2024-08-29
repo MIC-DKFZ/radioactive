@@ -5,16 +5,6 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python Debugger: Current File with Arguments",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${file}",
-            "console": "integratedTerminal",
-            "args": ["-r", "/home/t722s/Desktop/ExperimentResults_lesions_20240730/",
-                    "-m", "sammed2d",
-                    "-d", "/home/t722s/Desktop/Datasets/melanoma_HD/"]
-        },
-        {
             "name": "Run config",
             "type": "debugpy",
             "request": "launch",
@@ -22,13 +12,36 @@
             "console": "integratedTerminal",
             "args": [
                 "-c",
-                "${workspaceFolder}/configs/static_benchmark.yaml",
+                //"${workspaceFolder}/configs/static_benchmark.yaml",
+                "${workspaceFolder}/configs/metric_testing.yaml",
                 ],
             "env":{
-                "INTRAB_DATA_PATH": "/mnt/E132-Rohdaten/nnUNetv2",
+                //"INTRAB_DATA_PATH": "/mnt/E132-Rohdaten/nnUNetv2",
+                "INTRAB_DATA_PATH": "/home/t722s/E132-Projekte/Projects/2023_Tempus_intrab/datasets/",
                 //"INTRAB_DATA_PATH": "/mnt/E132-Projekte/Projects/2023_Rokuss_Tracking/Datasets",
-                "INTRAB_MODEL_PATH": "/mnt/E132-Projekte/Projects/2023_Tempus_intrab/checkpoints",
-                "INTRAB_RESULTS_PATH": "/mnt/E132-Projekte/Projects/2023_Tempus_intrab/results"
+                //"INTRAB_MODEL_PATH": "/mnt/E132-Projekte/Projects/2023_Tempus_intrab/checkpoints",
+                "INTRAB_MODEL_PATH": "/home/t722s/E132-Projekte/Projects/2023_Tempus_intrab/checkpoints",
+                "INTRAB_RESULTS_PATH": "/home/t722s/E132-Projekte/Projects/2023_Tempus_intrab/metric_testing/"
+            }
+        }, 
+        {
+            "name": "sammed3d testing",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/intrab/evaluate.py",
+            "console": "integratedTerminal",
+            "args": [
+                "-c",
+                //"${workspaceFolder}/configs/static_benchmark.yaml",
+                "${workspaceFolder}/configs/metric_testing.yaml",
+                ],
+            "env":{
+                //"INTRAB_DATA_PATH": "/mnt/E132-Rohdaten/nnUNetv2",
+                "INTRAB_DATA_PATH": "/home/t722s/E132-Projekte/Projects/2023_Tempus_intrab/datasets/",
+                //"INTRAB_DATA_PATH": "/mnt/E132-Projekte/Projects/2023_Rokuss_Tracking/Datasets",
+                //"INTRAB_MODEL_PATH": "/mnt/E132-Projekte/Projects/2023_Tempus_intrab/checkpoints",
+                "INTRAB_MODEL_PATH": "/home/t722s/E132-Projekte/Projects/2023_Tempus_intrab/checkpoints",
+                "INTRAB_RESULTS_PATH": "/home/t722s/E132-Projekte/Projects/2023_Tempus_intrab/metric_testing/"
             }
         }
     ]
