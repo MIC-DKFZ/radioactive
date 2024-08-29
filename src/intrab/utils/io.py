@@ -131,5 +131,5 @@ def binarize_gt(gt_path: Path, label_of_interest: int):
     gt_nib = nib.load(gt_path)
     gt = gt_nib.get_fdata()
     binary_gt = np.where(gt == label_of_interest, 1, 0)
-    binary_gt = nib.Nifti1Image(binary_gt.astype(np.float32), gt_nib.affine)
+    binary_gt = nib.Nifti1Image(binary_gt.astype(np.uint8), gt_nib.affine)
     return binary_gt
