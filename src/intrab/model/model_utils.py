@@ -82,14 +82,14 @@ def get_wanted_supported_prompters(
                     )
                 )
         if "box" in inferer.supported_prompts:
-            if "BoxPer2DSlice" in wanted_prompt_styles:
+            if "BoxPer2DSlicePrompter" in wanted_prompt_styles:
                 prompters.append(
                     BoxPer2DSlicePrompter(
                         inferer,
                         seed=seed,
                     )
                 )
-            if "BoxPer2dSliceFrom3DBox" in wanted_prompt_styles:
+            if "BoxPer2dSliceFrom3DBoxPrompter" in wanted_prompt_styles:
                 prompters.append(BoxPer2dSliceFrom3DBoxPrompter(inferer, seed))
             if "BoxInterpolationPrompter" in wanted_prompt_styles:
                 prompters.append(
@@ -99,7 +99,7 @@ def get_wanted_supported_prompters(
                         n_slice_box_interpolation=pro_conf.twoD_n_slice_box_interpolation,
                     )
                 )
-            if "BoxPropagation" in wanted_prompt_styles:
+            if "BoxPropagationPrompter" in wanted_prompt_styles:
                 prompters.append(BoxPropagationPrompter(inferer, seed))
     elif inferer.dim == 3:
         if "point" in inferer.supported_prompts:

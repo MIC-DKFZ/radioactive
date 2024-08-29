@@ -73,5 +73,5 @@ if __name__ == "__main__":
                     wanted_prompt_styles,
                     seed=1,
                     experiment_overwrite=None,
-                    debug=True
+                    debug=config.get("debug", False),
                 )

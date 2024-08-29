@@ -18,6 +18,9 @@ import nibabel as nib
 from tqdm import tqdm
 import shutil
 
+from intrab.utils.io import binarize_gt
+from nneval.evaluate_semantic import semantic_evaluation
+
 
 # ToDo: Make this run_organ_experiments
 def run_experiments(
@@ -54,40 +57,42 @@ def run_experiments(
         + "Right now this is assumed to be correct"
     )
 
-    # # Debugging: Overwrite experiments
-    # if experiment_overwrite:
-    #     experiments = {ex: experiments[ex] for ex in experiment_overwrite if ex in experiments.keys()}
-    #     interactive_experiments = {
-    #         ex: experiments[ex] for ex in experiment_overwrite if ex in interactive_experiments.keys()
-    #     }
-    # for p in prompters:
-    #     results_dir / p.name
-    # Todo: Remove when exclusion happens earlier.
     targets: dict = {k.replace("/", "_"): v for k, v in label_dict.items() if k != "background"}
 
     [
-        Path(results_dir / p.name / target).mkdir(exist_ok=True, parents=True)
+        Path(results_dir / p.name / (f"{target_label:03d}" + "__" + target)).mkdir(exist_ok=True, parents=True)
         for p in prompters
-        for target in targets.keys()
+        for target, target_label in targets.items()
+    ]
+
+    [
+        Path(results_dir / "binarised_gts" / (f"{target_label:03d}" + "__" + target)).mkdir(
+            exist_ok=True, parents=True
+        )
+        for target, target_label in targets.items()
     ]
 
     # Initialize results dictionary
-    results = []
 
     # Loop through all image and label pairs
-    for img_path, gt_path in tqdm(imgs_gts, desc="looping through files\n"):
+    target_names: set[str] = set()
+    for img_path, gt_path in tqdm(imgs_gts, desc="looping through files\n", leave=True):
         base_name = os.path.basename(gt_path)
         multi_class_gt = inferer.get_transformed_groundtruth(gt_path)
 
         # Loop through each organ label except the background
-        for target, target_label in tqdm(targets.items(), desc="looping through organs\n"):
+        for target, target_label in tqdm(targets.items(), desc="Predicting targets...\n", leave=False):
+            target_name: str = f"{target_label:03d}" + "__" + target
+            target_names.add(target_name)
             binary_gt = np.where(multi_class_gt == target_label, 1, 0)
+            # Save the binarised ground truth next to the predictions for easy access -- Needed for evaluation
+            binarize_gt(gt_path, target_label).to_filename(results_dir / "binarised_gts" / target_name / base_name)
 
             if np.all(binary_gt == 0):
                 logger.debug(f"Skipping {gt_path} missing segmentation for {target}")
                 img = nib.load(gt_path)
                 empty_gt = nib.Nifti1Image(binary_gt.astype(np.float32), img.affine)
-                empty_gt.to_filename(results_dir / prompter.name / target / base_name)
+                empty_gt.to_filename(results_dir / prompter.name / target_name / base_name)
                 continue
 
             # ToDo: Include again, Just temporary measure to see if inference works.
@@ -105,82 +110,20 @@ def run_experiments(
                 prompter.set_groundtruth(binary_gt)
                 if prompter.is_static:
                     prediction, _ = prompter.predict_image(image_path=img_path)
-                    prediction.to_filename(results_dir / prompter.name / target / base_name)
+                    prediction.to_filename(results_dir / prompter.name / target_name / base_name)
                 else:
                     # do something else
                     pass
 
-            # # Now handle interactive experiments
-            # for exp_name, prompting_func in tqdm(
-            #     interactive_experiments.items(), desc="looping through interactive experiments", leave=False
-            # ):
-            #     # Set the few things that differ depending on the seed method
-            #     if exp_name in ["point_propagation_interactive", "box_propagation_interactive"]:
-            #         segmentation, low_res_masks, prompt = prompting_func(img, organ_mask, slices_to_infer)
-            #         init_dof = 5
-            #     else:
-            #         prompt = prompting_func(organ_mask)
-            #         segmentation, low_res_masks = inferer.predict(
-            #             img, prompt, return_low_res_logits=True, use_stored_embeddings=True
-            #         )
-            #         init_dof = 9
-
-            #     if save_segs:
-            #         dice_scores, dofs, segmentations, prompts = iterate_2d(
-            #             inferer,
-            #             img,
-            #             organ_mask,
-            #             segmentation,
-            #             low_res_masks,
-            #             prompt,
-            #             inferer.pass_prev_prompts,
-            #             use_stored_embeddings=True,
-            #             scribble_length=0.6,
-            #             contour_distance=3,
-            #             disk_size_range=(0, 3),
-            #             init_dof=init_dof,
-            #             perf_bound=exp_params.perf_bound,
-            #             dof_bound=exp_params.dof_bound,
-            #             seed=seed,
-            #             verbose=False,
-            #             detailed=True,
-            #         )
-            #     else:
-            #         dice_scores, dofs = iterate_2d(
-            #             inferer,
-            #             img,
-            #             organ_mask,
-            #             segmentation,
-            #             low_res_masks,
-            #             prompt,
-            #             inferer.pass_prev_prompts,
-            #             use_stored_embeddings=True,
-            #             scribble_length=0.6,
-            #             contour_distance=3,
-            #             disk_size_range=(0, 3),
-            #             init_dof=init_dof,
-            #             perf_bound=exp_params.perf_bound,
-            #             dof_bound=exp_params.dof_bound,
-            #             seed=seed,
-            #             verbose=False,
-            #         )
-
-            #     results[exp_name][target][base_name] = {"dof": dofs, "dice_scores": dice_scores}
-
-            #     if save_segs:
-            #         for i, segmentation in enumerate(segmentations):
-            #             seg_orig_ori = inv_transform(segmentation)  # Reorient segmentation
-            #             save_path = os.path.join(results_dir, exp_name, target, base_name).replace(
-            #                 ".nii.gz", f"_seg_{i}.nii.gz"
-            #             )
-            #             seg_orig_ori.to_filename(save_path)
-
-            # inferer.clear_embeddings()
-
-    # Save results
-
-    results_path = os.path.join(results_dir, "results.json")
-    with open(results_path, "w") as f:
-        json.dump(results, f, indent=4)
-
-    print(f"Results saved to {results_dir}")
+    # We always run the semantic eval on the created folders directly.
+    for target_name in target_names:
+        for prompter in prompters:
+            if prompter.is_static:
+                with logger.catch(level="WARNING"):
+                    semantic_evaluation(
+                        semantic_pd_path=results_dir / "binarised_gts" / target_name,
+                        semantic_gt_path=results_dir / prompter.name / target_name,
+                        output_path=results_dir / prompter.name,
+                        classes_of_interest=(1,),
+                        output_name=target_name,
+                    )
