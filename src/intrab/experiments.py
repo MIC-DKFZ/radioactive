@@ -19,6 +19,7 @@ from tqdm import tqdm
 import shutil
 
 from intrab.utils.io import verify_results_dir_exist
+from intrab.utils.io import verify_results_dir_exist
 from nneval.evaluate_semantic import semantic_evaluation
 
 
