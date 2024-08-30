@@ -37,7 +37,11 @@ def run_experiments(
     debug: bool = False,
 ):
     targets: dict = {k.replace("/", "_"): v for k, v in label_dict.items() if k != "background"}
-    prompters: list[Prompter] = get_wanted_supported_prompters(inferer, pro_conf, wanted_prompt_styles, seed)
+    prompters: list[Prompter] = get_wanted_supported_prompters(inferer, pro_conf, wanted_prompt_styles, seed) 
+    
+    if len(prompters) == 0: 
+        logger.warning(f'No prompters selected; only evaluation will be performed.') 
+
     verify_results_dir_exist(targets=targets, results_dir=results_dir, prompters=prompters)
 
     if debug:
