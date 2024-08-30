@@ -9,7 +9,7 @@ import torch
 from batchgenerators.augmentations.utils import resize_segmentation
 from scipy.ndimage import map_coordinates
 from skimage.transform import resize
-from nnunetv2.configuration import ANISO_THRESHOLD
+from intrab.utils.nnunet.configuration import ANISO_THRESHOLD
 
 
 def get_do_separate_z(spacing: Union[Tuple[float, ...], List[float], np.ndarray], anisotropy_threshold=ANISO_THRESHOLD):
