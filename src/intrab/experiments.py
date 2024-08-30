@@ -18,7 +18,8 @@ import nibabel as nib
 from tqdm import tqdm
 import shutil
 
-from intrab.utils.io import binarize_gt
+from intrab.utils.io import binarize_gt, verify_results_dir_exist
+from intrab.utils.io import verify_results_dir_exist
 from nneval.evaluate_semantic import semantic_evaluation
 
 
@@ -35,44 +36,18 @@ def run_experiments(
     results_overwrite: bool = False,
     debug: bool = False,
 ):
+    targets: dict = {k.replace("/", "_"): v for k, v in label_dict.items() if k != "background"}
+    prompters: list[Prompter] = get_wanted_supported_prompters(inferer, pro_conf, wanted_prompt_styles, seed)
+    verify_results_dir_exist(targets=targets, results_dir=results_dir, prompters=prompters)
+
     if debug:
         logger.warning("Debug mode activated. Only running on the first three images.")
         imgs_gts = imgs_gts[:3]
-
-    results_dir: Path
-    if os.path.exists(results_dir):
-        if results_overwrite:
-            shutil.rmtree(results_dir)
-        else:
-            results_dir = results_dir.parent / (results_dir.name + datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
-            # raise FileExistsError("Results directory already exists. Set results_overwrite=True to overwrite.")
-
-    results_dir.mkdir(parents=True)
-
-    # Define experiments
-    prompters: list[Prompter] = get_wanted_supported_prompters(inferer, pro_conf, wanted_prompt_styles, seed)
 
     logger.warning(
         "Coordinate systems should be checked and verified for correctness. \n"
         + "Right now this is assumed to be correct"
     )
-
-    targets: dict = {k.replace("/", "_"): v for k, v in label_dict.items() if k != "background"}
-
-    [
-        Path(results_dir / p.name / (f"{target_label:03d}" + "__" + target)).mkdir(exist_ok=True, parents=True)
-        for p in prompters
-        for target, target_label in targets.items()
-    ]
-
-    [
-        Path(results_dir / "binarised_gts" / (f"{target_label:03d}" + "__" + target)).mkdir(
-            exist_ok=True, parents=True
-        )
-        for target, target_label in targets.items()
-    ]
-
-    # Initialize results dictionary
 
     # Loop through all image and label pairs
     target_names: set[str] = set()
@@ -83,34 +58,30 @@ def run_experiments(
         # Loop through each organ label except the background
         for target, target_label in tqdm(targets.items(), desc="Predicting targets...\n", leave=False):
             target_name: str = f"{target_label:03d}" + "__" + target
+
             target_names.add(target_name)
             binary_gt = np.where(multi_class_gt == target_label, 1, 0)
             # Save the binarised ground truth next to the predictions for easy access -- Needed for evaluation
+
             binarize_gt(gt_path, target_label).to_filename(results_dir / "binarised_gts" / target_name / base_name)
 
-            if np.all(binary_gt == 0):
-                logger.debug(f"Skipping {gt_path} missing segmentation for {target}")
-                img = nib.load(gt_path)
-                empty_gt = nib.Nifti1Image(binary_gt.astype(np.float32), img.affine)
-                empty_gt.to_filename(results_dir / prompter.name / target_name / base_name)
-                continue
-
-            # ToDo: Include again, Just temporary measure to see if inference works.
-            # if not np.any(binary_gt):  # Skip if no foreground for this label
-            #     logger.warning(f"{gt_path} missing segmentation for {target}")
-            #     continue
-
-            # Handle non-interactive experiments
             for prompter in tqdm(
                 prompters,
                 desc="Prompting with various prompters ...",
                 leave=False,
                 # disable=True,
             ):
+                filepath = results_dir / prompter.name / target_name / base_name
+                if filepath.exists() and not results_overwrite:
+                    logger.debug(f"Skipping {gt_path} as it has already been processed.")
+                    continue
                 prompter.set_groundtruth(binary_gt)
+
+                # Handle non-interactive experiments
                 if prompter.is_static:
                     prediction, _ = prompter.predict_image(image_path=img_path)
-                    prediction.to_filename(results_dir / prompter.name / target_name / base_name)
+                    prediction.to_filename(filepath)
+                # Handle interactive experiments
                 else:
                     # do something else
                     pass
@@ -121,8 +92,8 @@ def run_experiments(
             if prompter.is_static:
                 with logger.catch(level="WARNING"):
                     semantic_evaluation(
-                        semantic_pd_path=results_dir / "binarised_gts" / target_name,
-                        semantic_gt_path=results_dir / prompter.name / target_name,
+                        semantic_gt_path=results_dir / "binarised_gts" / target_name,
+                        semantic_pd_path=results_dir / prompter.name / target_name,
                         output_path=results_dir / prompter.name,
                         classes_of_interest=(1,),
                         output_name=target_name,
