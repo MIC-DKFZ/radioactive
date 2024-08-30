@@ -138,3 +138,12 @@ def get_labels_from_dataset_json(dataset_dir: Path) -> dict[str:int]:
     label_dict = dataset_info["labels"]
     return label_dict
 
+def binarize_gt(gt_path: Path, label_of_interest: int):
+    """
+    Creates a binary mask from a multi-class groundtruth in the same spacing.
+    """
+    gt_nib = nib.load(gt_path)
+    gt = gt_nib.get_fdata()
+    binary_gt = np.where(gt == label_of_interest, 1, 0)
+    binary_gt = nib.Nifti1Image(binary_gt.astype(np.uint8), gt_nib.affine)
+    return binary_gt
