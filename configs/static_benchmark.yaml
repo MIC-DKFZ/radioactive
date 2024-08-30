@@ -2,12 +2,12 @@
 seeds:
   - 11121
 models:
-  # - "sam"
-  # - "sammed2d"
-  # - "medsam"
+  - "sam"
+  - "sammed2d"
+  - "medsam"
   # - "sammed3d"
   # - "sammed3d_turbo"
-  - "segvol"
+  # - "segvol"
 
 prompting:
   type: "static"
