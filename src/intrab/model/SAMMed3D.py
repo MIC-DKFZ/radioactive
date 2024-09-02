@@ -1,3 +1,4 @@
+from pathlib import Path
 import torch
 import numpy as np
 import torch.nn.functional as F
@@ -10,9 +11,7 @@ import nibabel as nib
 from intrab.model.inferer import Inferer
 from intrab.prompts.prompt import PromptStep
 from intrab.utils.SAMMed3D_segment_anything.build_sam3D import build_sam3D_vit_b_ori
-
-SAM3D = TypeVar("SAM3D")
-
+from intrab.utils.resample import get_current_spacing_from_affine, resample
 
 def load_sammed3d(checkpoint_path, device="cuda"):
     sam_model_tune = build_sam3D_vit_b_ori(checkpoint=None)
@@ -66,8 +65,10 @@ class SAMMed3DInferer(Inferer):
             return
         # Original code: the ToCanonical function doesn't work without metadata anyway, so it efectively only reads in the image. For ease of preserving metadata, I use nib
         img = nib.load(img_path)
-        # ToDo: Preprocess the image 
         img_data = img.get_fdata()
+
+        
+
         self.img = img_data
         self.affine = img.affine
         self.image_set = True
@@ -75,11 +76,27 @@ class SAMMed3DInferer(Inferer):
     def clear_embeddings(self):
         self.stored_cropping_params, self.stored_padding_params, self.stored_patch_list = None, None, None
 
-    def transform_to_model_coords(self, some_array: np.ndarray) -> np.ndarray:
-        return super().transform_to_model_coords(some_array)
+    def transform_to_model_coords(self, nifti_path: Path, is_seg: bool) -> np.ndarray:
+        nifti = nib.load(nifti_path)
+        affine = nifti.affine
+        data = nifti.get_fdata()
+
+        # Resample to 1.5mm, 1.5mm, 1.5mm
+        current_spacing = get_current_spacing_from_affine(affine)
+        new_spacing = (1.5, 1.5, 1.5)
+
+        img_respaced = resample(data, current_spacing, new_spacing, is_seg=is_seg)
+
+        def inv_transform(arr: np.ndarray):
+            img_orig_spacing = resample(arr, new_spacing, current_spacing, True)
+            output_nib = nib.Nifti1Image(img_orig_spacing, affine)
+            return output_nib
+        return img_respaced
 
     def get_transformed_groundtruth(self, gt_path) -> np.ndarray:
-        return super().get_transformed_groundtruth(gt_path)
+        gt_data, _ = self.transform_to_model_coords(gt_path)
+
+        return gt_data
 
     def preprocess_img(self, img3D, prompt=None, cheat=False, gt=None):
         img3D = torch.from_numpy(img3D)

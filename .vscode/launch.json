@@ -30,6 +30,46 @@
                 "INTRAB_MODEL_PATH": "/mnt/E132-Projekte/Projects/2023_Tempus_intrab/checkpoints",
                 "INTRAB_RESULTS_PATH": "/mnt/E132-Projekte/Projects/2023_Tempus_intrab/results"
             }
+        },
+        {
+            "name": "Run config Tempus",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/intrab/experiments_runner_2d.py",
+            "console": "integratedTerminal",
+            "args": [
+                "-c",
+                //"${workspaceFolder}/configs/static_benchmark.yaml",
+                "${workspaceFolder}/configs/metric_testing.yaml",
+                ],
+            "env":{
+                //"INTRAB_DATA_PATH": "/mnt/E132-Rohdaten/nnUNetv2",
+                "INTRAB_DATA_PATH": "/home/t722s/E132-Projekte/Projects/2023_Tempus_intrab/datasets/",
+                //"INTRAB_DATA_PATH": "/mnt/E132-Projekte/Projects/2023_Rokuss_Tracking/Datasets",
+                //"INTRAB_MODEL_PATH": "/mnt/E132-Projekte/Projects/2023_Tempus_intrab/checkpoints",
+                "INTRAB_MODEL_PATH": "/home/t722s/E132-Projekte/Projects/2023_Tempus_intrab/checkpoints",
+                "INTRAB_RESULTS_PATH": "/home/t722s/E132-Projekte/Projects/2023_Tempus_intrab/metric_testing/"
+            }
+        }, 
+        {
+            "name": "sammed3d testing",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/intrab/evaluate.py",
+            "console": "integratedTerminal",
+            "args": [
+                "-c",
+                //"${workspaceFolder}/configs/static_benchmark.yaml",
+                "${workspaceFolder}/configs/metric_testing.yaml",
+                ],
+            "env":{
+                //"INTRAB_DATA_PATH": "/mnt/E132-Rohdaten/nnUNetv2",
+                "INTRAB_DATA_PATH": "/home/t722s/E132-Projekte/Projects/2023_Tempus_intrab/datasets/",
+                //"INTRAB_DATA_PATH": "/mnt/E132-Projekte/Projects/2023_Rokuss_Tracking/Datasets",
+                //"INTRAB_MODEL_PATH": "/mnt/E132-Projekte/Projects/2023_Tempus_intrab/checkpoints",
+                "INTRAB_MODEL_PATH": "/home/t722s/E132-Projekte/Projects/2023_Tempus_intrab/checkpoints",
+                "INTRAB_RESULTS_PATH": "/home/t722s/E132-Projekte/Projects/2023_Tempus_intrab/metric_testing/"
+            }
         }
     ]
 }

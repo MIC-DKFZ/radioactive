@@ -2,7 +2,7 @@
 seeds:
   - 11121
 models:
-  - "sammed2d"
+  - "sammed3d"
 
 # - "sammed3d"
 # - "sammed3d_turbo"
@@ -11,11 +11,11 @@ models:
 prompting:
   type: "static"
   prompt_styles:
-    - "NPointsPer2DSliceInteractivePrompter"
+    - "NPoints3DVolumePrompter"
   # ToDo: Add the hyperparameters for the prompters in here to have them properly defined and not depend on the defaults.
 
 # List of dataset that will be compared in the next run of the benchmark.
 datasets:
-  - identifier: 223
+  - identifier: 350
     type: "organ"  # Choose from 'organ' or 'lesion'; When lesion we average over all lesions, otherwise across organs.
     excluded_classes: [0] # List of classes to exclude from the dataset -- 0 is generally background 

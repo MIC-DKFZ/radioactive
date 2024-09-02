@@ -9,6 +9,8 @@ models:
   # - "sammed3d_turbo"
   # - "segvol"
 
+debug: False
+
 prompting:
   type: "static"
   prompt_styles:
