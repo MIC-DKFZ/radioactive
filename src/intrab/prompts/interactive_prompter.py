@@ -78,7 +78,6 @@ class InteractivePrompter(Prompter):
         num_iter: int = 0
         perf: float = 0
 
-        all_prompts: list[PromptStep] = []
         all_prompt_results: list[PromptResult] = []
         prompt_step: PromptStep = self.get_initial_prompt_step()
         pred, logits = self.inferer.predict(prompt_step)
@@ -89,17 +88,21 @@ class InteractivePrompter(Prompter):
                 predicted_image=pred, logits=logits, perf=perf, dof=dof, n_step=num_iter, prompt_step=prompt_step
             )
         )
-        all_prompts.append(prompt_step)
 
         while not self.stopping_criteria_met(dof, perf, num_iter):
-            prompt_step = self.get_next_prompt_step(pred, logits, all_prompts)
+            prompt_step = self.get_next_prompt_step(pred, logits, [ap.prompt_step for ap in all_prompt_results])
             # Option to never forget previous prompts but feed all of them again in one huge joint prompt.
             if self.always_pass_prev_prompts:
-                prompt_step = merge_prompt_steps(prompt_step, all_prompts[-1])
-            all_prompts.append(prompt_step)
+                prompt_step = merge_prompt_steps(prompt_step, all_prompt_results[-1].prompt_step)
+
             pred, logits = self.inferer.predict(prompt_step, pred)
             dof += prompt_step.get_dof()
             perf = self.get_performance(pred)
+            all_prompt_results.append(
+                PromptResult(
+                    predicted_image=pred, logits=logits, prompt_step=prompt_step, perf=perf, n_step=num_iter, dof=dof
+                )
+            )
             num_iter += 1
         return all_prompt_results
 
