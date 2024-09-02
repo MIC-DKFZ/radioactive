@@ -62,8 +62,9 @@ def run_experiments(
             target_names.add(target_name)
             binary_gt = np.where(multi_class_gt == target_label, 1, 0)
             # Save the binarised ground truth next to the predictions for easy access -- Needed for evaluation
-
-            binarize_gt(gt_path, target_label).to_filename(results_dir / "binarised_gts" / target_name / base_name)
+            bin_gt_filepath = results_dir / "binarised_gts" / target_name / base_name
+            if not bin_gt_filepath.exists():
+                binarize_gt(gt_path, target_label).to_filename(bin_gt_filepath)
 
             for prompter in tqdm(
                 prompters,
