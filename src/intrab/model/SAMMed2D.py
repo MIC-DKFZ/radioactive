@@ -85,11 +85,12 @@ class SAMMed2DInferer(Inferer):
         if self.image_embeddings_dict:
             self.image_embeddings_dict = {}
 
-        self.img, self.inv_trans = self.transform_to_model_coords(img_path)
+        self.img, self.inv_trans = self.transform_to_model_coords(img_path, None)
         self.loaded_image = img_path
 
-    def transform_to_model_coords(self, nifti_path: Path) -> np.ndarray:
-        nifti: nib.Nifti1Image = nib.load(nifti_path)
+    def transform_to_model_coords(self, nifti: Path | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
+        if isinstance(nifti, Path):
+            nifti: nib.Nifti1Image = nib.load(nifti)
         orientation_old = io_orientation(nifti.affine)
 
         if nib.aff2axcodes(nifti.affine) != ("R", "A", "S"):
@@ -107,10 +108,6 @@ class SAMMed2DInferer(Inferer):
 
         # Return the data in the new format and transformation function
         return data, inv_trans
-
-    def get_transformed_groundtruth(self, gt_path: Path) -> np.ndarray:
-        gt_data, _ = self.transform_to_model_coords(gt_path)
-        return gt_data
 
     def segment(self, points, box, mask, image_embedding):
         sparse_embeddings, dense_embeddings = self.model.prompt_encoder(

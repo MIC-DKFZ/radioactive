@@ -14,6 +14,7 @@ from intrab.prompts.prompt import Boxes, Boxes3D, Points, PromptStep
 from intrab.utils.SAMMed3D_segment_anything.build_sam3D import build_sam3D_vit_b_ori
 from intrab.utils.resample import get_current_spacing_from_affine, resample_to_shape, resample_to_spacing
 
+
 def load_sammed3d(checkpoint_path, device="cuda"):
     sam_model_tune = build_sam3D_vit_b_ori(checkpoint=None)
     if checkpoint_path is not None:
@@ -29,7 +30,7 @@ def load_sammed3d(checkpoint_path, device="cuda"):
 # ToDo: Make sure the spacing is correct for SAMMed3D
 class SAMMed3DInferer(Inferer):
     dim = 3
-    supported_prompts = ('point', 'mask')
+    supported_prompts = ("point", "mask")
     required_shape = (128, 128, 128)  # Hard code to match training
     offset_mode = "center"  # Changing this will require siginificant reworking of code; currently doesn't matter anyway since the other method doesn't work
     pass_prev_prompts = True
@@ -65,15 +66,14 @@ class SAMMed3DInferer(Inferer):
         if self._image_already_loaded(img_path=img_path):
             return
         # Original code: the ToCanonical function doesn't work without metadata anyway, so it efectively only reads in the image. For ease of preserving metadata, I use nib
-        self.img, self.inv_transform = self.transform_to_model_coords(img_path, is_seg = False)
-        
-        self.image_set = True
+        self.img, self.inv_trans = self.transform_to_model_coords(img_path, is_seg=False)
 
     def clear_embeddings(self):
         self.stored_cropping_params, self.stored_padding_params, self.stored_patch_list = None, None, None
 
-    def transform_to_model_coords(self, nifti_path: Path, is_seg: bool) -> np.ndarray:
-        nifti = nib.load(nifti_path)
+    def transform_to_model_coords(self, nifti: Path | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
+        if isinstance(nifti, Path):
+            nifti = nib.load(nifti)
         affine = nifti.affine
         orig_shape = nifti.shape
         data = nifti.get_fdata()
@@ -85,15 +85,13 @@ class SAMMed3DInferer(Inferer):
         img_respaced = resample_to_spacing(data, orig_spacing, new_spacing, is_seg=is_seg)
 
         def inv_transform(arr: np.ndarray):
-            img_orig_spacing = resample_to_shape(arr, current_spacing = new_spacing, new_shape = orig_shape, new_spacing = orig_spacing, is_seg = True)
+            img_orig_spacing = resample_to_shape(
+                arr, current_spacing=new_spacing, new_shape=orig_shape, new_spacing=orig_spacing, is_seg=True
+            )
             output_nib = nib.Nifti1Image(img_orig_spacing, affine)
             return output_nib
+
         return img_respaced, inv_transform
-
-    def get_transformed_groundtruth(self, gt_path) -> np.ndarray:
-        gt_data, _ = self.transform_to_model_coords(gt_path, is_seg = True)
-
-        return gt_data
 
     def preprocess_img(self, img3D, prompt=None, cheat=False, gt=None):
         img3D = torch.from_numpy(img3D)
@@ -110,9 +108,11 @@ class SAMMed3DInferer(Inferer):
             )
             crop_transform = tio.CropOrPad(mask_name="label", target_shape=(128, 128, 128))
         else:
-            coords = prompt.coords
+            coords_T = prompt.coords.T
             crop_mask = torch.zeros_like(subject.image.data)
-            crop_mask[0, *coords.T] = 1  # Include initial 0 for the additional N axis
+            # fmt: off
+            crop_mask[0, *coords_T] = 1  # Include initial 0 for the additional N axis
+            # fmt: on
             subject.add_image(tio.LabelMap(tensor=crop_mask, affine=subject.image.affine), image_name="crop_mask")
             crop_transform = tio.CropOrPad(mask_name="crop_mask", target_shape=(128, 128, 128))
 
@@ -238,7 +238,7 @@ class SAMMed3DInferer(Inferer):
             batch_labels = batch_labels[:, :1]
 
         return batch_points, batch_labels
-    
+
     def get_patchings(self, img, prompt, cheat, gt, use_stored_patching, store_patching):
         if use_stored_patching:
             if (
@@ -269,17 +269,17 @@ class SAMMed3DInferer(Inferer):
     def predict(
         self,
         prompt: PromptStep,
-        prev_low_res_logits = None,
+        prev_low_res_logits=None,
         cheat=False,
         gt=None,
         store_patching=False,
         use_stored_patching=False,
         transform=True,
     ):  # If iterating, use previous patching, previous embeddings
-        if isinstance(prompt, Points): 
-            prompt_type = 'point'
+        if isinstance(prompt, Points):
+            prompt_type = "point"
         elif isinstance(prompt, Boxes3D):
-            prompt_type = 'box'
+            prompt_type = "box"
         if not prompt_type in self.supported_prompts:
             raise ValueError(f"Unsupported prompt type: got {type(prompt)}")
 
@@ -287,9 +287,10 @@ class SAMMed3DInferer(Inferer):
             :, ::-1
         ]  # Points are in xyz, but must be in zyx to align to image in row-major format.
 
+        cropping_params, padding_params, patch_list = self.get_patchings(
+            self.img, prompt, cheat, gt, use_stored_patching, store_patching
+        )
 
-        cropping_params, padding_params, patch_list = self.get_patchings(self.img, prompt, cheat, gt, use_stored_patching, store_patching)
-        
         coords, labels = self.preprocess_prompt(prompt, cropping_params, padding_params)
         if use_stored_patching or cheat:  # Check that the prompt lies within the patch
             if torch.any(torch.logical_or(coords < 0, coords >= 128)):
@@ -324,7 +325,9 @@ class SAMMed3DInferer(Inferer):
             seg_mask_roi = seg_mask[
                 ..., pred_roi[0] : pred_roi[1], pred_roi[2] : pred_roi[3], pred_roi[4] : pred_roi[5]
             ]
-            segmentation[..., ori_roi[0] : ori_roi[1], ori_roi[2] : ori_roi[3], ori_roi[4] : ori_roi[5]] = seg_mask_roi
+            segmentation[..., ori_roi[0] : ori_roi[1], ori_roi[2] : ori_roi[3], ori_roi[4] : ori_roi[5]] = (
+                seg_mask_roi
+            )
 
         # Turn into Nifti object in original space
         segmentation = self.inv_trans(segmentation)

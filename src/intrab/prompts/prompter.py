@@ -47,14 +47,15 @@ class Prompter:
         dice = 2 * tps / (2 * tps + fps + fns)
         return dice
 
-    def set_groundtruth(self, groundtruth: np.ndarray) -> None:
+    def set_groundtruth(self, groundtruth: nib.Nifti1Image) -> None:
         """
         Sets the groundtruth that we want to predict.
         :param groundtruth: np.ndarray (Binary groundtruth mask)
         :return None
         """
         # Load the groundtruth
-        self.groundtruth = groundtruth
+        self.groundtruth = self.inferer.get_transformed_groundtruth(groundtruth)
+        self.groundtruth_orig = groundtruth
 
     def predict_image(self, image_path: Path) -> PromptResult:
         """Generate segmentation given prompt-style and model behavior."""

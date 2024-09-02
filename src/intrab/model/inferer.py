@@ -57,11 +57,10 @@ class Inferer(ABC):
         pass
 
     @abstractmethod
-    def transform_to_model_coords(self, some_array: np.ndarray) -> np.ndarray:
+    def transform_to_model_coords(self, nifti: Path | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
         """Transform the coordinates to the model's coordinate system"""
         pass
 
-    @abstractmethod
-    def get_transformed_groundtruth(self, gt_path) -> np.ndarray:
-        """Transform the groundtruth to the model's coordinate system"""
-        pass
+    def get_transformed_groundtruth(self, nifti: Path | nib.Nifti1Image) -> np.ndarray:
+        """Transforms the nifti or the groundtruth to the model's coordinate system."""
+        return self.transform_to_model_coords(nifti, is_seg=True)[0]

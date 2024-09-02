@@ -71,11 +71,12 @@ class MedSAMInferer(Inferer):
         if self.image_embeddings_dict:
             self.image_embeddings_dict = {}
 
-        self.img, self.inv_trans = self.transform_to_model_coords(img_path)
+        self.img, self.inv_trans = self.transform_to_model_coords(img_path, None)
         self.loaded_image = img_path
 
-    def transform_to_model_coords(self, nifti_path: Path) -> np.ndarray:
-        nifti: nib.Nifti1Image = nib.load(nifti_path)
+    def transform_to_model_coords(self, nifti: Path | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
+        if isinstance(nifti, Path):
+            nifti: nib.Nifti1Image = nib.load(nifti)
         orientation_old = io_orientation(nifti.affine)
 
         if nib.aff2axcodes(nifti.affine) != ("R", "A", "S"):
@@ -93,21 +94,6 @@ class MedSAMInferer(Inferer):
 
         # Return the data in the new format and transformation function
         return data, inv_trans
-
-    def get_transformed_groundtruth(self, gt_path: Path) -> np.ndarray:
-        #   The transformation of image and groundtruth to the predictio space and back to the original space needs to be done.
-        # Load in and reorient to RAS
-        # The inferer has the inverse transformation function saved
-        gt_data, _ = self.transform_to_model_coords(gt_path)
-
-        # This preprocessing should be defined more general, to allow good generalization.
-        # Think about this tomorrow when fresh.
-        #   Maybe make all of the preprocessing a pre-processing pipeline?
-        #   Might make life easier to have transforms fully defined?
-        #   Should be tested then though, to assure that preprocessings work as expected.
-        #   Also think about how to conditionally create these transforms if e.g. spacings are requested.
-
-        return gt_data
 
     def postprocess_mask(self, mask):
         pass
@@ -151,7 +137,9 @@ class MedSAMInferer(Inferer):
         return slices_processed
 
     def preprocess_prompt(self, prompt):
-        preprocessed_prompts_dict = {slice_idx: {"point": None, "box": None} for slice_idx in prompt.get_slices_to_infer()}
+        preprocessed_prompts_dict = {
+            slice_idx: {"point": None, "box": None} for slice_idx in prompt.get_slices_to_infer()
+        }
 
         if prompt.has_boxes:
             for slice_idx, box in prompt.boxes.items():

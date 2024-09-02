@@ -55,19 +55,17 @@ def run_experiments(
     # Loop through all image and label pairs
     target_names: set[str] = set()
     for img_path, gt_path in tqdm(imgs_gts, desc="looping through files\n", leave=True):
-        base_name = os.path.basename(gt_path)
-        multi_class_gt = inferer.get_transformed_groundtruth(gt_path)
-
         # Loop through each organ label except the background
         for target, target_label in tqdm(targets.items(), desc="Predicting targets...\n", leave=False):
             target_name: str = f"{target_label:03d}" + "__" + target
-
             target_names.add(target_name)
-            binary_gt = np.where(multi_class_gt == target_label, 1, 0)
-            # Save the binarised ground truth next to the predictions for easy access -- Needed for evaluation
+
+            # ---------------- Get binary gt in original coordinate system --------------- #
+            base_name = os.path.basename(gt_path)
             bin_gt_filepath = results_dir / "binarised_gts" / target_name / base_name
+            binary_gt_orig_coords = binarize_gt(gt_path, target_label)
             if not bin_gt_filepath.exists():
-                binarize_gt(gt_path, target_label).to_filename(bin_gt_filepath)
+                binary_gt_orig_coords.to_filename(bin_gt_filepath)
 
             for prompter in tqdm(
                 prompters,
@@ -79,7 +77,7 @@ def run_experiments(
                 if filepath.exists() and not results_overwrite:
                     logger.debug(f"Skipping {gt_path} as it has already been processed.")
                     continue
-                prompter.set_groundtruth(binary_gt)
+                prompter.set_groundtruth(binary_gt_orig_coords)
 
                 # Handle non-interactive experiments
                 if prompter.is_static:

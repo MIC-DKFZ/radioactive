@@ -108,11 +108,12 @@ class SAMInferer(Inferer):
         if self.image_embeddings_dict:
             self.image_embeddings_dict = {}
 
-        self.img, self.inv_trans = self.transform_to_model_coords(img_path)
+        self.img, self.inv_trans = self.transform_to_model_coords(img_path, None)
         self.loaded_image = img_path
 
-    def transform_to_model_coords(self, nifti_path: Path) -> np.ndarray:
-        nifti: nib.Nifti1Image = nib.load(nifti_path)
+    def transform_to_model_coords(self, nifti: Path | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
+        if isinstance(nifti, Path):
+            nifti: nib.Nifti1Image = nib.load(nifti)
         orientation_old = io_orientation(nifti.affine)
 
         if nib.aff2axcodes(nifti.affine) != ("R", "A", "S"):
@@ -130,10 +131,6 @@ class SAMInferer(Inferer):
 
         # Return the data in the new format and transformation function
         return data, inv_trans
-
-    def get_transformed_groundtruth(self, gt_path: Path) -> np.ndarray:
-        gt_data, _ = self.transform_to_model_coords(gt_path)
-        return gt_data
 
     def preprocess_img(self, img, slices_to_process):
         """
@@ -178,7 +175,9 @@ class SAMInferer(Inferer):
             - Modify in line with the interpolation
             - Collect into a dictionary of slice:slice prompt
         """
-        preprocessed_prompts_dict = {slice_idx: {"point": None, "box": None} for slice_idx in prompt.get_slices_to_infer()}
+        preprocessed_prompts_dict = {
+            slice_idx: {"point": None, "box": None} for slice_idx in prompt.get_slices_to_infer()
+        }
 
         if prompt.has_points:
             coords = prompt.coords
@@ -242,8 +241,8 @@ class SAMInferer(Inferer):
 
     def merge_seg_with_prev_seg(self, new_seg: np.ndarray, old_seg_path: Path, slices_inferred: set):
         # Find slices which were inferred on in old seg, but not in new_seg
-        old_seg, _ = self.transform_to_model_coords(old_seg_path)
-        old_seg_inferred_slices = np.where(np.any(old_seg, axis = (1,2)))[0] # ToDo Check that I took the right axes
+        old_seg, _ = self.transform_to_model_coords(old_seg_path, None)
+        old_seg_inferred_slices = np.where(np.any(old_seg, axis=(1, 2)))[0]  # ToDo Check that I took the right axes
         missing_slices = set(old_seg_inferred_slices) - slices_inferred
 
         # Merge segmentations
@@ -251,14 +250,12 @@ class SAMInferer(Inferer):
 
         return new_seg
 
-
-    def predict(self, prompt: PromptStep, mask_dict={}, return_logits: bool =False, prev_seg_path: Path = None):
+    def predict(self, prompt: PromptStep, mask_dict={}, return_logits: bool = False, prev_seg_path: Path = None):
         if not isinstance(prompt, PromptStep):
             raise TypeError(f"Prompts must be supplied as an instance of the Prompt class.")
         if prompt.has_boxes and prompt.has_points:
             logger.warning("Both point and box prompts have been supplied; the model has not been trained on this.")
         slices_to_infer = prompt.get_slices_to_infer()
-
 
         prompt = deepcopy(prompt)
 
@@ -314,7 +311,5 @@ class SAMInferer(Inferer):
         # Reorient to original orientation and return with metadata
         # Turn into Nifti object in original space
         segmentation = self.inv_trans(segmentation)
-
-        
 
         return segmentation, low_res_logits
