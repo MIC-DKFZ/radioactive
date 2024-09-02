@@ -39,8 +39,10 @@ if __name__ == "__main__":
         twoD_n_slice_box_interpolation=5,
         twoD_n_seed_points_point_propagation=5,
         twoD_n_points_propagation=5,
-        twoD_dof_bound=60,
-        twoD_perf_bound=0.85,
+        interactive_dof_bound = 60,
+        interactive_perf_bound = 0.9,
+        interactive_max_iter = 10,
+        twoD_interactive_n_points_per_slice = 5
     )
 
     # Potentially move the seeds inside to not create new models each seed, but save that time.

@@ -18,6 +18,11 @@ from intrab.prompts.prompter import (
     static_prompt_styles,
 )
 
+from intrab.prompts.interactive_prompter import(
+    NPointsPer2DSliceInteractive,
+    interactive_prompt_styles
+)
+
 from intrab.utils.paths import get_model_path
 from intrab.model.inferer import Inferer
 from intrab.model.SAM import SAMInferer
@@ -103,6 +108,16 @@ def get_wanted_supported_prompters(
                 )
             if "BoxPropagationPrompter" in wanted_prompt_styles:
                 prompters.append(BoxPropagationPrompter(inferer, seed))
+
+        if "point" in inferer.supported_prompts and "mask" in inferer.supported_prompts:
+            if "NPointsPer2DSliceInteractive" in wanted_prompt_styles:
+                prompters.append(NPointsPer2DSliceInteractive(inferer, 
+                                                              seed, 
+                                                              dof_bound = pro_conf.interactive_dof_bound,
+                                                              perf_bound = pro_conf.interactive_perf_bound,
+                                                              max_iter = pro_conf.interactive_max_iter,
+                                                              n_points_per_slice = pro_conf.twoD_interactive_n_points_per_slice))
+
     elif inferer.dim == 3:
         if "point" in inferer.supported_prompts:
             prompters.append(NPoints3DVolumePrompter(inferer, seed, n_points=pro_conf.threeD_n_click_random_points))

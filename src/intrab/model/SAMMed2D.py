@@ -10,7 +10,7 @@ import cv2
 from argparse import Namespace
 import nibabel as nib
 from nibabel.orientations import io_orientation, ornt_transform
-import warnings
+from loguru import logger
 
 from intrab.utils.SAMMed2D_segment_anything import sam_model_registry as registry_sammed2d
 from intrab.prompts.prompt import PromptStep
@@ -255,7 +255,7 @@ class SAMMed2DInferer(Inferer):
         if not (isinstance(prompt, PromptStep)):
             raise TypeError(f"Prompts must be supplied as an instance of the Prompt class.")
         if prompt.has_boxes and prompt.has_points:
-            warnings.warn("Both point and box prompts have been supplied; the model has not been trained on this.")
+            logger.warning("Both point and box prompts have been supplied; the model has not been trained on this.")
         slices_to_infer = prompt.get_slices_to_infer()
 
         if self.loaded_image is None:

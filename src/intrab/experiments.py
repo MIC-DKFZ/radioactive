@@ -2,6 +2,7 @@
 from datetime import datetime
 import os
 from pathlib import Path
+import pickle
 
 from loguru import logger
 from intrab.model.inferer import Inferer
@@ -84,8 +85,17 @@ def run_experiments(
                     prediction.to_filename(filepath)
                 # Handle interactive experiments
                 else:
-                    # do something else
-                    pass
+                    
+                    predictions, predictions_meta = prompter.predict_image(image_path = img_path)                    
+                    
+                    dirpath = filepath.with_suffix('') # Results are saved to a directory since there are multiple segmetnations
+                    dirpath.mkdir(exist_ok = True)
+                    for i, pred in enumerate(predictions):
+                        # Transform back to original sapcing/coordinate system and save
+                        pred.to_filename(dirpath / f'iter_{i}.nii.gz')
+                    
+                    with open(dirpath / 'meta.pkl', 'wb') as f:
+                        pickle.dump(predictions_meta, f)
 
     # We always run the semantic eval on the created folders directly.
     for target_name in target_names:

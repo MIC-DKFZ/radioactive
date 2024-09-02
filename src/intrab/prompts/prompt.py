@@ -4,7 +4,7 @@ import numpy as np
 class Points:
     def __init__(self, coords, labels):
 
-        self.coords = np.array(coords)  # Nx3  [x, y, z]
+        self.coords = np.atleast_2d(np.array(coords))  # Nx3  [x, y, z]
         self.labels = np.array(labels)  # N    [0 or 1]
 
     def get_slices_to_infer(self):
@@ -57,11 +57,13 @@ class PromptStep:
 
         # Handle point initiation
         if isinstance(point_prompts, Points):
+            assert len(point_prompts.coords) == len(point_prompts.labels), 'Labels and coordinates do not match up - Not the same number of each.'
             self.coords, self.labels = point_prompts.coords, point_prompts.labels
             self.has_points = True
 
         elif point_prompts is not None:
-            self.coords, self.labels = np.array(point_prompts[0]), np.array(point_prompts[1])
+            assert len(point_prompts[0]) == len(point_prompts[1]), 'Labels and coordinates do not match up - Not the same number of each.'
+            self.coords, self.labels = np.atleast_2d(np.array(point_prompts[0])), np.array(point_prompts[1])
             self.has_points = True
 
         # Handle box initiation
@@ -116,7 +118,11 @@ def merge_prompt_steps(prompt1: PromptStep, prompt2: PromptStep) -> PromptStep:
             raise ValueError("Merging would cause having two distinct boxes on one slice, which is not permitted")
         boxes.update(prompt2.boxes)
 
-    coords = np.concatenate([prompt1.coords, prompt2.coords], axis=0)
+    # Ensure both arrays are 2d to permit concatenation
+    coords1 = np.atleast_2d(prompt1.coords)
+    coords2 = np.atleast_2d(prompt2.coords)
+
+    coords = np.concatenate([coords1, coords2], axis=0)
     labels = np.concatenate([prompt1.labels, prompt2.labels])
 
     merged_prompt = PromptStep(point_prompts=(coords, labels), box_prompts=boxes)

@@ -513,6 +513,7 @@ from intrab.prompts.prompt_utils import get_fg_points_from_cc_centers, get_pos_c
 from intrab.prompts.prompter import Prompter
 from intrab.utils.interactivity import gen_contour_fp_scribble
 from intrab.utils.result_data import PromptResult
+from loguru import logger
 from nibabel import Nifti1Image
 
 class InteractivePrompter(Prompter):
@@ -558,7 +559,7 @@ class InteractivePrompter(Prompter):
         return dice
 
     @abstractmethod
-    def get_initial_prompt_step(self) -> PromptStep:
+    def get_initial_prompt_step(self) -> tuple[PromptStep, int]:
         """Gets the initial prompt for the image from the groundtruth."""
         pass
 
@@ -568,7 +569,7 @@ class InteractivePrompter(Prompter):
         """Gets the next prompt for the image from the groundtruth."""
         pass
 
-    def predict_image(self, image_path: Path) -> list[PromptResult]:
+    def predict_image(self, image_path: Path) -> tuple[list[Nifti1Image],list[PromptResult]]:
         """Predicts the image for multiple steps until the stopping criteria is met."""
 
         self.inferer.set_image(image_path)
@@ -576,7 +577,7 @@ class InteractivePrompter(Prompter):
         num_iter: int = 0
         perf: float = 0
 
-        prompt_step: PromptStep = self.get_initial_prompt_step()
+        prompt_step, dof = self.get_initial_prompt_step()
         pred, logits = self.inferer.predict(prompt_step)
 
         # ToDo: Update the DoF calculations to be more accurate.
@@ -591,7 +592,7 @@ class InteractivePrompter(Prompter):
 
 
 # ToDo: Check prompts generated are of decent 'quality'
-class InteractivePrompterMIC(InteractivePrompter):
+class twoDInteractivePrompter(InteractivePrompter):
     def __init__(
             self,
             inferer: Inferer,
@@ -599,9 +600,20 @@ class InteractivePrompterMIC(InteractivePrompter):
             dof_bound: int | None = 60,
             perf_bound: float | None = 0.85,
             max_iter: int | None = 10,
+            contour_distance = 2,
+            disk_size_range = (0,0),
+            scribble_length = 0.6
+
         ):
         super().__init__(inferer, seed, dof_bound, perf_bound, max_iter)
         self.initial_dof = None
+        self.prompts = []
+        self.prompt_step_all = None
+
+        # Scribble generating parameters
+        self.contour_distance = contour_distance
+        self.disk_size_range = disk_size_range
+        self.scribble_length = scribble_length
         
     
     def get_generate_negative_prompts_flag(self, fn_mask: np.ndarray, fp_mask: np.ndarray) -> bool:
@@ -627,7 +639,6 @@ class InteractivePrompterMIC(InteractivePrompter):
         self,
         fn_mask: np.ndarray,
         slices_inferred: set,
-        dof: int
     ) -> PromptStep:
         
         if not self.has_generated_positive_prompts:
@@ -640,18 +651,19 @@ class InteractivePrompterMIC(InteractivePrompter):
             fp_coords[:, 0] < upper
         )  # Mask to determine which false negatives lie between the 30th to 70th percentile
         if np.sum(middle_mask) == 0:
+            logger.info('Failed to generate prompt in middle 40 percent of the volume. This may be worth checking out.')
             middle_mask = np.ones(
                 len(fp_coords), bool
             )  # If there are no false negatives in the middle, draw from all coordinates (unlikely given that there must be many)
+
         fp_coords = fp_coords[middle_mask, :]
         new_middle_seed_prompt = fp_coords[np.random.choice(len(fp_coords), 1)]
-        dof += 3
 
         # Interpolate linearly from botom_seed-prompt to top_seed_prompt through the new middle prompt to get new positive prompts
         new_seed_prompt = np.vstack([self.bottom_seed_prompt, new_middle_seed_prompt, self.top_seed_prompt])
         new_coords = interpolate_points(new_seed_prompt, kind="linear").astype(int)
         new_coords = new_coords[:, [2, 1, 0]]  # zyx -> xyz
-        new_positive_promptstep = PromptStep(point_prompts=new_coords)
+        new_positive_promptstep = PromptStep(point_prompts=(new_coords, [1]*len(new_coords)))
         return new_positive_promptstep
     
     def _get_max_fp_sagittal_slice_idx(self, fp_mask):
@@ -662,22 +674,19 @@ class InteractivePrompterMIC(InteractivePrompter):
         return max_fp_idx
 
     def _generate_scribble(
-        self, slice_gt, slice_seg, fp_mask
+        self, slice_gt, slice_seg
     ):  # Mostly a wrapper for gen_countour_fp_scribble, but handles an edge case where it fails
         if not np.any(
             slice_gt
         ):  # There is no gt in the slice, but lots of fps. For now just draw a vertical line down the column with the most fps
-            fp_mask = (
-                slice_seg  # All segmented fg voxels are false positives, slice_seg only contains false positives
-            )
-            fp_per_column = np.sum(fp_mask, axis=0)
+            fp_per_column = np.sum(slice_seg, axis=0)
             max_fp_column = np.argmax(fp_per_column)
             scribble = np.zeros_like(slice_seg)
             scribble[:, max_fp_column] = 1
         else:
             scribble = gen_contour_fp_scribble(
                 slice_gt,
-                fp_mask,
+                slice_seg,
                 self.contour_distance,
                 self.disk_size_range,
                 self.scribble_length,
@@ -691,14 +700,15 @@ class InteractivePrompterMIC(InteractivePrompter):
         # Obtain contour scribble on worst sagittal slice
         max_fp_idx = self._get_max_fp_sagittal_slice_idx(fp_mask)
         
-        max_fp_slice = groundtruth[:, max_fp_idx]
+        slice_gt = groundtruth[:, max_fp_idx]
         slice_seg = pred[:, max_fp_idx]
 
         # Try to generate a 'scribble' containing lots of false positives
-        scribble = self._generate_scribble(max_fp_slice, slice_seg)
+        scribble = self._generate_scribble(slice_gt, slice_seg)
 
         if scribble is None: # Scribble generation failed, get random negative click instead
-            return None, None
+            logger.warning('Generating negative prompt failed - this should not happen. Will generate positive prompt instead.')
+            return None
 
         else:  # Otherwise subset scribble to false positives to generate new prompt
             scribble_coords = np.where(scribble)
@@ -712,11 +722,11 @@ class InteractivePrompterMIC(InteractivePrompter):
             missing_axis = np.repeat(max_fp_idx, len(fp_coords))
             fp_coords_3d = np.vstack([fp_coords[:, 0], missing_axis, fp_coords[:, 1]]).T
             fp_coords_3d = fp_coords_3d[:, [2, 1, 0]]  # zyx -> xyz
-            new_negative_promptstep = PromptStep(points_prompts = (fp_coords_3d, [0] * len(fp_coords_3d)))
+            new_negative_promptstep = PromptStep(point_prompts = (fp_coords_3d, [0] * len(fp_coords_3d)))
 
             return new_negative_promptstep
 
-    def get_next_prompt_step(self, pred, dof):
+    def get_next_prompt_step(self, pred, dof, pass_prev_prompts):
         fn_mask = (pred == 0) & (self.groundtruth == 1)
         fp_mask = (pred == 1) & (self.groundtruth == 0)
 
@@ -728,13 +738,17 @@ class InteractivePrompterMIC(InteractivePrompter):
             if prompt_step is None: 
                 prompt_gen_failed = True
             else: 
+                prompt_gen_failed = False
+                # TESTING:
+                if len(prompt_step.get_slices_to_infer()) < 5:
+                    logger.warning('Negative prompt step is changing less than 5 slices; probably pretty ineffective')
                 dof+=12 # ToDo discuss how many dofs to add here
-                return prompt_step, dof
-
 
         if not generate_negative_prompts_flag or prompt_gen_failed:
+            slices_inferred = self.prompt_step_all.get_slices_to_infer() # Get which slices have been inferred on
             prompt_step = self.generate_positive_promptstep(
-                pred, fn_mask
+                fn_mask,
+                slices_inferred
             )
 
             if not self.has_generated_positive_prompts:
@@ -743,61 +757,85 @@ class InteractivePrompterMIC(InteractivePrompter):
 
             dof += 3
 
-            return prompt_step, dof 
+        # Handle prompt step storage and merging; as needed
+        self.store_prompt_steps(prompt_step)
 
-    def predict_image(self, image_path: Path) -> tuple[list[Nifti1Image], list[int]]:
+        if pass_prev_prompts:
+            return self.prompt_step_all, dof
+        else:
+            return prompt_step, dof 
+        
+    def store_prompt_steps(self, prompt_step:PromptStep):
+        # Store the prompt step as a state
+        self.prompts.append(prompt_step) 
+
+        # Merge into prompt_step_all
+        if self.prompt_step_all is None:
+            self.prompt_step_all = prompt_step
+        else:
+            self.prompt_step_all = merge_prompt_steps(self.prompt_step_all, prompt_step)
+
+    def predict_and_merge_new_seg(self, pred: np.ndarray, logits:np.ndarray, prompt_step:PromptStep):
+        """
+        Wrapper for inferer.predict that handles merging new segmentations. 
+        """
+        
+        # Obtain new prediction
+        new_seg, new_logits = self.inferer.predict(prompt_step, logits, transform=False)
+
+        # Merge into previous segmentation
+        slices_with_new_prompts = prompt_step.get_slices_to_infer()
+
+        pred[slices_with_new_prompts] = new_seg[slices_with_new_prompts]
+        logits.update(new_logits)
+
+        return pred, logits
+    
+    def process_results(self, pred, logits, perf, num_iter, dof) -> tuple[Nifti1Image, PromptMetaResult]:
+        pred_orig_system = self.inferer.inv_trans(pred)
+        meta_res = PromptMetaResult(logits, perf, num_iter, dof)
+
+        return pred_orig_system, meta_res
+
+    def predict_image(self, image_path: Path) -> tuple[list[Nifti1Image], list[PromptMetaResult]]:
         # Initialise helper variables
         self.has_generated_positive_prompts = False
         num_iter = 0
-        dof = 0
-        results = []
-        prompt_step_all = None
+        dof = None
+        preds = []
+        preds_meta = []
 
         # Obtain initial segmetnation
         self.inferer.set_image(image_path)
 
-        prompt_step, initial_dof = self.get_initial_prompt_step()
-        if self.inferer.pass_prev_prompts:
-            prompt_step_all = prompt_step 
-        pred, logits = self.inferer.predict(prompt_step)
+        prompt_step, dof = self.get_initial_prompt_step()
+        pred, logits = self.inferer.predict(prompt_step, transform = False)
 
-        dof = initial_dof
         perf = self.get_performance(pred)
 
-        result = PromptResult(pred, logits, perf, num_iter, dof) 
-        results.append(result)
+        pred_orig_system, meta_res = self.process_results(pred, logits, perf, num_iter, dof)
+        preds.append(pred_orig_system)
+        preds_meta.append(meta_res)
 
         # Iterate on initial segmentation
         while not self.stopping_criteria_met(dof, perf, num_iter):
             # Obtain next prompt_step 
-            prompt_step, dof = self.get_next_prompt_step(pred, logits)
-            
+            prompt_step, dof = self.get_next_prompt_step(pred, dof, self.inferer.pass_prev_prompts)
 
-            # Merge prompt step with previous steps if desired
-            slices_with_new_prompts = prompt_step.get_slices_to_infer()
-
-            if self.inferer.pass_prev_prompts:
-                prompt_step_all = merge_prompt_steps(prompt_step, prompt_step_all)
-                # coords_to_use, labels_to_use = prompt_step_all.coords[fix_slice_mask], prompt_step_all.labels[fix_slice_mask] 
-                # Check this new way works as well as using the fix_slice_mask
-                coords_to_use, labels_to_use = prompt_step_all.coords[slices_with_new_prompts], prompt_step_all.labels[slices_with_new_prompts]
-                prompt_step = PromptStep(point_prompts = (coords_to_use, labels_to_use))
-                
             # Generate new segmentation and integrate into old one
-            new_seg, new_logits = self.inferer.predict(prompt_step, logits, transform=False)
-            pred[slices_with_new_prompts] = new_seg[slices_with_new_prompts]
-            logits[slices_with_new_prompts] = new_logits[slices_with_new_prompts]
+            pred, logits = self.predict_and_merge_new_seg(pred, logits, prompt_step)
             
             perf = self.get_performance(pred)
 
-            result = PromptResult(pred, logits, perf, num_iter, dof) 
-            results.append(result)
+            pred_orig_system, meta_res = self.process_results(pred, logits, perf, num_iter, dof)
+            preds.append(pred_orig_system)
+            preds_meta.append(meta_res)
 
             num_iter += 1
         
-        return results
+        return preds, preds_meta
 
-class NPointsPer2DSliceInteractive(InteractivePrompterMIC):
+class NPointsPer2DSliceInteractive(twoDInteractivePrompter):
     def __init__(
             self,
             inferer: Inferer,
@@ -815,6 +853,7 @@ class NPointsPer2DSliceInteractive(InteractivePrompterMIC):
         initial_prompt_step = get_pos_clicks2D_row_major(
             self.groundtruth, self.n_points_per_slice, self.seed
         )
+        self.prompt_step_all = initial_prompt_step
         initial_dof = len(initial_prompt_step.get_slices_to_infer())*3 # 3 dofs per slice inferred
 
         return initial_prompt_step, initial_dof
