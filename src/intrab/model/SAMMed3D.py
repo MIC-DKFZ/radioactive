@@ -295,7 +295,7 @@ class SAMMed3DInferer(Inferer):
             if torch.any(torch.logical_or(coords < 0, coords >= 128)):
                 raise RuntimeError("Prompt coordinates do not lie within stored patch!")
 
-        pred = np.zeros_like(self.img, dtype=np.uint8)
+        segmentation = np.zeros_like(self.img, dtype=np.uint8)
         for patch_embedding, pos3D in patch_list:
             if (
                 prev_low_res_logits is not None
@@ -324,9 +324,9 @@ class SAMMed3DInferer(Inferer):
             seg_mask_roi = seg_mask[
                 ..., pred_roi[0] : pred_roi[1], pred_roi[2] : pred_roi[3], pred_roi[4] : pred_roi[5]
             ]
-            pred[..., ori_roi[0] : ori_roi[1], ori_roi[2] : ori_roi[3], ori_roi[4] : ori_roi[5]] = seg_mask_roi
+            segmentation[..., ori_roi[0] : ori_roi[1], ori_roi[2] : ori_roi[3], ori_roi[4] : ori_roi[5]] = seg_mask_roi
 
-        if transform: # ToDo: should always transform (also for all other models.)
-            pred = self.inv_transform(pred)
+        # Turn into Nifti object in original space
+        segmentation = self.inv_trans(segmentation)
 
-        return pred, low_res_logits.cpu().squeeze()
+        return segmentation, low_res_logits.cpu().squeeze()

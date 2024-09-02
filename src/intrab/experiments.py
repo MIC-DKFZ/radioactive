@@ -87,7 +87,7 @@ def run_experiments(
                 else:
                     
                     predictions, predictions_meta = prompter.predict_image(image_path = img_path)                    
-                    
+                    # ToDo: Save segmentations with hierarchy of step 1 for an organ and then all nifitis
                     dirpath = filepath.with_suffix('') # Results are saved to a directory since there are multiple segmetnations
                     dirpath.mkdir(exist_ok = True)
                     for i, pred in enumerate(predictions):

@@ -89,7 +89,7 @@ class PromptStep:
 
     def get_dof(self):
         """Get the degress of freedom of the current prompt step."""
-        raise NotImplementedError("This method hasn't been implemented yet.")
+        return 0 # Temporary implementation - may change to something more substantial later.
 
     def __getitem__(self, index):
         return self.prompts_dict[index]

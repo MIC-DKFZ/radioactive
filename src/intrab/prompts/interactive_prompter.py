@@ -80,7 +80,8 @@ class InteractivePrompter(Prompter):
         all_prompt_results: list[PromptResult] = []
         prompt_step: PromptStep = self.get_initial_prompt_step()
         pred, logits = self.inferer.predict(prompt_step)
-        perf = self.get_performance(pred)
+
+        perf = self.get_performance(pred.get_fdata())
         all_prompt_results.append(PromptResult(predicted_image=pred,logits=logits, perf=perf, dof=dof, n_step=num_iter, prompt_step=prompt_step))
         all_prompts.append(prompt_step)
 
@@ -111,10 +112,6 @@ class twoDInteractivePrompter(InteractivePrompter):
 
         ):
         super().__init__(inferer, seed, dof_bound, perf_bound, max_iter)
-        self.initial_dof = None
-        self.prompts = []
-        self.prompt_step_all = None
-
         # Scribble generating parameters
         self.contour_distance = contour_distance
         self.disk_size_range = disk_size_range
@@ -273,9 +270,8 @@ class NPointsPer2DSliceInteractive(twoDInteractivePrompter):
             self.groundtruth, self.n_points_per_slice, self.seed
         )
         self.prompt_step_all = initial_prompt_step
-        initial_dof = len(initial_prompt_step.get_slices_to_infer())*3 # 3 dofs per slice inferred
 
-        return initial_prompt_step, initial_dof
+        return initial_prompt_step
 
 interactive_prompt_styles = Literal[
     "NPointsPer2DSliceInteractive",

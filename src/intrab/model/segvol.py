@@ -324,7 +324,7 @@ class SegVolInferer(Inferer):
 
         segmentation = self.postprocess_mask(res[-1], return_logits)
 
-        if transform:
-            segmentation = nib.Nifti1Image(segmentation, self.affine)
+        # Turn into Nifti object in original space
+        segmentation = nib.Nifti1Image(segmentation, self.affine)
 
         return segmentation

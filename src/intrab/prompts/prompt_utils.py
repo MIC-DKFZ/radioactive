@@ -507,10 +507,7 @@ def point_propagation_old(inferer: Inferer, seed_prompt: PromptStep, slices_to_i
     ]  # Removes extraneous prompts on bottom_slice-1 and top_slice+1 that weren't used.
     prompt = PromptStep(point_prompts=(coords, [1] * len(coords)))
 
-    if return_low_res_logits:
-        return segmentation, low_res_logits, prompt
-    else:
-        return segmentation, prompt
+    return segmentation, low_res_logits, prompt
 
 
 def get_seed_box(gt):

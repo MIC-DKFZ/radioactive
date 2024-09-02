@@ -227,8 +227,8 @@ class MedSAMInferer(Inferer):
         low_res_logits = {k: torch.sigmoid(v).squeeze().cpu().numpy() for k, v in slice_lowres_outputs.items()}
 
         segmentation = self.postprocess_slices(slice_lowres_outputs)
-        # segmentation = nib.Nifti1Image(segmentation, 
-        if transform:
-            segmentation = self.inv_trans(segmentation)
+
+        # Turn into Nifti object in original space
+        segmentation = self.inv_trans(segmentation)
 
         return segmentation, low_res_logits
