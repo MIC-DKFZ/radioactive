@@ -23,6 +23,8 @@ from intrab.utils.io import binarize_gt, verify_results_dir_exist
 from intrab.utils.io import verify_results_dir_exist
 from nneval.evaluate_semantic import semantic_evaluation
 
+from intrab.utils.result_data import PromptResult
+
 
 # ToDo: Make this run_organ_experiments
 def run_experiments(
@@ -81,21 +83,22 @@ def run_experiments(
 
                 # Handle non-interactive experiments
                 if prompter.is_static:
-                    prediction, _ = prompter.predict_image(image_path=img_path)
-                    prediction.to_filename(filepath)
+                    prediction_result: PromptResult
+                    prediction_result = prompter.predict_image(image_path=img_path)
+                    # Save the prediction
+                    prediction_result.predicted_image.to_filename(filepath)
                 # Handle interactive experiments
                 else:
-                    
-                    predictions, predictions_meta = prompter.predict_image(image_path = img_path)                    
-                    # ToDo: Save segmentations with hierarchy of step 1 for an organ and then all nifitis
-                    dirpath = filepath.with_suffix('') # Results are saved to a directory since there are multiple segmetnations
-                    dirpath.mkdir(exist_ok = True)
-                    for i, pred in enumerate(predictions):
-                        # Transform back to original sapcing/coordinate system and save
-                        pred.to_filename(dirpath / f'iter_{i}.nii.gz')
-                    
-                    with open(dirpath / 'meta.pkl', 'wb') as f:
-                        pickle.dump(predictions_meta, f)
+                    prediction_results: list[PromptResult]
+                    prediction_results = prompter.predict_image(image_path=img_path)
+                    base_path = filepath.parent
+
+                    for cnt, pred in enumerate(prediction_results):
+                        target_path = base_path / f"iter_{cnt}"
+                        target_path.mkdir(exist_ok=True)
+                        pred.predicted_image.to_filename(target_path / base_name)
+
+                        # ToDo: Serialize the prediction results.
 
     # We always run the semantic eval on the created folders directly.
     for target_name in target_names:
