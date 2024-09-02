@@ -8,6 +8,7 @@ from argparse import Namespace
 import nibabel as nib
 from nibabel.orientations import io_orientation, ornt_transform
 import warnings
+from loguru import logger
 
 from intrab.model.inferer import Inferer
 from intrab.prompts.prompt import PromptStep
@@ -241,10 +242,10 @@ class SAMInferer(Inferer):
         return segmentation
 
     def predict(self, prompt: PromptStep, mask_dict={}, return_logits=False, transform=True):
-        if not (isinstance(prompt, PromptStep)):
+        if not isinstance(prompt, PromptStep):
             raise TypeError(f"Prompts must be supplied as an instance of the Prompt class.")
         if prompt.has_boxes and prompt.has_points:
-            warnings.warn("Both point and box prompts have been supplied; the model has not been trained on this.")
+            logger.warning("Both point and box prompts have been supplied; the model has not been trained on this.")
         slices_to_infer = prompt.get_slices_to_infer()
 
 
@@ -296,7 +297,7 @@ class SAMInferer(Inferer):
         segmentation = self.postprocess_slices(self.slice_lowres_outputs, return_logits)
 
         # Reorient to original orientation and return with metadata
-        if transform == True:
+        if transform:
             segmentation = self.inv_trans(segmentation)
 
         return segmentation, low_res_logits
