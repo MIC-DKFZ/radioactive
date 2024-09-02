@@ -21,6 +21,7 @@ class Inferer(ABC):
         self.loaded_image: Path | None = None
         # Just used for 2D models and not for 3D models
         self.image_embeddings_dict = {}
+        self.inv_trans: callable[[np.ndarray], np.ndarray] = None
 
     @abstractmethod
     def load_model(self, checkpoint_path, device):
