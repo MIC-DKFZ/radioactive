@@ -13,6 +13,7 @@ from intrab.prompts.prompt import PromptStep
 from intrab.utils.SAMMed3D_segment_anything.build_sam3D import build_sam3D_vit_b_ori
 from intrab.utils.resample import get_current_spacing_from_affine, resample
 
+
 def load_sammed3d(checkpoint_path, device="cuda"):
     sam_model_tune = build_sam3D_vit_b_ori(checkpoint=None)
     if checkpoint_path is not None:
@@ -67,8 +68,6 @@ class SAMMed3DInferer(Inferer):
         img = nib.load(img_path)
         img_data = img.get_fdata()
 
-        
-
         self.img = img_data
         self.affine = img.affine
         self.image_set = True
@@ -91,10 +90,11 @@ class SAMMed3DInferer(Inferer):
             img_orig_spacing = resample(arr, new_spacing, current_spacing, True)
             output_nib = nib.Nifti1Image(img_orig_spacing, affine)
             return output_nib
+
         return img_respaced
 
     def get_transformed_groundtruth(self, gt_path) -> np.ndarray:
-        gt_data, _ = self.transform_to_model_coords(gt_path)
+        gt_data, _ = self.transform_to_model_coords(gt_path, is_seg=True)
 
         return gt_data
 
