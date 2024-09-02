@@ -1,6 +1,8 @@
 from pathlib import Path
 from typing import Literal
 
+from loguru import logger
+
 from intrab.prompts.prompt_hparams import PromptConfig
 from intrab.prompts.prompter import (
     Box3DVolumePrompter,
@@ -108,4 +110,7 @@ def get_wanted_supported_prompters(
             prompters.append(Box3DVolumePrompter(inferer, seed))
     else:
         raise ValueError(f"Inferer dimension '{inferer.dim}' not supported. Choose from [2, 3]")
+
+    if len(prompters) == 0:
+        logger.warning(f"No prompters selected; only evaluation will be performed.")
     return prompters

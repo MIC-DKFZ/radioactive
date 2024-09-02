@@ -15,7 +15,7 @@
 
 from typing import Tuple, Union, List
 import numpy as np
-from nnunetv2.imageio.base_reader_writer import BaseReaderWriter
+from intrab.utils.nnunet.base_reader_writer import BaseReaderWriter
 import SimpleITK as sitk
 
 

@@ -44,7 +44,7 @@ def sanity_check_dataset_config(dataset_conf: dict) -> None:
     assert len(dataset_conf) > 0, "No datasets provided in the config file. Please provide at least one dataset."
     for dataset in dataset_conf:
         assert "identifier" in dataset.keys(), f"Dataset identifier is missing: {dataset}."
-        assert dataset["type"] in ["organ", "lesion"], f"Dataset {dataset["identifier"]} type has to be either organ dataset or lesion dataset."
+        assert dataset["type"] in ["organ", "lesion"], f"Dataset {dataset['identifier']} type has to be either organ dataset or lesion dataset."
         verify_dataset_exists(dataset["identifier"])
     return
 

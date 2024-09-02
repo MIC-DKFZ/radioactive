@@ -306,7 +306,7 @@ class SAMMed2DInferer(Inferer):
         segmentation = self.postprocess_slices(self.slice_lowres_outputs, return_logits)
 
         # Reorient to original orientation and return with metadata
-        if transform == True:
+        if transform:
             segmentation = self.inv_trans(segmentation)
 
         return segmentation, low_res_logits
