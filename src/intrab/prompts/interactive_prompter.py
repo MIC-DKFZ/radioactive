@@ -64,7 +64,9 @@ class InteractivePrompter(Prompter):
 
     # ToDo: Think about if one should actually use np.ndarrays as parameters of this function.
     @abstractmethod
-    def get_next_prompt_step(self, pred: np.ndarray, low_res_logits: np.ndarray, all_prompts: list[PromptStep]) -> PromptStep:
+    def get_next_prompt_step(
+        self, pred: np.ndarray, low_res_logits: np.ndarray, all_prompts: list[PromptStep]
+    ) -> PromptStep:
         """Gets the next prompt for the image from the groundtruth."""
         pass
 
@@ -82,7 +84,11 @@ class InteractivePrompter(Prompter):
         pred, logits = self.inferer.predict(prompt_step)
 
         perf = self.get_performance(pred.get_fdata())
-        all_prompt_results.append(PromptResult(predicted_image=pred,logits=logits, perf=perf, dof=dof, n_step=num_iter, prompt_step=prompt_step))
+        all_prompt_results.append(
+            PromptResult(
+                predicted_image=pred, logits=logits, perf=perf, dof=dof, n_step=num_iter, prompt_step=prompt_step
+            )
+        )
         all_prompts.append(prompt_step)
 
         while not self.stopping_criteria_met(dof, perf, num_iter):
@@ -97,20 +103,20 @@ class InteractivePrompter(Prompter):
             num_iter += 1
         return all_prompt_results
 
+
 # ToDo: Check prompts generated are of decent 'quality'
 class twoDInteractivePrompter(InteractivePrompter):
     def __init__(
-            self,
-            inferer: Inferer,
-            seed: int = 11121,
-            dof_bound: int | None = 60,
-            perf_bound: float | None = 0.85,
-            max_iter: int | None = 10,
-            contour_distance = 2,
-            disk_size_range = (0,0),
-            scribble_length = 0.6
-
-        ):
+        self,
+        inferer: Inferer,
+        seed: int = 11121,
+        dof_bound: int | None = 60,
+        perf_bound: float | None = 0.85,
+        max_iter: int | None = 10,
+        contour_distance=2,
+        disk_size_range=(0, 0),
+        scribble_length=0.6,
+    ):
         super().__init__(inferer, seed, dof_bound, perf_bound, max_iter)
         # Scribble generating parameters
         self.contour_distance = contour_distance
@@ -153,7 +159,9 @@ class twoDInteractivePrompter(InteractivePrompter):
             fp_coords[:, 0] < upper
         )  # Mask to determine which false negatives lie between the 30th to 70th percentile
         if np.sum(middle_mask) == 0:
-            logger.info('Failed to generate prompt in middle 40 percent of the volume. This may be worth checking out.')
+            logger.info(
+                "Failed to generate prompt in middle 40 percent of the volume. This may be worth checking out."
+            )
             middle_mask = np.ones(
                 len(fp_coords), bool
             )  # If there are no false negatives in the middle, draw from all coordinates (unlikely given that there must be many)
@@ -165,7 +173,7 @@ class twoDInteractivePrompter(InteractivePrompter):
         new_seed_prompt = np.vstack([self.bottom_seed_prompt, new_middle_seed_prompt, self.top_seed_prompt])
         new_coords = interpolate_points(new_seed_prompt, kind="linear").astype(int)
         new_coords = new_coords[:, [2, 1, 0]]  # zyx -> xyz
-        new_positive_promptstep = PromptStep(point_prompts=(new_coords, [1]*len(new_coords)))
+        new_positive_promptstep = PromptStep(point_prompts=(new_coords, [1] * len(new_coords)))
         return new_positive_promptstep
 
     def _get_max_fp_sagittal_slice_idx(self, fp_mask):
@@ -208,8 +216,10 @@ class twoDInteractivePrompter(InteractivePrompter):
         # Try to generate a 'scribble' containing lots of false positives
         scribble = self._generate_scribble(slice_gt, slice_seg)
 
-        if scribble is None: # Scribble generation failed, get random negative click instead
-            logger.warning('Generating negative prompt failed - this should not happen. Will generate positive prompt instead.')
+        if scribble is None:  # Scribble generation failed, get random negative click instead
+            logger.warning(
+                "Generating negative prompt failed - this should not happen. Will generate positive prompt instead."
+            )
             return None
 
         else:  # Otherwise subset scribble to false positives to generate new prompt
@@ -224,11 +234,13 @@ class twoDInteractivePrompter(InteractivePrompter):
             missing_axis = np.repeat(max_fp_idx, len(fp_coords))
             fp_coords_3d = np.vstack([fp_coords[:, 0], missing_axis, fp_coords[:, 1]]).T
             fp_coords_3d = fp_coords_3d[:, [2, 1, 0]]  # zyx -> xyz
-            new_negative_promptstep = PromptStep(point_prompts = (fp_coords_3d, [0] * len(fp_coords_3d)))
+            new_negative_promptstep = PromptStep(point_prompts=(fp_coords_3d, [0] * len(fp_coords_3d)))
 
             return new_negative_promptstep
 
-    def get_next_prompt_step(self, pred: np.ndarray, low_res_logits: np.ndarray, all_prompts: list[PromptStep]) -> PromptStep:
+    def get_next_prompt_step(
+        self, pred: np.ndarray, low_res_logits: np.ndarray, all_prompts: list[PromptStep]
+    ) -> PromptStep:
         fn_mask = (pred == 0) & (self.groundtruth == 1)
         fp_mask = (pred == 1) & (self.groundtruth == 0)
 
@@ -241,38 +253,30 @@ class twoDInteractivePrompter(InteractivePrompter):
                 prompt_gen_failed = True
 
         if not generate_negative_prompts_flag or prompt_gen_failed:
-            slices_inferred = self.prompt_step_all.get_slices_to_infer() # Get which slices have been inferred on
-            prompt_step = self.generate_positive_promptstep(
-                fn_mask,
-                slices_inferred
-            )
+            slices_inferred = self.prompt_step_all.get_slices_to_infer()  # Get which slices have been inferred on
+            prompt_step = self.generate_positive_promptstep(fn_mask, slices_inferred)
 
         return prompt_step
 
 
-
 class NPointsPer2DSliceInteractive(twoDInteractivePrompter):
     def __init__(
-            self,
-            inferer: Inferer,
-            seed: int = 11121,
-            dof_bound: int | None = 60,
-            perf_bound: float | None = 0.85,
-            max_iter: int | None = 10,
-            n_points_per_slice: int = 5
-        ):
+        self,
+        inferer: Inferer,
+        seed: int = 11121,
+        dof_bound: int | None = 60,
+        perf_bound: float | None = 0.85,
+        max_iter: int | None = 10,
+        n_points_per_slice: int = 5,
+    ):
         super().__init__(inferer, seed, dof_bound, perf_bound, max_iter)
         self.n_points_per_slice = n_points_per_slice
 
-
     def get_initial_prompt_step(self) -> PromptStep:
-        initial_prompt_step = get_pos_clicks2D_row_major(
-            self.groundtruth, self.n_points_per_slice, self.seed
-        )
+        initial_prompt_step = get_pos_clicks2D_row_major(self.groundtruth, self.n_points_per_slice, self.seed)
         self.prompt_step_all = initial_prompt_step
 
         return initial_prompt_step
 
-interactive_prompt_styles = Literal[
-    "NPointsPer2DSliceInteractive",
-]
+
+interactive_prompt_styles = Literal["NPointsPer2DSliceInteractive",]
