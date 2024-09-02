@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Type
 
 from loguru import logger
 
@@ -18,10 +18,7 @@ from intrab.prompts.prompter import (
     static_prompt_styles,
 )
 
-from intrab.prompts.interactive_prompter import(
-    NPointsPer2DSliceInteractive,
-    interactive_prompt_styles
-)
+from intrab.prompts.interactive_prompter import NPointsPer2DSliceInteractive
 
 from intrab.utils.paths import get_model_path
 from intrab.model.inferer import Inferer
@@ -34,7 +31,7 @@ from intrab.model.segvol import SegVolInferer
 
 model_registry = Literal["sam", "sammed2d", "sammed3d", "sammed3d_turbo", "medsam", "segvol"]
 
-inferer_registry: dict[model_registry, Inferer] = {
+inferer_registry: dict[model_registry, Type[Inferer]] = {
     "sam": SAMInferer,
     "sammed2d": SAMMed2DInferer,
     "medsam": MedSAMInferer,
@@ -111,12 +108,16 @@ def get_wanted_supported_prompters(
 
         if "point" in inferer.supported_prompts and "mask" in inferer.supported_prompts:
             if "NPointsPer2DSliceInteractive" in wanted_prompt_styles:
-                prompters.append(NPointsPer2DSliceInteractive(inferer, 
-                                                              seed, 
-                                                              dof_bound = pro_conf.interactive_dof_bound,
-                                                              perf_bound = pro_conf.interactive_perf_bound,
-                                                              max_iter = pro_conf.interactive_max_iter,
-                                                              n_points_per_slice = pro_conf.twoD_interactive_n_points_per_slice))
+                prompters.append(
+                    NPointsPer2DSliceInteractive(
+                        inferer,
+                        seed,
+                        dof_bound=pro_conf.interactive_dof_bound,
+                        perf_bound=pro_conf.interactive_perf_bound,
+                        max_iter=pro_conf.interactive_max_iter,
+                        n_points_per_slice=pro_conf.twoD_interactive_n_points_per_slice,
+                    )
+                )
 
     elif inferer.dim == 3:
         if "point" in inferer.supported_prompts:

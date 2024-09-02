@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Literal, Sequence
+
+import nibabel as nib
 import numpy as np
 from intrab.prompts.prompt import PromptStep
 
@@ -41,7 +43,7 @@ class Inferer(ABC):
         pass
 
     @abstractmethod
-    def predict(self, prompts: PromptStep):
+    def predict(self, prompts: PromptStep, prev_seg: nib.Nifti1Image):
         """Obtain logits"""
         pass
 

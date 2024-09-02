@@ -1,17 +1,17 @@
 repos:
   - repo: https://github.com/kynan/nbstripout
-    rev: master  # Use the latest commit on the master branch
+    rev: '0.7.1'  # Use the latest commit on the master branch
     hooks:
       - id: nbstripout
-  
+
   - repo: https://github.com/psf/black
-    rev: 23.1  # Specify the version of Black you want to use
+    rev: '24.8.0'  # Specify the version of Black you want to use
     hooks:
       - id: black
         args: ['--line-length', '118']  # Set line length to 118
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.3.0  # Use the appropriate version for the hooks
+    rev: v4.6.0  # Use the appropriate version for the hooks
     hooks:
       - id: trailing-whitespace
       - id: check-yaml
