@@ -22,6 +22,7 @@ from intrab.prompts.prompt_utils import (
 )
 
 from intrab.utils.analysis import compute_dice
+from intrab.utils.result_data import PromptResult
 
 
 # ToDo: Save the Prompt before feeding into the model.
@@ -38,6 +39,14 @@ class Prompter:
         self.seed = seed
         self.name = self.__class__.__name__
 
+    def get_performance(self, pred: np.ndarray) -> float:
+        """Get the DICE between prediciton and groundtruths."""
+        tps = np.sum(pred * self.groundtruth)
+        fps = np.sum(pred * (1 - self.groundtruth))
+        fns = np.sum((1 - pred) * self.groundtruth)
+        dice = 2 * tps / (2 * tps + fps + fns)
+        return dice
+
     def set_groundtruth(self, groundtruth: np.ndarray) -> None:
         """
         Sets the groundtruth that we want to predict.
@@ -47,7 +56,7 @@ class Prompter:
         # Load the groundtruth
         self.groundtruth = groundtruth
 
-    def predict_image(self, image_path: Path) -> tuple[nib.Nifti1Image, dict[int, np.ndarray]]:
+    def predict_image(self, image_path: Path) -> PromptResult:
         """Generate segmentation given prompt-style and model behavior."""
         # If the groundtruth is all zeros, return an empty mask
         if np.all(self.groundtruth == 0):
@@ -58,8 +67,13 @@ class Prompter:
 
         # Else predict the image
         self.inferer.set_image(image_path)
-        prompt = self.get_prompt()
-        return self.inferer.predict(prompt)
+        prompt: PromptStep = self.get_prompt()
+        pred: nib.Nifti1Image
+        logits: np.ndarray
+        pred, logits = self.inferer.predict(prompt)
+        perf = self.get_performance(pred.get_fdata())
+
+        return PromptResult(predicted_image=pred, logits=logits, prompt_step=prompt, perf=perf, n_step=0, dof=0)
 
     @abstractmethod
     def get_prompt(self) -> PromptStep:

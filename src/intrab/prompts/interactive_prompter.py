@@ -49,14 +49,6 @@ class InteractivePrompter(Prompter):
 
         return dof_met or perf_met or num_it_met
 
-    def get_performance(self, pred: np.ndarray) -> float:
-        """Get the DICE between prediciton and groundtruths."""
-        tps = np.sum(pred * self.groundtruth)
-        fps = np.sum(pred * (1 - self.groundtruth))
-        fns = np.sum((1 - pred) * self.groundtruth)
-        dice = 2 * tps / (2 * tps + fps + fns)
-        return dice
-
     @abstractmethod
     def get_initial_prompt_step(self) -> PromptStep:
         """Gets the initial prompt for the image from the groundtruth."""
@@ -230,7 +222,8 @@ class twoDInteractivePrompter(InteractivePrompter):
             scribble_coords = np.array(scribble_coords).T
 
             # Obtain false positive points and make new prompt
-            is_fp_mask = slice_seg[*scribble_coords.T].astype(bool)
+            coords_transpose = scribble_coords.T
+            is_fp_mask = slice_seg[*coords_transpose].astype(bool)
             fp_coords = scribble_coords[is_fp_mask]
 
             ## Position fp_coords back into original 3d coordinate system
