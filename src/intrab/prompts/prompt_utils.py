@@ -289,6 +289,24 @@ def interpolate_points(points, kind="linear"):
     # Stack the new z, y, and x coordinates vertically and return
     return np.column_stack((z_new, y_new, x_new)).round()
 
+def get_middle_seed_point(fn_mask, slices_inferred):
+    lower, upper = np.percentile(slices_inferred, [30, 70])
+    fp_coords = np.vstack(np.where(fn_mask)).T
+    middle_mask = (lower < fp_coords[:, 0]) & (
+        fp_coords[:, 0] < upper
+    )  # Mask to determine which false negatives lie between the 30th to 70th percentile
+    if np.sum(middle_mask) == 0:
+        logger.info(
+            "Failed to generate prompt in middle 40 percent of the volume. This may be worth checking out."
+        )
+        middle_mask = np.ones(
+            len(fp_coords), bool
+        )  # If there are no false negatives in the middle, draw from all coordinates (unlikely given that there must be many)
+
+    fp_coords = fp_coords[middle_mask, :]
+    new_middle_seed_prompt = fp_coords[np.random.choice(len(fp_coords), 1)]
+    
+    return new_middle_seed_prompt
 
 def point_interpolation(gt, n_slices, interpolation="linear"):
     simulated_clicks = get_fg_points_from_cc_centers(gt, n_slices)

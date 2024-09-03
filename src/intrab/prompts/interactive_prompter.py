@@ -5,7 +5,7 @@ import numpy as np
 from click import prompt
 from intrab.model.inferer import Inferer
 from intrab.prompts.prompt import PromptStep, merge_prompt_steps
-from intrab.prompts.prompt_utils import get_pos_clicks2D_row_major, get_fg_points_from_cc_centers, interpolate_points
+from intrab.prompts.prompt_utils import get_pos_clicks2D_row_major, get_fg_points_from_cc_centers, interpolate_points, get_middle_seed_point
 from intrab.prompts.prompter import Prompter
 from intrab.utils.interactivity import gen_contour_fp_scribble
 from intrab.utils.result_data import PromptResult
@@ -17,6 +17,7 @@ from triton.language.extra.cuda import num_threads
 
 class InteractivePrompter(Prompter):
     always_pass_prev_prompts = False
+    is_static = False
 
     def __init__(
         self,
@@ -48,6 +49,11 @@ class InteractivePrompter(Prompter):
             num_it_met = num_iter >= self.max_iter
 
         return dof_met or perf_met or num_it_met
+    
+    @abstractmethod
+    def clear_states(self) -> None:
+        """Clear any states saved in generating the image"""
+        pass
 
     @abstractmethod
     def get_initial_prompt_step(self) -> PromptStep:
@@ -74,7 +80,7 @@ class InteractivePrompter(Prompter):
         prompt_step: PromptStep = self.get_initial_prompt_step()
         pred, logits = self.inferer.predict(prompt_step)
 
-        perf = self.get_performance(pred.get_fdata())
+        perf = self.get_performance(pred)
         all_prompt_results.append(
             PromptResult(
                 predicted_image=pred, logits=logits, perf=perf, dof=dof, n_step=num_iter, prompt_step=prompt_step
@@ -87,7 +93,7 @@ class InteractivePrompter(Prompter):
             if self.always_pass_prev_prompts:
                 prompt_step = merge_prompt_steps(prompt_step, all_prompt_results[-1].prompt_step)
 
-            pred, logits = self.inferer.predict(prompt_step, pred)
+            pred, logits = self.inferer.predict(prompt_step, prev_seg = pred)
             dof += prompt_step.get_dof()
             perf = self.get_performance(pred)
             all_prompt_results.append(
@@ -96,6 +102,9 @@ class InteractivePrompter(Prompter):
                 )
             )
             num_iter += 1
+
+        # Clear any states generated in inferring this image
+        self.clear_states()
         return all_prompt_results
 
 
@@ -117,6 +126,9 @@ class twoDInteractivePrompter(InteractivePrompter):
         self.contour_distance = contour_distance
         self.disk_size_range = disk_size_range
         self.scribble_length = scribble_length
+
+        self.bottom_seed_prompt = None # Store these to avoid repeated computation
+        self.top_seed_prompt = None
 
     @staticmethod
     def get_generate_negative_prompts_flag(fn_mask: np.ndarray, fp_mask: np.ndarray) -> bool:
@@ -144,27 +156,13 @@ class twoDInteractivePrompter(InteractivePrompter):
         slices_inferred: set,
     ) -> PromptStep:
 
-        if not self.has_generated_positive_prompts:
+        if self.bottom_seed_prompt is None or self.top_seed_prompt is None:
             self.bottom_seed_prompt, _, self.top_seed_prompt = get_fg_points_from_cc_centers(
                 self.groundtruth_model, 3
             )
 
-        # Try to find fp coord in the middle 40% axially of the volume.
-        lower, upper = np.percentile(slices_inferred, [30, 70])
-        fp_coords = np.vstack(np.where(fn_mask)).T
-        middle_mask = (lower < fp_coords[:, 0]) & (
-            fp_coords[:, 0] < upper
-        )  # Mask to determine which false negatives lie between the 30th to 70th percentile
-        if np.sum(middle_mask) == 0:
-            logger.info(
-                "Failed to generate prompt in middle 40 percent of the volume. This may be worth checking out."
-            )
-            middle_mask = np.ones(
-                len(fp_coords), bool
-            )  # If there are no false negatives in the middle, draw from all coordinates (unlikely given that there must be many)
-
-        fp_coords = fp_coords[middle_mask, :]
-        new_middle_seed_prompt = fp_coords[np.random.choice(len(fp_coords), 1)]
+        # Try to find fp coord in the middle 40% axially of the volume
+        new_middle_seed_prompt = get_middle_seed_point(fn_mask, slices_inferred)
 
         # Interpolate linearly from botom_seed-prompt to top_seed_prompt through the new middle prompt to get new positive prompts
         new_seed_prompt = np.vstack([self.bottom_seed_prompt, new_middle_seed_prompt, self.top_seed_prompt])
@@ -239,8 +237,9 @@ class twoDInteractivePrompter(InteractivePrompter):
             return new_negative_promptstep
 
     def get_next_prompt_step(
-        self, pred: np.ndarray, low_res_logits: np.ndarray, all_prompts: list[PromptStep]
+        self, pred: nib.Nifti1Image, low_res_logits: np.ndarray, all_prompts: list[PromptStep]
     ) -> PromptStep:
+        pred, _ = self.inferer.transform_to_model_coords(pred, is_seg = True) # Transform to the coordinate system in which inference will occur
         fn_mask = (pred == 0) & (self.groundtruth_model == 1)
         fp_mask = (pred == 1) & (self.groundtruth_model == 0)
 
@@ -257,6 +256,10 @@ class twoDInteractivePrompter(InteractivePrompter):
             prompt_step = self.generate_positive_promptstep(fn_mask, slices_inferred)
 
         return prompt_step
+    
+    def clear_states(self) -> None:
+        self.top_seed_prompt = None
+        self.bottom_seed_prompt = None
 
 
 class NPointsPer2DSliceInteractive(twoDInteractivePrompter):
