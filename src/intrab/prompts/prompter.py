@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Literal
 import numpy as np
 import nibabel as nib
+import torch
 
 from intrab.model.inferer import Inferer
 from intrab.prompts.prompt import PromptStep, merge_prompt_steps
@@ -37,19 +38,22 @@ class Prompter:
         self.inferer: Inferer = inferer
         self.groundtruth_nib: None | nib.Nifti1Image = None
         self.groundtruth_model: np.ndarray = None
-        self.groundtruth_orig: np.ndarray = None
+        self.groundtruth_orig: np.ndarray | torch.Tensor = None
         self.seed = seed
         self.name = self.__class__.__name__
 
-    def get_performance(self, pred: nib.Nifti1Image | np.ndarray) -> float:
-        """Get the DICE between prediction and groundtruth."""
-        if isinstance(pred, nib.Nifti1Image):
-            pred = pred.get_fdata()
-        tps = np.sum(pred * self.groundtruth_orig)
-        fps = np.sum(pred * (1 - self.groundtruth_orig))
-        fns = np.sum((1 - pred) * self.groundtruth_orig)
+    def get_performance(self, pred: np.ndarray) -> float:
+        """Get the DICE between prediciton and groundtruths."""
+        if torch.cuda.is_available():
+            pred = torch.from_numpy(pred).cuda().to(torch.int8)
+        else:
+            pred = pred.astype(np.int8)
+
+        tps = (pred * self.groundtruth_orig).sum()
+        fps = (pred * (1 - self.groundtruth_orig)).sum()
+        fns = ((1 - pred) * self.groundtruth_orig).sum()
         dice = 2 * tps / (2 * tps + fps + fns)
-        return dice
+        return float(dice)
 
     def set_groundtruth(self, groundtruth: nib.Nifti1Image) -> None:
         """
@@ -61,6 +65,8 @@ class Prompter:
         self.groundtruth_nib = groundtruth
         self.groundtruth_model = self.inferer.get_transformed_groundtruth(groundtruth)
         self.groundtruth_orig = groundtruth.get_fdata()
+        if torch.cuda.is_available():
+            self.groundtruth_orig = torch.from_numpy(self.groundtruth_orig).cuda().to(torch.int8)
 
     def predict_image(self, image_path: Path) -> PromptResult:
         """Generate segmentation given prompt-style and model behavior."""
