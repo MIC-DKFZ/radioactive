@@ -99,7 +99,7 @@ class PromptStep:
 
     def get_slices_to_infer(
         self,
-    ) -> set[int]:
+    ) -> np.ndarray:
         points_zs = set()
         if self.coords is not None:
             points_zs = set(self.coords[:, 2])
@@ -107,6 +107,7 @@ class PromptStep:
         if self.boxes is not None:
             boxes_zs = set(self.boxes.keys())
         slices_to_infer = points_zs.union(boxes_zs)
+        slices_to_infer = np.sort(list(slices_to_infer)) # Ensure the slices to infer are given in ascending order
         return slices_to_infer
 
 

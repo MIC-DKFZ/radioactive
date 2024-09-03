@@ -41,8 +41,10 @@ class Prompter:
         self.seed = seed
         self.name = self.__class__.__name__
 
-    def get_performance(self, pred: np.ndarray) -> float:
-        """Get the DICE between prediciton and groundtruths."""
+    def get_performance(self, pred: nib.Nifti1Image | np.ndarray) -> float:
+        """Get the DICE between prediction and groundtruth."""
+        if isinstance(pred, nib.Nifti1Image):
+            pred = pred.get_fdata()
         tps = np.sum(pred * self.groundtruth_orig)
         fps = np.sum(pred * (1 - self.groundtruth_orig))
         fns = np.sum((1 - pred) * self.groundtruth_orig)
