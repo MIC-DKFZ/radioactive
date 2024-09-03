@@ -145,7 +145,9 @@ class twoDInteractivePrompter(InteractivePrompter):
     ) -> PromptStep:
 
         if not self.has_generated_positive_prompts:
-            self.bottom_seed_prompt, _, self.top_seed_prompt = get_fg_points_from_cc_centers(self.groundtruth, 3)
+            self.bottom_seed_prompt, _, self.top_seed_prompt = get_fg_points_from_cc_centers(
+                self.groundtruth_model, 3
+            )
 
         # Try to find fp coord in the middle 40% axially of the volume.
         lower, upper = np.percentile(slices_inferred, [30, 70])
@@ -223,7 +225,9 @@ class twoDInteractivePrompter(InteractivePrompter):
 
             # Obtain false positive points and make new prompt
             coords_transpose = scribble_coords.T
+            # fmt: off
             is_fp_mask = slice_seg[*coords_transpose].astype(bool)
+            # fmt: on
             fp_coords = scribble_coords[is_fp_mask]
 
             ## Position fp_coords back into original 3d coordinate system
@@ -237,14 +241,14 @@ class twoDInteractivePrompter(InteractivePrompter):
     def get_next_prompt_step(
         self, pred: np.ndarray, low_res_logits: np.ndarray, all_prompts: list[PromptStep]
     ) -> PromptStep:
-        fn_mask = (pred == 0) & (self.groundtruth == 1)
-        fp_mask = (pred == 1) & (self.groundtruth == 0)
+        fn_mask = (pred == 0) & (self.groundtruth_model == 1)
+        fp_mask = (pred == 1) & (self.groundtruth_model == 0)
 
         generate_negative_prompts_flag = self.get_generate_negative_prompts_flag(fn_mask, fp_mask)
 
         prompt_gen_failed = False
         if generate_negative_prompts_flag:
-            prompt_step = self.generate_negative_promptstep(self.groundtruth, pred, fp_mask)
+            prompt_step = self.generate_negative_promptstep(self.groundtruth_model, pred, fp_mask)
             if prompt_step is None:
                 prompt_gen_failed = True
 
@@ -269,7 +273,7 @@ class NPointsPer2DSliceInteractive(twoDInteractivePrompter):
         self.n_points_per_slice = n_points_per_slice
 
     def get_initial_prompt_step(self) -> PromptStep:
-        initial_prompt_step = get_pos_clicks2D_row_major(self.groundtruth, self.n_points_per_slice, self.seed)
+        initial_prompt_step = get_pos_clicks2D_row_major(self.groundtruth_model, self.n_points_per_slice, self.seed)
         self.prompt_step_all = initial_prompt_step
 
         return initial_prompt_step

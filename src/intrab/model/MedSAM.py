@@ -75,7 +75,7 @@ class MedSAMInferer(Inferer):
         self.loaded_image = img_path
 
     def transform_to_model_coords(self, nifti: Path | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
-        if isinstance(nifti, Path):
+        if isinstance(nifti, (str, Path)):
             nifti: nib.Nifti1Image = nib.load(nifti)
         orientation_old = io_orientation(nifti.affine)
 

@@ -71,8 +71,8 @@ class SAMMed3DInferer(Inferer):
     def clear_embeddings(self):
         self.stored_cropping_params, self.stored_padding_params, self.stored_patch_list = None, None, None
 
-    def transform_to_model_coords(self, nifti: Path | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
-        if isinstance(nifti, Path):
+    def transform_to_model_coords(self, nifti: Path | str | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
+        if isinstance(nifti, (Path, str)):
             nifti = nib.load(nifti)
         affine = nifti.affine
         orig_shape = nifti.shape
