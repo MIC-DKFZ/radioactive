@@ -42,8 +42,11 @@ class Prompter:
         self.seed = seed
         self.name = self.__class__.__name__
 
-    def get_performance(self, pred: np.ndarray) -> float:
+    def get_performance(self, pred: np.ndarray | nib.Nifti1Image) -> float:
         """Get the DICE between prediciton and groundtruths."""
+        if isinstance(pred, nib.Nifti1Image):
+            pred = pred.get_fdata()
+
         if torch.cuda.is_available():
             pred = torch.from_numpy(pred).cuda().to(torch.int8)
         else:
