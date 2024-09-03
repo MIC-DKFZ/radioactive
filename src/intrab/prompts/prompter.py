@@ -78,7 +78,7 @@ class Prompter:
             img: nib.Nifti1Image = nib.load(image_path)
             binary_gt = np.zeros_like(img.get_fdata())
             empty_gt = nib.Nifti1Image(binary_gt.astype(np.uint8), img.affine)
-            return empty_gt, None
+            return PromptResult(predicted_image=empty_gt, logits=None, prompt_step=None, perf=0, n_step=0, dof=0)
 
         # Else predict the image
         self.inferer.set_image(image_path)
