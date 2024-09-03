@@ -2,7 +2,7 @@ import numpy as np
 
 from skimage.morphology import dilation, ball
 
-from intrab.prompts.prompt import Boxes3D, Points
+from intrab.prompts.prompt import Boxes3D, Points, PromptStep
 
 
 def get_crop_pad_center_from_points(points: Points):
@@ -46,7 +46,7 @@ def get_pos_clicks3D(gt, n_clicks, seed=None):
     point_indices = np.random.choice(n_fg_voxels, size=n_clicks, replace=False)
     pos_coords = volume_fg[point_indices]
     pos_coords = pos_coords[:, ::-1]  # Assume gt is in row major zyx, need to reverse order
-    pos_coords = Points(coords=pos_coords, labels=[1] * len(pos_coords))
+    pos_coords = PromptStep(point_prompts = (pos_coords, [1] * len(pos_coords)))
     return pos_coords
 
 
@@ -98,3 +98,36 @@ def get_bbox3d(mask_volume: np.ndarray, delta=0):
     bb_max = bb_max[::-1]
     bb = Boxes3D(bb_min, bb_max)
     return bb
+
+def isolate_patch_around_point(img_or_gt: np.ndarray, seed_point: PromptStep, patch_dim: tuple[int, int, int]) -> np.ndarray:
+    """Sets all values outside a patch_dim[0]xpatch_dim[1]xpatch_dim[2] patch around a seed point to 0"""
+    img_or_gt_isolated = np.zeros_like(img_or_gt)
+    seed_coords = seed_point.coords[0]
+    low = np.maximum(seed_coords - patch_dim, 0)
+    high = np.minimum(seed_coords + 64, img_or_gt.shape)
+    img_or_gt_isolated[low[0] : high[0], low[1] : high[1], low[2] : high[2]] = img_or_gt_isolated[
+        low[0] : high[0], low[1] : high[1], low[2] : high[2]
+    ]
+
+    return img_or_gt_isolated
+
+def obtain_misclassified_point_prompt(pred: np.ndarray, gt: np.ndarray, seed: int = None):
+    """
+    Obtain a point prompt from the misclassified entries in pred, as compared to gt.
+    """
+    assert pred.shape == gt.shape, "Prediction and gt shapes must match"
+
+    if seed:
+        np.random.seed(seed)
+
+    # Choose a random misclassified point
+    misclassifieds = np.vstack(np.where(pred != gt)).T
+    sampled_ind = np.random.randint(len(misclassifieds))
+    sampled_coords = [misclassifieds[sampled_ind]]
+    sampled_labels = [gt[*sampled_coords[0]]]
+
+    # Format into PromptStep and return
+
+    prompt_step = PromptStep(point_prompts = (sampled_coords, sampled_labels))
+
+    return prompt_step

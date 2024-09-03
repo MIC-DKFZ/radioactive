@@ -42,7 +42,9 @@ if __name__ == "__main__":
         interactive_dof_bound = 60,
         interactive_perf_bound = 0.9,
         interactive_max_iter = 10,
-        twoD_interactive_n_points_per_slice = 5
+        twoD_interactive_n_points_per_slice = 5,
+        threeD_interactive_n_init_points = 5,
+        threeD_patch_size = (128,128,128) # This argument is only for SAMMed3D - should be different for segvol
     )
 
     # Potentially move the seeds inside to not create new models each seed, but save that time.

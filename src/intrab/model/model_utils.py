@@ -18,7 +18,7 @@ from intrab.prompts.prompter import (
     static_prompt_styles,
 )
 
-from intrab.prompts.interactive_prompter import NPointsPer2DSliceInteractive
+from intrab.prompts.interactive_prompter import NPointsPer2DSliceInteractivePrompter, threeDInteractivePrompter
 
 from intrab.utils.paths import get_model_path
 from intrab.model.inferer import Inferer
@@ -109,7 +109,7 @@ def get_wanted_supported_prompters(
         if "point" in inferer.supported_prompts and "mask" in inferer.supported_prompts:
             if "NPointsPer2DSliceInteractive" in wanted_prompt_styles:
                 prompters.append(
-                    NPointsPer2DSliceInteractive(
+                    NPointsPer2DSliceInteractivePrompter(
                         inferer,
                         seed,
                         dof_bound=pro_conf.interactive_dof_bound,
@@ -121,9 +121,20 @@ def get_wanted_supported_prompters(
 
     elif inferer.dim == 3:
         if "point" in inferer.supported_prompts:
-            prompters.append(NPoints3DVolumePrompter(inferer, seed, n_points=pro_conf.threeD_n_click_random_points))
+            if "NPoints3DVolumePrompter" in wanted_prompt_styles:
+                prompters.append(NPoints3DVolumePrompter(inferer, seed, n_points=pro_conf.threeD_n_click_random_points))
         if "box" in inferer.supported_prompts:
-            prompters.append(Box3DVolumePrompter(inferer, seed))
+            if "Box3DVolumePrompter" in wanted_prompt_styles:
+                prompters.append(Box3DVolumePrompter(inferer, seed))
+        if "point" in inferer.supported_prompts and "mask" in inferer.supported_prompts:
+            if "threeDInteractivePrompter" in wanted_prompt_styles:
+                prompters.append(threeDInteractivePrompter(inferer, 
+                                                           pro_conf.threeD_interactive_n_init_points,
+                                                           seed,
+                                                           pro_conf.interactive_dof_bound,
+                                                           pro_conf.interactive_perf_bound,
+                                                           pro_conf.interactive_max_iter,
+                                                           pro_conf.threeD_patch_size)) 
     else:
         raise ValueError(f"Inferer dimension '{inferer.dim}' not supported. Choose from [2, 3]")
 

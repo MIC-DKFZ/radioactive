@@ -5,6 +5,7 @@ import numpy as np
 from click import prompt
 from intrab.model.inferer import Inferer
 from intrab.prompts.prompt import PromptStep, merge_prompt_steps
+from intrab.prompts.prompt_3d import get_pos_clicks3D, isolate_patch_around_point, obtain_misclassified_point_prompt
 from intrab.prompts.prompt_utils import get_pos_clicks2D_row_major, get_fg_points_from_cc_centers, interpolate_points, get_middle_seed_point
 from intrab.prompts.prompter import Prompter
 from intrab.utils.interactivity import gen_contour_fp_scribble
@@ -107,6 +108,42 @@ class InteractivePrompter(Prompter):
         self.clear_states()
         return all_prompt_results
 
+
+class threeDInteractivePrompter(InteractivePrompter):
+    def __init__(
+        self,
+        inferer: Inferer,
+        n_points: int,
+        seed: int = 11121,
+        dof_bound: int | None = 60,
+        perf_bound: float | None = 0.85,
+        max_iter: int | None = 10,
+        isolate_around_initial_point_size: int = None
+    ):
+        super().__init__(inferer, seed, dof_bound, perf_bound, max_iter)
+        self.n_points = n_points
+        self.gt_to_compare = None
+        self.isolate_around_initial_point_size = isolate_around_initial_point_size
+
+    def get_initial_prompt_step(self) -> PromptStep:
+        return get_pos_clicks3D(self.groundtruth_model, n_clicks=self.n_points, seed=self.seed)
+    
+    def process_gt_to_compare(self, gt, initial_prompt_step, isolate_around_initial_point_size):
+        return isolate_patch_around_point(gt, initial_prompt_step, isolate_around_initial_point_size)
+
+    def get_next_prompt_step(self, pred: np.ndarray, low_res_logits: np.ndarray, all_prompts: list[PromptStep]) -> PromptStep:
+        pred, _ = self.inferer.transform_to_model_coords(pred, is_seg = True) # Transform to the coordinate system in which inference will occur
+        
+        if self.gt_to_compare is None:
+            self.gt_to_compare = self.process_gt_to_compare(self.groundtruth_model, all_prompts[0], self.isolate_around_initial_point_size)
+
+        new_prompt = obtain_misclassified_point_prompt(pred, self.gt_to_compare, self.seed)
+        
+        return new_prompt
+
+    def clear_states(self):
+        self.isolated_gt = None
+        return 
 
 # ToDo: Check prompts generated are of decent 'quality'
 class twoDInteractivePrompter(InteractivePrompter):
@@ -262,7 +299,7 @@ class twoDInteractivePrompter(InteractivePrompter):
         self.bottom_seed_prompt = None
 
 
-class NPointsPer2DSliceInteractive(twoDInteractivePrompter):
+class NPointsPer2DSliceInteractivePrompter(twoDInteractivePrompter):
     def __init__(
         self,
         inferer: Inferer,
@@ -282,4 +319,5 @@ class NPointsPer2DSliceInteractive(twoDInteractivePrompter):
         return initial_prompt_step
 
 
-interactive_prompt_styles = Literal["NPointsPer2DSliceInteractive",]
+interactive_prompt_styles = Literal["NPointsPer2DSliceInteractivePrompter",
+                                    "threeDInteractivePrompter"]

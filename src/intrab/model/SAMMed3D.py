@@ -277,12 +277,10 @@ class SAMMed3DInferer(Inferer):
         transform=True,
         prev_seg = None,
     ):  # If iterating, use previous patching, previous embeddings
-        if isinstance(prompt, Points):
-            prompt_type = "point"
-        elif isinstance(prompt, Boxes3D):
-            prompt_type = "box"
-        if not prompt_type in self.supported_prompts:
-            raise ValueError(f"Unsupported prompt type: got {type(prompt)}")
+        if not isinstance(prompt, PromptStep):
+            raise TypeError(f"Prompts must be supplied as an instance of the Prompt class.")
+        if prompt.has_boxes:
+            raise ValueError(f"Box prompts have been supplied, but are not supported by SAMMed3D.")
 
         prompt.coords = prompt.coords[
             :, ::-1
