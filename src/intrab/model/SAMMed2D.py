@@ -88,7 +88,7 @@ class SAMMed2DInferer(Inferer):
         self.img, self.inv_trans = self.transform_to_model_coords(img_path, None)
         self.loaded_image = img_path
 
-    def transform_to_model_coords(self, nifti: Path | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
+    def transform_to_model_coords(self, nifti: str | Path | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
         if isinstance(nifti, (str, Path)):
             nifti: nib.Nifti1Image = nib.load(nifti)
         orientation_old = io_orientation(nifti.affine)
@@ -248,7 +248,7 @@ class SAMMed2DInferer(Inferer):
         return segmentation
 
     @torch.no_grad()
-    def predict(self, prompt, mask_dict={}, return_logits=False, transform=True):
+    def predict(self, prompt, mask_dict={}, return_logits=False, prev_seg = None):
         if not (isinstance(prompt, PromptStep)):
             raise TypeError(f"Prompts must be supplied as an instance of the Prompt class.")
         if prompt.has_boxes and prompt.has_points:
@@ -301,6 +301,10 @@ class SAMMed2DInferer(Inferer):
         low_res_logits = {k: torch.sigmoid(v).squeeze().cpu().numpy() for k, v in self.slice_lowres_outputs.items()}
 
         segmentation = self.postprocess_slices(self.slice_lowres_outputs, return_logits)
+
+        # Fill in missing slices using a previous segmentation if desired
+        if prev_seg is not None:
+            segmentation = self.merge_seg_with_prev_seg(segmentation, prev_seg, slices_to_infer)
 
         # Reorient to original orientation and return with metadata
         # Turn into Nifti object in original space

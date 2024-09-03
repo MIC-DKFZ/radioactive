@@ -174,7 +174,7 @@ class MedSAMInferer(Inferer):
 
         return segmentation
 
-    def predict(self, prompt: PromptStep, transform=True):
+    def predict(self, prompt: PromptStep, prev_seg = None):
         if not (isinstance(prompt, PromptStep)):
             raise TypeError(f"Prompts must be supplied as an instance of the Prompt class.")
         if prompt.has_points:
@@ -215,6 +215,10 @@ class MedSAMInferer(Inferer):
         low_res_logits = {k: torch.sigmoid(v).squeeze().cpu().numpy() for k, v in slice_lowres_outputs.items()}
 
         segmentation = self.postprocess_slices(slice_lowres_outputs)
+
+        # Fill in missing slices using a previous segmentation if desired
+        if prev_seg is not None:
+            segmentation = self.merge_seg_with_prev_seg(segmentation, prev_seg, slices_to_infer)
 
         # Turn into Nifti object in original space
         segmentation = self.inv_trans(segmentation)

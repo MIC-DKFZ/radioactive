@@ -275,6 +275,7 @@ class SAMMed3DInferer(Inferer):
         store_patching=False,
         use_stored_patching=False,
         transform=True,
+        prev_seg = None,
     ):  # If iterating, use previous patching, previous embeddings
         if isinstance(prompt, Points):
             prompt_type = "point"

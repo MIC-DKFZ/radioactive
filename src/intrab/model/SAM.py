@@ -239,18 +239,7 @@ class SAMInferer(Inferer):
 
         return segmentation
 
-    def merge_seg_with_prev_seg(self, new_seg: np.ndarray, old_seg_path: Path, slices_inferred: set):
-        # Find slices which were inferred on in old seg, but not in new_seg
-        old_seg, _ = self.transform_to_model_coords(old_seg_path, None)
-        old_seg_inferred_slices = np.where(np.any(old_seg, axis=(1, 2)))[0]  # ToDo Check that I took the right axes
-        missing_slices = set(old_seg_inferred_slices) - slices_inferred
-
-        # Merge segmentations
-        new_seg[missing_slices] = old_seg[missing_slices]
-
-        return new_seg
-
-    def predict(self, prompt: PromptStep, mask_dict={}, return_logits: bool = False, prev_seg_path: Path = None):
+    def predict(self, prompt: PromptStep, mask_dict={}, return_logits: bool = False, prev_seg = None):
         if not isinstance(prompt, PromptStep):
             raise TypeError(f"Prompts must be supplied as an instance of the Prompt class.")
         if prompt.has_boxes and prompt.has_points:
@@ -305,8 +294,8 @@ class SAMInferer(Inferer):
         segmentation = self.postprocess_slices(self.slice_lowres_outputs, return_logits)
 
         # Fill in missing slices using a previous segmentation if desired
-        if not prev_seg_path is None:
-            segmentation = self.merge_seg_with_prev_seg(segmentation, prev_seg_path, slices_to_infer)
+        if prev_seg is not None:
+            segmentation = self.merge_seg_with_prev_seg(segmentation, prev_seg, slices_to_infer)
 
         # Reorient to original orientation and return with metadata
         # Turn into Nifti object in original space
