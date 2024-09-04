@@ -36,7 +36,7 @@ dependencies = [
     'segment_anything',
     'pre-commit',
     'nbstripout',
-    'einops', 
+    'einops',
     'nneval',
 ]
 
@@ -49,6 +49,8 @@ classifiers = [
 
 [tool.black]
 line-length = 118
+target-version = ['py310', 'py311']
+# required-version = "23.3.0"
 
 # [tool.setuptools.packages.find]
 # where = ["intrab"]

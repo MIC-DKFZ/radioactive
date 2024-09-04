@@ -6,7 +6,7 @@ from intrab.model.inferer import Inferer
 from intrab.prompts.prompt_hparams import PromptConfig
 from intrab.model.model_utils import inferer_registry, checkpoint_registry, model_registry
 
-from intrab.experiments import run_experiments
+from intrab.experiments import run_experiments, run_experiments_lesions
 from intrab.utils.io import get_labels_from_dataset_json, get_dataset_path_by_id, get_img_gts, read_yaml_config
 from intrab.utils.paths import get_results_path
 from argparse import ArgumentParser
@@ -39,10 +39,10 @@ if __name__ == "__main__":
         twoD_n_slice_box_interpolation=5,
         twoD_n_seed_points_point_propagation=5,
         twoD_n_points_propagation=5,
-        interactive_dof_bound = 60,
-        interactive_perf_bound = 0.9,
-        interactive_max_iter = 10,
-        twoD_interactive_n_points_per_slice = 5
+        interactive_dof_bound=60,
+        interactive_perf_bound=0.9,
+        interactive_max_iter=10,
+        twoD_interactive_n_points_per_slice=5,
     )
 
     # Potentially move the seeds inside to not create new models each seed, but save that time.
@@ -65,8 +65,12 @@ if __name__ == "__main__":
                 checkpoint_path: Path = checkpoint_registry[model_name]
                 logger.info(f"Instantiating '{model_name}' with checkpoint '{checkpoint_path}'")
                 inferer: Inferer = inferer_registry[model_name](checkpoint_path, device)
-                
-                run_experiments(
+
+                if dataset["type"] == "organ":
+                    runner = run_experiments
+                else:
+                    runner = run_experiments_lesions
+                runner(
                     inferer,
                     imgs_gts,
                     results_path,

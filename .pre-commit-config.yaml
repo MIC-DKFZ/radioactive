@@ -8,7 +8,9 @@ repos:
     rev: '24.8.0'  # Specify the version of Black you want to use
     hooks:
       - id: black
+        language_version: python3.12
         args: ['--line-length', '118']  # Set line length to 118
+
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0  # Use the appropriate version for the hooks

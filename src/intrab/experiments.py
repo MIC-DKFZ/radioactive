@@ -19,8 +19,15 @@ import nibabel as nib
 from tqdm import tqdm
 import shutil
 
-from intrab.utils.io import binarize_gt, create_instance_gt, verify_results_dir_exist
+from intrab.utils.io import (
+    binarize_gt,
+    create_instance_gt,
+    save_interactive_lesion_results,
+    save_static_lesion_results,
+    verify_results_dir_exist,
+)
 from intrab.utils.io import verify_results_dir_exist
+from nneval.evaluate_instance import instance_evaluation
 from nneval.evaluate_semantic import semantic_evaluation
 
 from intrab.utils.result_data import PromptResult
@@ -110,58 +117,6 @@ def run_experiments(
                         classes_of_interest=(1,),
                         output_name=target_name,
                     )
-
-
-def save_static_lesion_results(
-    prompt_results: list[PromptResult], base_name: Path, semantic_filename: str, instance_filename: str
-):
-    """Iterate through all single prompt results that are"""
-    semantic_pd_path = base_name / semantic_filename
-    instance_pd_path = base_name / instance_filename
-    for i, prompt_result in enumerate(prompt_results):
-        if i == 0:
-            img = prompt_result.predicted_image.get_fdata()
-            affine = prompt_result.predicted_image.affine
-            continue
-        img = img + (prompt_result.predicted_image.get_fdata() + i)
-    semantic_img = nib.Nifti1Image(np.where(np.nonzero(img), 1, 0), affine)
-    instance_img = nib.Nifti1Image(img, affine)
-
-    semantic_pd_path = base_name / semantic_filename
-    instance_pd_path = base_name / instance_filename
-    # ToDo: Save the prompt steps as well.
-    instance_img.to_filename(instance_pd_path)
-    semantic_img.to_filename(semantic_pd_path)
-
-
-def save_interactive_lesion_results(
-    all_prompt_results: list[list[PromptResult]], base_name: Path, semantic_filename: str, instance_filename: str
-):
-    """
-    Save the interactive lesion results.
-    Each lesion has it's own interactive results. The outer list count goes through the lesions and the inner list goes through the iterations.
-    """
-    all_arr = []
-    affine = None
-    for lesion_id, prompt_results in enumerate(all_prompt_results):
-        all_arr_iter = []
-        prompt_res: PromptResult
-        for cnt, prompt_res in enumerate(prompt_results):
-            if lesion_id == 0 and cnt == 0:
-                affine - prompt_res.predicted_image.affine
-            img = (prompt_res.predicted_image.get_fdata()) + lesion_id
-            all_arr_iter.append(img)
-        all_arr.append(all_arr_iter)
-    joint_arr = np.array(all_arr)  # Shape: (num_lesions, num_iterations, x, y, z)
-    iter_wise_arr = np.sum(joint_arr, axis=0, keepdims=False)  # Shape: (num_iterations, x, y, z)
-    # Save the results iteratively
-    for cnt in range(iter_wise_arr.shape[0]):
-        semantic_img = nib.Nifti1Image(np.where(np.nonzero(iter_wise_arr[cnt]), 1, 0), affine)
-        instance_img = nib.Nifti1Image(iter_wise_arr[cnt], affine)
-        semantic_pd_path = base_name / f"iter_{cnt}" / semantic_filename
-        instance_pd_path = base_name / f"iter_{cnt}" / instance_filename
-        semantic_img.to_filename(semantic_pd_path)
-        instance_img.to_filename(instance_pd_path)
 
 
 def run_experiments_lesions(
@@ -259,14 +214,13 @@ def run_experiments_lesions(
                 save_interactive_lesion_results(all_prompt_result, base_name, semantic_filename, instance_filename)
 
     # We always run the semantic eval on the created folders directly.
-    for target_name in target_names:
-        for prompter in prompters:
-            if prompter.is_static:
-                with logger.catch(level="WARNING"):
-                    semantic_evaluation(
-                        semantic_gt_path=results_dir / "binarised_gts" / target_name,
-                        semantic_pd_path=results_dir / prompter.name / target_name,
-                        output_path=results_dir / prompter.name,
-                        classes_of_interest=(1,),
-                        output_name=target_name,
-                    )
+    for prompter in prompters:
+        if prompter.is_static:
+            with logger.catch(level="WARNING"):
+                instance_evaluation(
+                    semantic_gt_path=gt_output_path,
+                    semantic_pd_path=pred_output_path / prompter.name,
+                    output_path=results_dir / prompter.name,
+                    classes_of_interest=(1,),
+                    dice_threshold=1e-9,
+                )

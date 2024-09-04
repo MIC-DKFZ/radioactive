@@ -10,6 +10,8 @@ from loguru import logger
 import nibabel as nib
 import numpy as np
 
+from intrab.utils.result_data import PromptResult
+
 
 def get_matching_datasets(dataset_path: Path, dataset_id: int) -> list[Path]:
     """Finds all matching datasets by its id and returns a list of paths to that directory."""
@@ -171,3 +173,55 @@ def create_instance_gt(gt_path: Path) -> tuple[nib.Nifti1Image, nib.Nifti1Image,
     semantic_gt = nib.Nifti1Image(semantic_gt_np.astype(np.uint8), gt_nib.affine)
     instance_gt = gt_nib
     return semantic_gt, instance_gt, instances
+
+
+def save_static_lesion_results(
+    prompt_results: list[PromptResult], base_name: Path, semantic_filename: str, instance_filename: str
+):
+    """Iterate through all single prompt results that are"""
+    semantic_pd_path = base_name / semantic_filename
+    instance_pd_path = base_name / instance_filename
+    for i, prompt_result in enumerate(prompt_results):
+        if i == 0:
+            img = prompt_result.predicted_image.get_fdata()
+            affine = prompt_result.predicted_image.affine
+            continue
+        img = img + (prompt_result.predicted_image.get_fdata() + i)
+    semantic_img = nib.Nifti1Image(np.where(np.nonzero(img), 1, 0), affine)
+    instance_img = nib.Nifti1Image(img, affine)
+
+    semantic_pd_path = base_name / semantic_filename
+    instance_pd_path = base_name / instance_filename
+    # ToDo: Save the prompt steps as well.
+    instance_img.to_filename(instance_pd_path)
+    semantic_img.to_filename(semantic_pd_path)
+
+
+def save_interactive_lesion_results(
+    all_prompt_results: list[list[PromptResult]], base_name: Path, semantic_filename: str, instance_filename: str
+):
+    """
+    Save the interactive lesion results.
+    Each lesion has it's own interactive results. The outer list count goes through the lesions and the inner list goes through the iterations.
+    """
+    all_arr = []
+    affine = None
+    for lesion_id, prompt_results in enumerate(all_prompt_results):
+        all_arr_iter = []
+        prompt_res: PromptResult
+        for cnt, prompt_res in enumerate(prompt_results):
+            if lesion_id == 0 and cnt == 0:
+                affine - prompt_res.predicted_image.affine
+            img = (prompt_res.predicted_image.get_fdata()) + lesion_id
+            all_arr_iter.append(img)
+        all_arr.append(all_arr_iter)
+    joint_arr = np.array(all_arr)  # Shape: (num_lesions, num_iterations, x, y, z)
+    iter_wise_arr = np.sum(joint_arr, axis=0, keepdims=False)  # Shape: (num_iterations, x, y, z)
+    # Save the results iteratively
+    for cnt in range(iter_wise_arr.shape[0]):
+        semantic_img = nib.Nifti1Image(np.where(np.nonzero(iter_wise_arr[cnt]), 1, 0), affine)
+        instance_img = nib.Nifti1Image(iter_wise_arr[cnt], affine)
+        semantic_pd_path = base_name / f"iter_{cnt}" / semantic_filename
+        instance_pd_path = base_name / f"iter_{cnt}" / instance_filename
+        semantic_img.to_filename(semantic_pd_path)
+        instance_img.to_filename(instance_pd_path)
