@@ -15,7 +15,7 @@
                     "-d", "/home/t722s/Desktop/Datasets/melanoma_HD/"]
         },
         {
-            "name": "Run config",
+            "name": "Static Organ Test",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/src/intrab/experiments_runner.py",
@@ -25,7 +25,24 @@
                 "${workspaceFolder}/configs/static_benchmark.yaml",
                 ],
             "env":{
-                "INTRAB_DATA_PATH": "/mnt/E132-Rohdaten/nnUNetv2",
+                "INTRAB_DATA_PATH": "/mnt/E132-Projekte/Projects/2023_Tempus_intrab/datasets",
+                //"INTRAB_DATA_PATH": "/mnt/E132-Projekte/Projects/2023_Rokuss_Tracking/Datasets",
+                "INTRAB_MODEL_PATH": "/mnt/E132-Projekte/Projects/2023_Tempus_intrab/checkpoints",
+                "INTRAB_RESULTS_PATH": "/mnt/E132-Projekte/Projects/2023_Tempus_intrab/results"
+            }
+        },
+        {
+            "name": "Static Lesion Test",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/intrab/experiments_runner.py",
+            "console": "integratedTerminal",
+            "args": [
+                "-c",
+                "${workspaceFolder}/configs/static_lesion_benchmark.yaml",
+                ],
+            "env":{
+                "INTRAB_DATA_PATH": "/mnt/E132-Projekte/Projects/2023_Tempus_intrab/datasets",
                 //"INTRAB_DATA_PATH": "/mnt/E132-Projekte/Projects/2023_Rokuss_Tracking/Datasets",
                 "INTRAB_MODEL_PATH": "/mnt/E132-Projekte/Projects/2023_Tempus_intrab/checkpoints",
                 "INTRAB_RESULTS_PATH": "/mnt/E132-Projekte/Projects/2023_Tempus_intrab/results"
