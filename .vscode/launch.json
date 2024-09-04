@@ -22,7 +22,7 @@
             "console": "integratedTerminal",
             "args": [
                 "-c",
-                "${workspaceFolder}/configs/static_benchmark.yaml",
+                "${workspaceFolder}/configs/static_organ_test.yaml",
                 ],
             "env":{
                 "INTRAB_DATA_PATH": "/mnt/E132-Projekte/Projects/2023_Tempus_intrab/datasets",
@@ -39,7 +39,7 @@
             "console": "integratedTerminal",
             "args": [
                 "-c",
-                "${workspaceFolder}/configs/static_lesion_benchmark.yaml",
+                "${workspaceFolder}/configs/static_lesion_test.yaml",
                 ],
             "env":{
                 "INTRAB_DATA_PATH": "/mnt/E132-Projekte/Projects/2023_Tempus_intrab/datasets",
