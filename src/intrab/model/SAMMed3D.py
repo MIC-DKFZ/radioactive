@@ -12,6 +12,7 @@ import nibabel as nib
 from intrab.model.inferer import Inferer
 from intrab.prompts.prompt import Boxes, Boxes3D, Points, PromptStep
 from intrab.utils.SAMMed3D_segment_anything.build_sam3D import build_sam3D_vit_b_ori
+from intrab.utils.image import get_crop_pad_params_from_gt_or_prompt
 from intrab.utils.resample import get_current_spacing_from_affine, resample_to_shape, resample_to_spacing
 
 
@@ -31,14 +32,12 @@ def load_sammed3d(checkpoint_path, device="cuda"):
 class SAMMed3DInferer(Inferer):
     dim = 3
     supported_prompts = ("point", "mask")
-    required_shape = (128, 128, 128)  # Hard code to match training
     offset_mode = "center"  # Changing this will require siginificant reworking of code; currently doesn't matter anyway since the other method doesn't work
     pass_prev_prompts = True
 
     def __init__(self, checkpoint, device="cuda", use_only_first_point=True):
         super().__init__(checkpoint, device)
         self.use_only_first_point = use_only_first_point
-        self.stored_patch_info = None
 
     def segment(self, img_embedding, low_res_mask, coords, labels):
         # Get prompt embeddings
@@ -68,9 +67,6 @@ class SAMMed3DInferer(Inferer):
         # Original code: the ToCanonical function doesn't work without metadata anyway, so it efectively only reads in the image. For ease of preserving metadata, I use nib
         self.img, self.inv_trans = self.transform_to_model_coords(img_path, is_seg=False)
 
-    def clear_embeddings(self):
-        self.stored_patch_info = None 
-
     def transform_to_model_coords(self, nifti: Path | str | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
         if isinstance(nifti, (Path, str)):
             nifti = nib.load(nifti)
@@ -93,37 +89,11 @@ class SAMMed3DInferer(Inferer):
 
         return img_respaced, inv_transform
 
-    def preprocess_img(self, img3D, prompt=None, cheat=False, gt=None):
+    def preprocess_img(self, img3D: np.ndarray, cropping_params, padding_params):
         img3D = torch.from_numpy(img3D)
-
         subject = tio.Subject(image=tio.ScalarImage(tensor=img3D.unsqueeze(0)))
 
-        if cheat:
-            subject.add_image(
-                tio.LabelMap(
-                    tensor=gt.unsqueeze(0),
-                    affine=subject.image.affine,
-                ),
-                image_name="label",
-            )
-            crop_transform = tio.CropOrPad(mask_name="label", target_shape=(128, 128, 128))
-        else:
-            coords_T = prompt.coords.T
-            crop_mask = torch.zeros_like(subject.image.data)
-            # fmt: off
-            crop_mask[0, *coords_T] = 1  # Include initial 0 for the additional N axis
-            # fmt: on
-            subject.add_image(tio.LabelMap(tensor=crop_mask, affine=subject.image.affine), image_name="crop_mask")
-            crop_transform = tio.CropOrPad(mask_name="crop_mask", target_shape=(128, 128, 128))
-
-        padding_params, cropping_params = crop_transform.compute_crop_or_pad(subject)
-        # cropping_params: (x_start, x_max-(x_start+roi_size), y_start, ...)
-        # padding_params: (x_left_pad, x_right_pad, y_left_pad, ...)
-        if cropping_params is None:
-            cropping_params = (0, 0, 0, 0, 0, 0)
-        if padding_params is None:
-            padding_params = (0, 0, 0, 0, 0, 0)
-        roi_shape = crop_transform.target_shape
+        roi_shape = (128, 128, 128)
         vol_bound = (0, img3D.shape[0], 0, img3D.shape[1], 0, img3D.shape[2])
         center_oob_ori_roi = (
             cropping_params[0] - padding_params[0],
@@ -138,6 +108,7 @@ class SAMMed3DInferer(Inferer):
             "rounded": list(product((-32, +32, 0), repeat=3)),
             "center": [(0, 0, 0)],
         }
+
         for offset in offset_dict[self.offset_mode]:
             # get the position in original volume~(allow out-of-bound) for current offset
             oob_ori_roi = (
@@ -169,7 +140,7 @@ class SAMMed3DInferer(Inferer):
             # pad and crop for the original subject
             pad_and_crop = tio.Compose(
                 [
-                    tio.Pad(padding_params, padding_mode=crop_transform.padding_mode),
+                    tio.Pad(padding_params, padding_mode=0),
                     tio.Crop(cropping_params),
                 ]
             )
@@ -212,7 +183,7 @@ class SAMMed3DInferer(Inferer):
             )
 
             window_list.append((patch_embedding, pos3D_roi))
-        return cropping_params, padding_params, window_list
+        return window_list
 
     def preprocess_prompt(self, pts_prompt, cropping_params, padding_params):
 
@@ -238,15 +209,6 @@ class SAMMed3DInferer(Inferer):
             batch_labels = batch_labels[:, :1]
 
         return batch_points, batch_labels
-
-    def get_patchings(self, img, prompt, cheat, gt):
-        if self.stored_patch_info is not None:
-            cropping_params, padding_params, patch_list = self.stored_patch_info
-        else:  # If stored patchings shouldn't be used, generate new ones
-            cropping_params, padding_params, patch_list = self.preprocess_img(img, prompt, cheat, gt)
-            self.stored_patch_info = cropping_params, padding_params, patch_list
-
-        return cropping_params, padding_params, patch_list
     
     def create_or_format_low_res_logits(self, prev_low_res_logits: None | np.ndarray):
         """
@@ -258,7 +220,7 @@ class SAMMed3DInferer(Inferer):
             low_res_logits = prev_low_res_logits.unsqueeze(0).unsqueeze(0).to(self.device)
         else:  # If no low res mask supplied, create one consisting of zeros
             low_res_spatial_shape = [
-                dim // 4 for dim in SAMMed3DInferer.required_shape
+                dim // 4 for dim in (128, 128, 128)
             ]  # batch and channel dimensions remain the same, spatial dimensions are quartered
             low_res_logits = torch.zeros([1, 1] + low_res_spatial_shape).to(
                 self.device
@@ -270,8 +232,8 @@ class SAMMed3DInferer(Inferer):
     def predict(
         self,
         prompt: PromptStep,
-        prev_seg: np.ndarray = None,
-        pad_crop_params: tuple[tuple, tuple] = None
+        crop_pad_params: tuple[tuple, tuple] | None = None,
+        prev_seg: np.ndarray = None, # Argument not used - present to align with prediction for 2d models
     ) -> tuple[nib.Nifti1Image, np.ndarray]:  # If iterating, use previous patching, previous embeddings
         cheat = False
         gt = None
@@ -284,15 +246,16 @@ class SAMMed3DInferer(Inferer):
             :, ::-1
         ]  # Points are in xyz, but must be in zyx to align to image in row-major format.
 
-        if pad_crop_params is None:
-            pass # ToDo
-        cropping_params, padding_params, patch_list = self.get_patchings(
-            self.img, prompt, cheat, gt
-        )
+        if crop_pad_params is None:
+            crop_pad_params = get_crop_pad_params_from_gt_or_prompt(self.img, prompt, cheat, gt)
+
+        cropping_params, padding_params = crop_pad_params
+        
+        patch_list = self.preprocess_img(self.img, cropping_params, padding_params)
 
         prev_low_res_logits = prompt.masks
         coords, labels = self.preprocess_prompt(prompt, cropping_params, padding_params)
-        if self.stored_patch_info is not None or cheat:  # Check that the prompt lies within the patch
+        if crop_pad_params is not None or cheat:  # Check that the prompt lies within the patch - only necessary if using a previously generated patch
             if torch.any(torch.logical_or(coords < 0, coords >= 128)):
                 raise RuntimeError("Prompt coordinates do not lie within stored patch!")
 
@@ -304,7 +267,7 @@ class SAMMed3DInferer(Inferer):
             low_res_logits = self.segment(patch_embedding, logit_mask, coords, labels)
             logits = (
                 F.interpolate(
-                    low_res_logits, size=SAMMed3DInferer.required_shape, mode="trilinear", align_corners=False
+                    low_res_logits, size=(128,128,128), mode="trilinear", align_corners=False
                 )
                 .detach()
                 .cpu()

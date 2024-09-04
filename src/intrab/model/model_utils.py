@@ -18,7 +18,12 @@ from intrab.prompts.prompter import (
     static_prompt_styles,
 )
 
-from intrab.prompts.interactive_prompter import NPointsPer2DSliceInteractivePrompter, threeDInteractivePrompterSAMMed3D
+from intrab.prompts.interactive_prompter import (
+    NPointsPer2DSliceInteractivePrompter, 
+    threeDInteractivePrompterSAMMed3D, 
+    twoDNPointsUnrealisticInteractivePrompter,
+    interactive_prompt_styles
+)
 
 from intrab.utils.paths import get_model_path
 from intrab.model.inferer import Inferer
@@ -110,6 +115,17 @@ def get_wanted_supported_prompters(
             if "NPointsPer2DSliceInteractive" in wanted_prompt_styles:
                 prompters.append(
                     NPointsPer2DSliceInteractivePrompter(
+                        inferer,
+                        seed,
+                        dof_bound=pro_conf.interactive_dof_bound,
+                        perf_bound=pro_conf.interactive_perf_bound,
+                        max_iter=pro_conf.interactive_max_iter,
+                        n_init_points_per_slice=pro_conf.twoD_interactive_n_points_per_slice,
+                    )
+                )
+            if "twoDNPointsUnrealisticInteractivePrompter" in wanted_prompt_styles:
+                prompters.append(
+                    twoDNPointsUnrealisticInteractivePrompter(
                         inferer,
                         seed,
                         dof_bound=pro_conf.interactive_dof_bound,

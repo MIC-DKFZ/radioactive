@@ -44,7 +44,7 @@ class Inferer(ABC):
         pass
 
     @abstractmethod
-    def predict(self, prompts: PromptStep, prev_low_res_logits: dict[int: np.ndarray] | np.ndarray, prev_seg: nib.Nifti1Image):
+    def predict(self, prompts: PromptStep, prev_seg: nib.Nifti1Image):
         """Obtain logits"""
         pass
 

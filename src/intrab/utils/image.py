@@ -1,107 +1,44 @@
 import numpy as np
 import nibabel as nib
 from nibabel.orientations import io_orientation, ornt_transform
+import torch
+import torchio as tio
 
-def read_im_gt(img_path, gt_path, reorient, organ_label = None, RAS = False):
-    img, gt = nib.load(img_path), nib.load(gt_path)
-    if reorient:
-        img, gt = img, gt  # Initialize variables to hold potentially reoriented images
+from intrab.prompts.prompt import PromptStep
 
-        # Check if gt, image are already in RAS+ 
-        if nib.aff2axcodes(img.affine) != ('R', 'A', 'S'):
-            img = nib.as_closest_canonical(img)
+def get_crop_pad_params_from_gt_or_prompt(img3D: np.ndarray, prompt: PromptStep | None = None, cheat: bool = False, gt: np.ndarray | None = None):
+    prompt.coords = prompt.coords[:,[2,1,0]] # Prompt coords are in xyz. Need to get them to zyx to align with the image. One day all this should be removed.
+    img3D = torch.from_numpy(img3D)
 
-        if nib.aff2axcodes(gt.affine) != ('R', 'A', 'S'):
-            gt = nib.as_closest_canonical(gt)
+    subject = tio.Subject(image=tio.ScalarImage(tensor=img3D.unsqueeze(0)))
 
-    img_data = img.get_fdata().astype(np.float32)
-    gt_data = gt.get_fdata().astype(int)
-
-
-    # Ensure organ is binary
-    if organ_label is None:
-        flat_data = gt_data.ravel()
-        if not np.all( (flat_data == 0) | (flat_data == 1)):
-            raise ValueError('Ground truth is not binary and no foreground label to subset to is specified')
-        
+    if cheat:
+        subject.add_image(
+            tio.LabelMap(
+                tensor=gt.unsqueeze(0),
+                affine=subject.image.affine,
+            ),
+            image_name="label",
+        )
+        crop_transform = tio.CropOrPad(mask_name="label", target_shape=(128, 128, 128))
     else:
-        gt_data = (gt_data == organ_label).astype(int)
+        coords_T = prompt.coords.T
+        crop_mask = torch.zeros_like(subject.image.data)
+        # fmt: off
+        crop_mask[0, *coords_T] = 1  # Include initial 0 for the additional N axis
+        # fmt: on
+        subject.add_image(tio.LabelMap(tensor=crop_mask, affine=subject.image.affine), image_name="crop_mask")
+        crop_transform = tio.CropOrPad(mask_name="crop_mask", target_shape=(128, 128, 128))
 
-    if not RAS:
-        img_data, gt_data = img_data.transpose(2,1,0), gt_data.transpose(2,1,0) # change from RAS to row-major ie xyz to zyx
-    
-    return(img_data, gt_data)
+    padding_params, cropping_params = crop_transform.compute_crop_or_pad(subject)
+    # cropping_params: (x_start, x_max-(x_start+roi_size), y_start, ...)
+    # padding_params: (x_left_pad, x_right_pad, y_left_pad, ...)
+    if cropping_params is None:
+        cropping_params = (0, 0, 0, 0, 0, 0)
+    if padding_params is None:
+        padding_params = (0, 0, 0, 0, 0, 0)
 
-def read_reorient_nifti(path, dtype, RAS = False):
-    # Obtain image data
-    img = nib.load(path)
-    img_ras = img # Initialize variables to hold potentially reoriented images
-    # Check if gt, image are already in RAS+ 
-    if nib.aff2axcodes(img_ras.affine) != ('R', 'A', 'S'):
-        img_ras = nib.as_closest_canonical(img)
-    
-    img_data = img_ras.get_fdata().astype(dtype)
-
-    if not RAS:
-        img_data = img_data.transpose(2,1,0) # change from RAS to row-major ie xyz to zyx
-    
-    # Obtain function to invert transformation
-    ornt_old = io_orientation(img.affine)
-    ornt_new = io_orientation(img_ras.affine)
-    ornt_trans = ornt_transform(ornt_new, ornt_old)
-
-    def inv_trans(seg: np.array):
-        if not RAS:
-            seg = seg.transpose(2,1,0)
-        seg_nib = nib.Nifti1Image(seg, img.affine)
-        seg_orig_ori = seg_nib.as_reoriented(ornt_trans) 
-        
-        return seg_orig_ori
-
-    return img_data, inv_trans
-
-def get_crop_pad_params(img, crop_pad_center, target_shape): # Modified from TorchIO cropOrPad
-    subject_shape = img.shape
-    padding = []
-    cropping = []
-
-    for dim in range(3):
-        target_dim = target_shape[dim]
-        center_dim = crop_pad_center[dim]
-        subject_dim = subject_shape[dim]
-
-        center_on_index = not (center_dim % 1)
-        target_even = not (target_dim % 2)
-
-        # Approximation when the center cannot be computed exactly
-        # The output will be off by half a voxel, but this is just an
-        # implementation detail
-        if target_even ^ center_on_index:
-            center_dim -= 0.5
-
-        begin = center_dim - target_dim / 2
-        if begin >= 0:
-            crop_ini = begin
-            pad_ini = 0
-        else:
-            crop_ini = 0
-            pad_ini = -begin
-
-        end = center_dim + target_dim / 2
-        if end <= subject_dim:
-            crop_fin = subject_dim - end
-            pad_fin = 0
-        else:
-            crop_fin = 0
-            pad_fin = end - subject_dim
-
-        padding.extend([pad_ini, pad_fin])
-        cropping.extend([crop_ini, crop_fin])
-
-    padding_params = np.asarray(padding, dtype=int)
-    cropping_params = np.asarray(cropping, dtype=int)
-
-    return cropping_params, padding_params  # type: ignore[return-value]
+    return cropping_params, padding_params
 
 def crop_im(img, cropping_params): # Modified from TorchIO cropOrPad
         low = cropping_params[::2]

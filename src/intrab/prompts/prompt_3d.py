@@ -111,7 +111,7 @@ def isolate_patch_around_point(img_or_gt: np.ndarray, seed_point: PromptStep, pa
 
     return img_or_gt_isolated
 
-def obtain_misclassified_point_prompt(pred: np.ndarray, gt: np.ndarray, seed: int = None):
+def obtain_misclassified_point_prompt_3d(pred: np.ndarray, gt: np.ndarray, seed: int = None):
     """
     Obtain a point prompt from the misclassified entries in pred, as compared to gt.
     """
@@ -125,7 +125,32 @@ def obtain_misclassified_point_prompt(pred: np.ndarray, gt: np.ndarray, seed: in
     sampled_ind = np.random.randint(len(misclassifieds))
     sampled_coords = misclassifieds[sampled_ind]
     sampled_labels = gt[*sampled_coords][None]
-    sampled_coords = sampled_coords[None][:,[2,1,0]] # zyx -> xyz and make 2d
+    sampled_coords = sampled_coords[None][:,::-1] # zyx -> xyz, and make into 2d array
+
+    # Format into PromptStep and return
+
+    prompt_step = PromptStep(point_prompts = (sampled_coords, sampled_labels))
+
+    return prompt_step
+
+def obtain_misclassified_point_prompt_2d(slice_pred: np.ndarray, slice_gt: np.ndarray, slice_idx, seed: int = None):
+    """
+    Obtain a point prompt from the misclassified entries in pred, as compared to gt, and return a promptstep including slice index. 
+    Much like _3d version, just needs to be explicitly informed of which slice.
+    """
+    assert slice_pred.shape == slice_gt.shape, "Prediction and gt shapes must match"
+
+    if seed:
+        np.random.seed(seed)
+
+    # Choose a random misclassified point
+    misclassifieds = np.vstack(np.where(slice_pred != slice_gt)).T
+    sampled_ind = np.random.randint(len(misclassifieds))
+    sampled_coords = misclassifieds[sampled_ind]
+    sampled_labels = slice_gt[*sampled_coords][None]
+    # add 3d context. Below is only difference from obtain_misclassified_point_prompt_3d. Could merge? Is it better for this to be explicitly different functions?
+    sampled_coords = np.array([slice_idx, *sampled_coords]) 
+    sampled_coords = sampled_coords[None][:,::-1] # zyx -> xyz, and make into 2d array
 
     # Format into PromptStep and return
 

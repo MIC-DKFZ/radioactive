@@ -141,6 +141,12 @@ class PromptStep:
 
 
 def _merge_two_promptsteps(prompt1: PromptStep, prompt2: PromptStep) -> PromptStep:
+    # Need to have empty values as {}, not None. Need to discuss with Tilo since he preferred None
+    if prompt1.boxes is None: prompt1.boxes = {}
+    if prompt2.boxes is None: prompt2.boxes = {}
+    if prompt1.masks is None: prompt1.masks = {}
+    if prompt2.masks is None: prompt2.masks = {}
+
     # Merge boxes
     boxes = prompt1.boxes
     for slice_idx, bbox in prompt1.boxes.items():  # Check no slice gets two distinct boxes
@@ -150,20 +156,22 @@ def _merge_two_promptsteps(prompt1: PromptStep, prompt2: PromptStep) -> PromptSt
 
     # Merge points
     # Ensure both point arrays are 2d to permit concatenation
+    # This will break if the coords are none.
     coords1 = np.atleast_2d(prompt1.coords)
     coords2 = np.atleast_2d(prompt2.coords)
 
     coords = np.concatenate([coords1, coords2], axis=0)
     labels = np.concatenate([prompt1.labels, prompt2.labels])
 
-    merged_prompt = PromptStep(point_prompts=(coords, labels), box_prompts=boxes)
-
+    
     # Merge masks 
     masks = prompt1.masks
     for slice_idx, mask in prompt1.masks.items():  # Check no slice gets two distinct boxes
         if slice_idx in prompt2.masks.keys() and not np.array_equal(prompt1.masks[slice_idx], prompt2.masks[slice_idx]):
             raise ValueError("Merging would cause having two distinct masks on one slice, which is not permitted")
         masks.update(prompt2.masks)
+
+    merged_prompt = PromptStep(point_prompts=(coords, labels), box_prompts=boxes, mask_prompts=masks)
 
     return merged_prompt
 
