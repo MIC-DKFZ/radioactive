@@ -18,7 +18,7 @@ from intrab.prompts.prompter import (
     static_prompt_styles,
 )
 
-from intrab.prompts.interactive_prompter import NPointsPer2DSliceInteractivePrompter, threeDInteractivePrompter
+from intrab.prompts.interactive_prompter import NPointsPer2DSliceInteractivePrompter, threeDInteractivePrompterSAMMed3D
 
 from intrab.utils.paths import get_model_path
 from intrab.model.inferer import Inferer
@@ -115,7 +115,7 @@ def get_wanted_supported_prompters(
                         dof_bound=pro_conf.interactive_dof_bound,
                         perf_bound=pro_conf.interactive_perf_bound,
                         max_iter=pro_conf.interactive_max_iter,
-                        n_points_per_slice=pro_conf.twoD_interactive_n_points_per_slice,
+                        n_init_points_per_slice=pro_conf.twoD_interactive_n_points_per_slice,
                     )
                 )
 
@@ -128,7 +128,7 @@ def get_wanted_supported_prompters(
                 prompters.append(Box3DVolumePrompter(inferer, seed))
         if "point" in inferer.supported_prompts and "mask" in inferer.supported_prompts:
             if "threeDInteractivePrompter" in wanted_prompt_styles:
-                prompters.append(threeDInteractivePrompter(inferer, 
+                prompters.append(threeDInteractivePrompterSAMMed3D(inferer, 
                                                            pro_conf.threeD_interactive_n_init_points,
                                                            seed,
                                                            pro_conf.interactive_dof_bound,
