@@ -33,6 +33,7 @@ from intrab.utils.result_data import PromptResult
 
 class Prompter:
     is_static: bool = True
+    num_iterations: int = 20
 
     def __init__(self, inferer: Inferer, seed: int = 11111):
         self.inferer: Inferer = inferer

@@ -161,3 +161,13 @@ def binarize_gt(gt_path: Path, label_of_interest: int):
     binary_gt = np.where(gt == label_of_interest, 1, 0)
     binary_gt = nib.Nifti1Image(binary_gt.astype(np.uint8), gt_nib.affine)
     return binary_gt
+
+
+def create_instance_gt(gt_path: Path) -> tuple[nib.Nifti1Image, nib.Nifti1Image, list[int]]:
+    gt_nib: nib.Nifti1Image = nib.load(gt_path)
+    gt = gt_nib.get_fdata()
+    instances = np.unique(gt)
+    semantic_gt_np = np.where(gt != 0, 1, 0)
+    semantic_gt = nib.Nifti1Image(semantic_gt_np.astype(np.uint8), gt_nib.affine)
+    instance_gt = gt_nib
+    return semantic_gt, instance_gt, instances
