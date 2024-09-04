@@ -123,8 +123,9 @@ def obtain_misclassified_point_prompt(pred: np.ndarray, gt: np.ndarray, seed: in
     # Choose a random misclassified point
     misclassifieds = np.vstack(np.where(pred != gt)).T
     sampled_ind = np.random.randint(len(misclassifieds))
-    sampled_coords = [misclassifieds[sampled_ind]]
-    sampled_labels = [gt[*sampled_coords[0]]]
+    sampled_coords = misclassifieds[sampled_ind]
+    sampled_labels = gt[*sampled_coords][None]
+    sampled_coords = sampled_coords[None][:,[2,1,0]] # zyx -> xyz and make 2d
 
     # Format into PromptStep and return
 

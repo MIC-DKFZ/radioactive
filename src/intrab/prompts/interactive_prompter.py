@@ -94,7 +94,7 @@ class InteractivePrompter(Prompter):
             if self.always_pass_prev_prompts:
                 prompt_step = merge_prompt_steps(prompt_step, all_prompt_results[-1].prompt_step)
 
-            pred, logits = self.inferer.predict(prompt_step, prev_seg = pred)
+            pred, logits = self.inferer.predict(prompt_step, logits, prev_seg = pred)
             dof += prompt_step.get_dof()
             perf = self.get_performance(pred)
             all_prompt_results.append(
@@ -143,6 +143,7 @@ class threeDInteractivePrompter(InteractivePrompter):
 
     def clear_states(self):
         self.isolated_gt = None
+        self.inferer.clear_embeddings()
         return 
 
 # ToDo: Check prompts generated are of decent 'quality'

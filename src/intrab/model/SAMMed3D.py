@@ -38,7 +38,7 @@ class SAMMed3DInferer(Inferer):
     def __init__(self, checkpoint, device="cuda", use_only_first_point=True):
         super().__init__(checkpoint, device)
         self.use_only_first_point = use_only_first_point
-        self.stored_cropping_params, self.stored_padding_params, self.stored_patch_list = None, None, None
+        self.stored_patch_info = None
 
     def segment(self, img_embedding, low_res_mask, coords, labels):
         # Get prompt embeddings
@@ -69,7 +69,7 @@ class SAMMed3DInferer(Inferer):
         self.img, self.inv_trans = self.transform_to_model_coords(img_path, is_seg=False)
 
     def clear_embeddings(self):
-        self.stored_cropping_params, self.stored_padding_params, self.stored_patch_list = None, None, None
+        self.stored_patch_info = None 
 
     def transform_to_model_coords(self, nifti: Path | str | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
         if isinstance(nifti, (Path, str)):
@@ -239,44 +239,42 @@ class SAMMed3DInferer(Inferer):
 
         return batch_points, batch_labels
 
-    def get_patchings(self, img, prompt, cheat, gt, use_stored_patching, store_patching):
-        if use_stored_patching:
-            if (
-                (self.stored_cropping_params is None)
-                or (self.stored_padding_params is None)
-                or (self.stored_patch_list is None)
-            ):
-                raise RuntimeError("No stored patchings to use!")
-            cropping_params, padding_params, patch_list = (
-                self.stored_cropping_params,
-                self.stored_padding_params,
-                self.stored_patch_list,
-            )
+    def get_patchings(self, img, prompt, cheat, gt):
+        if self.stored_patch_info is not None:
+            cropping_params, padding_params, patch_list = self.stored_patch_info
         else:  # If stored patchings shouldn't be used, generate new ones
             cropping_params, padding_params, patch_list = self.preprocess_img(img, prompt, cheat, gt)
-        if (
-            store_patching and not use_stored_patching
-        ):  # store patching if desired. If use_stored_patching, this would do nothing
-            self.stored_cropping_params, self.stored_padding_params, self.stored_patch_list = (
-                cropping_params,
-                padding_params,
-                patch_list,
-            )
+            self.stored_patch_info = cropping_params, padding_params, patch_list
 
         return cropping_params, padding_params, patch_list
+    
+    def create_or_format_low_res_logits(self, prev_low_res_logits: None | np.ndarray):
+        """
+        SAMMed3D Expects a logit mask (many other models just take None). If a previous mask isn't supplied, a mask of 0s of the right shape is to be created.
+        """
+        if prev_low_res_logits is not None:
+            # if previous low res logits are present, add number and channel dimensions
+            prev_low_res_logits = torch.from_numpy(prev_low_res_logits)
+            low_res_logits = prev_low_res_logits.unsqueeze(0).unsqueeze(0).to(self.device)
+        else:  # If no low res mask supplied, create one consisting of zeros
+            low_res_spatial_shape = [
+                dim // 4 for dim in SAMMed3DInferer.required_shape
+            ]  # batch and channel dimensions remain the same, spatial dimensions are quartered
+            low_res_logits = torch.zeros([1, 1] + low_res_spatial_shape).to(
+                self.device
+            )  # [1,1] is batch and channel dimensions\
+
+        return low_res_logits
 
     @torch.no_grad()
     def predict(
         self,
         prompt: PromptStep,
-        prev_low_res_logits=None,
-        cheat=False,
-        gt=None,
-        store_patching=False,
-        use_stored_patching=False,
-        transform=True,
-        prev_seg = None,
-    ):  # If iterating, use previous patching, previous embeddings
+        prev_low_res_logits: np.ndarray =None,
+        cheat:bool = False,
+        gt:np.ndarray = None,
+        prev_seg: np.ndarray = None,
+    ) -> tuple[nib.Nifti1Image, np.ndarray]:  # If iterating, use previous patching, previous embeddings
         if not isinstance(prompt, PromptStep):
             raise TypeError(f"Prompts must be supplied as an instance of the Prompt class.")
         if prompt.has_boxes:
@@ -287,29 +285,20 @@ class SAMMed3DInferer(Inferer):
         ]  # Points are in xyz, but must be in zyx to align to image in row-major format.
 
         cropping_params, padding_params, patch_list = self.get_patchings(
-            self.img, prompt, cheat, gt, use_stored_patching, store_patching
+            self.img, prompt, cheat, gt
         )
 
         coords, labels = self.preprocess_prompt(prompt, cropping_params, padding_params)
-        if use_stored_patching or cheat:  # Check that the prompt lies within the patch
+        if self.stored_patch_info is not None or cheat:  # Check that the prompt lies within the patch
             if torch.any(torch.logical_or(coords < 0, coords >= 128)):
                 raise RuntimeError("Prompt coordinates do not lie within stored patch!")
 
+
         segmentation = np.zeros_like(self.img, dtype=np.uint8)
         for patch_embedding, pos3D in patch_list:
-            if (
-                prev_low_res_logits is not None
-            ):  # if previous low res logits are present, add number and channel dimensions
-                prev_low_res_logits = prev_low_res_logits.unsqueeze(0).unsqueeze(0).to(self.device)
-            else:  # If no low res mask supplied, create one consisting of zeros
-                low_res_spatial_shape = [
-                    dim // 4 for dim in SAMMed3DInferer.required_shape
-                ]  # batch and channel dimensions remain the same, spatial dimensions are quartered
-                prev_low_res_logits = torch.zeros([1, 1] + low_res_spatial_shape).to(
-                    self.device
-                )  # [1,1] is batch and channel dimensions
-
-            low_res_logits = self.segment(patch_embedding, prev_low_res_logits, coords, labels)
+            logit_mask = self.create_or_format_low_res_logits(prev_low_res_logits)
+            
+            low_res_logits = self.segment(patch_embedding, logit_mask, coords, labels)
             logits = (
                 F.interpolate(
                     low_res_logits, size=SAMMed3DInferer.required_shape, mode="trilinear", align_corners=False
@@ -331,4 +320,4 @@ class SAMMed3DInferer(Inferer):
         # Turn into Nifti object in original space
         segmentation = self.inv_trans(segmentation)
 
-        return segmentation, low_res_logits.cpu().squeeze()
+        return segmentation, low_res_logits.cpu().squeeze().numpy()
