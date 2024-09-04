@@ -270,11 +270,11 @@ class SAMMed3DInferer(Inferer):
     def predict(
         self,
         prompt: PromptStep,
-        prev_low_res_logits: np.ndarray =None,
-        cheat:bool = False,
-        gt:np.ndarray = None,
         prev_seg: np.ndarray = None,
+        pad_crop_params: tuple[tuple, tuple] = None
     ) -> tuple[nib.Nifti1Image, np.ndarray]:  # If iterating, use previous patching, previous embeddings
+        cheat = False
+        gt = None
         if not isinstance(prompt, PromptStep):
             raise TypeError(f"Prompts must be supplied as an instance of the Prompt class.")
         if prompt.has_boxes:
@@ -284,10 +284,13 @@ class SAMMed3DInferer(Inferer):
             :, ::-1
         ]  # Points are in xyz, but must be in zyx to align to image in row-major format.
 
+        if pad_crop_params is None:
+            pass # ToDo
         cropping_params, padding_params, patch_list = self.get_patchings(
             self.img, prompt, cheat, gt
         )
 
+        prev_low_res_logits = prompt.masks
         coords, labels = self.preprocess_prompt(prompt, cropping_params, padding_params)
         if self.stored_patch_info is not None or cheat:  # Check that the prompt lies within the patch
             if torch.any(torch.logical_or(coords < 0, coords >= 128)):

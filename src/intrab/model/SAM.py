@@ -239,7 +239,7 @@ class SAMInferer(Inferer):
 
         return segmentation
 
-    def predict(self, prompt: PromptStep, mask_dict={}, return_logits: bool = False, prev_seg = None):
+    def predict(self, prompt: PromptStep, return_logits: bool = False, prev_seg = None):
         if not isinstance(prompt, PromptStep):
             raise TypeError(f"Prompts must be supplied as an instance of the Prompt class.")
         if prompt.has_boxes and prompt.has_points:
@@ -254,6 +254,7 @@ class SAMInferer(Inferer):
             self.W,
         )  # Used for the transform class, which is taken from the original SAM code, hence the 2D size
 
+        mask_dict = prompt.masks if prompt.masks is not None else {}
         preprocessed_prompt_dict = self.preprocess_prompt(prompt)
         slices_to_process = [
             slice_idx for slice_idx in slices_to_infer if slice_idx not in self.image_embeddings_dict.keys()
