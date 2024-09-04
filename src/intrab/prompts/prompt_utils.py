@@ -236,7 +236,6 @@ def get_fg_point_from_cc_center(gt_slice: np.ndarray) -> np.ndarray:
     nearest_fg_point = get_nearest_fg_point(fg_mean_indices, largest_cc)
     return nearest_fg_point
 
-
 def get_fg_points_from_cc_centers(gt, n):
     """
     Takes n equally spaced slices starting at z_min and ending at z_max, where z_min is the lowest transverse slice of gt containing fg, and z_max similarly with highest,
@@ -573,7 +572,8 @@ def propagate_box(inferer: Inferer, seed_box: PromptStep, slices_to_infer: list[
 
         # If there is no next slice to infer, we can stop here.
         if cnt != len(slices_todo) - 1:
-            segmentation = inferer.predict(current_prompt, transform=False)[0]
+            segmentation = inferer.predict(current_prompt)[0]
+            segmentation, _ = inferer.transform_to_model_coords(segmentation, is_seg = True)
             if np.all(segmentation[slice_idx] == 0):  # Terminate if no fg generated
                 logger.debug("No prediction despite prompt given. Stopping propagation.")
                 break
