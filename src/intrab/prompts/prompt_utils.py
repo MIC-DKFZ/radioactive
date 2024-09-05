@@ -236,6 +236,7 @@ def get_fg_point_from_cc_center(gt_slice: np.ndarray) -> np.ndarray:
     nearest_fg_point = get_nearest_fg_point(fg_mean_indices, largest_cc)
     return nearest_fg_point
 
+
 def get_fg_points_from_cc_centers(gt, n):
     """
     Takes n equally spaced slices starting at z_min and ending at z_max, where z_min is the lowest transverse slice of gt containing fg, and z_max similarly with highest,
@@ -288,6 +289,7 @@ def interpolate_points(points, kind="linear"):
     # Stack the new z, y, and x coordinates vertically and return
     return np.column_stack((z_new, y_new, x_new)).round()
 
+
 def get_middle_seed_point(fn_mask, slices_inferred):
     lower, upper = np.percentile(slices_inferred, [30, 70])
     fp_coords = np.vstack(np.where(fn_mask)).T
@@ -295,17 +297,16 @@ def get_middle_seed_point(fn_mask, slices_inferred):
         fp_coords[:, 0] < upper
     )  # Mask to determine which false negatives lie between the 30th to 70th percentile
     if np.sum(middle_mask) == 0:
-        logger.info(
-            "Failed to generate prompt in middle 40 percent of the volume. This may be worth checking out."
-        )
+        logger.info("Failed to generate prompt in middle 40 percent of the volume. This may be worth checking out.")
         middle_mask = np.ones(
             len(fp_coords), bool
         )  # If there are no false negatives in the middle, draw from all coordinates (unlikely given that there must be many)
 
     fp_coords = fp_coords[middle_mask, :]
     new_middle_seed_prompt = fp_coords[np.random.choice(len(fp_coords), 1)]
-    
+
     return new_middle_seed_prompt
+
 
 def point_interpolation(gt, n_slices, interpolation="linear"):
     simulated_clicks = get_fg_points_from_cc_centers(gt, n_slices)
@@ -409,7 +410,7 @@ def propagate_point(
     all_labels = [seed_prompt.labels]
     current_prompt = seed_prompt
     for slice in slices_todo:
-        current_seg, _ = inferer.predict(current_prompt, transform=False)
+        current_seg, _ = inferer.predict(current_prompt)
         point_coords = get_fg_points_from_slice(current_seg, n_clicks=n_clicks, seed=seed)
         coords_xyz = point_coords[:, ::-1]  # zyx to xyz
         coords_xyz[:, -1] = increment(coords_xyz[:, -1], upwards)  # Increment the z-coordinate
@@ -573,7 +574,7 @@ def propagate_box(inferer: Inferer, seed_box: PromptStep, slices_to_infer: list[
         # If there is no next slice to infer, we can stop here.
         if cnt != len(slices_todo) - 1:
             segmentation = inferer.predict(current_prompt)[0]
-            segmentation, _ = inferer.transform_to_model_coords(segmentation, is_seg = True)
+            segmentation, _ = inferer.transform_to_model_coords(segmentation, is_seg=True)
             if np.all(segmentation[slice_idx] == 0):  # Terminate if no fg generated
                 logger.debug("No prediction despite prompt given. Stopping propagation.")
                 break
