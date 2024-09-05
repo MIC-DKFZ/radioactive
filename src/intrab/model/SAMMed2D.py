@@ -313,4 +313,4 @@ class SAMMed2DInferer(Inferer):
         segmentation_model_arr = segmentation
         segmentation_orig_nib = self.inv_trans(segmentation)
 
-        return segmentation_orig_nib, low_res_logits.cpu().squeeze().numpy(), segmentation_model_arr
+        return segmentation_orig_nib, low_res_logits, segmentation_model_arr
