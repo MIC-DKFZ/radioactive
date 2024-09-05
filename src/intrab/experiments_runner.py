@@ -6,7 +6,7 @@ from intrab.model.inferer import Inferer
 from intrab.prompts.prompt_hparams import PromptConfig
 from intrab.model.model_utils import inferer_registry, checkpoint_registry, model_registry
 
-from intrab.experiments import run_experiments, run_experiments_lesions
+from intrab.experiments import run_experiments_organ, run_experiments_lesions
 from intrab.utils.io import get_labels_from_dataset_json, get_dataset_path_by_id, get_img_gts, read_yaml_config
 from intrab.utils.paths import get_results_path
 from argparse import ArgumentParser
@@ -69,7 +69,7 @@ if __name__ == "__main__":
                 inferer: Inferer = inferer_registry[model_name](checkpoint_path, device)
 
                 if dataset["type"] == "organ":
-                    runner = run_experiments
+                    runner = run_experiments_organ
                 else:
                     runner = run_experiments_lesions
                 runner(

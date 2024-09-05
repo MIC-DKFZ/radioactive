@@ -33,8 +33,7 @@ from nneval.evaluate_semantic import semantic_evaluation
 from intrab.utils.result_data import PromptResult
 
 
-# ToDo: Make this run_organ_experiments
-def run_experiments(
+def run_experiments_organ(
     inferer: Inferer,
     imgs_gts: list[tuple[str, str]],
     results_dir: Path,
