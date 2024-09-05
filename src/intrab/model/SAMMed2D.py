@@ -248,7 +248,7 @@ class SAMMed2DInferer(Inferer):
         return segmentation
 
     @torch.no_grad()
-    def predict(self, prompt, return_logits=False, prev_seg = None):
+    def predict(self, prompt, return_logits=False, prev_seg=None):
         if not (isinstance(prompt, PromptStep)):
             raise TypeError(f"Prompts must be supplied as an instance of the Prompt class.")
         if prompt.has_boxes and prompt.has_points:
@@ -309,6 +309,8 @@ class SAMMed2DInferer(Inferer):
 
         # Reorient to original orientation and return with metadata
         # Turn into Nifti object in original space
-        segmentation = self.inv_trans(segmentation)
+        # Turn into Nifti object in original space
+        segmentation_model_arr = segmentation
+        segmentation_orig_nib = self.inv_trans(segmentation)
 
-        return segmentation, low_res_logits
+        return segmentation_orig_nib, low_res_logits.cpu().squeeze().numpy(), segmentation_model_arr

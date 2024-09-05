@@ -309,6 +309,13 @@ def get_middle_seed_point(fn_mask, slices_inferred):
 
 
 def point_interpolation(gt, n_slices, interpolation="linear"):
+    """
+    Simulates a clinician clicking in the 'center of the main mass of the roi' per slice.
+    Between these slices, the points are interpolated using linear or cubic spline interpolation.
+
+    :param gt: The ground truth volume.
+    :param n_slices: The number of slices to interpolate points between.
+    """
     simulated_clicks = get_fg_points_from_cc_centers(gt, n_slices)
     coords = interpolate_points(simulated_clicks, kind=interpolation).astype(int)
     coords = coords[:, [2, 1, 0]]  # Gt is in row-major; need to reorder to xyz
@@ -321,19 +328,20 @@ def point_interpolation(gt, n_slices, interpolation="linear"):
 
 
 def get_fg_points_from_slice(slice, n_clicks, seed=None):
+    """
+    Gets random forground points from a slice.
+    If n_clicks > n_fg_pixels, will return all n_fg_pixels -- May be lower than n_clicks.
+
+    :param slice: A 2D binary mask.
+    :param n_clicks: (int) The number of clicks to generate.
+    """
     if seed:
         np.random.seed(seed)
     slice_fg = np.where(slice)
     slice_fg = np.array(slice_fg).T
 
     n_fg_pixels = len(slice_fg)
-    if n_fg_pixels >= n_clicks:
-        point_indices = np.random.choice(n_fg_pixels, size=n_clicks, replace=False)
-    else:
-        # In this case, take all foreground pixels and then obtain some duplicate points by sampling with replacement additionally
-        point_indices = np.concatenate(
-            [np.arange(n_fg_pixels), np.random.choice(n_fg_pixels, size=n_clicks - n_fg_pixels, replace=True)]
-        )
+    point_indices = np.random.choice(n_fg_pixels, size=min(n_clicks, n_fg_pixels), replace=False)
 
     pos_clicks_slice = slice_fg[point_indices]
     return pos_clicks_slice
@@ -410,7 +418,7 @@ def propagate_point(
     all_labels = [seed_prompt.labels]
     current_prompt = seed_prompt
     for slice in slices_todo:
-        current_seg, _ = inferer.predict(current_prompt)
+        _, _, current_seg = inferer.predict(current_prompt)
         point_coords = get_fg_points_from_slice(current_seg, n_clicks=n_clicks, seed=seed)
         coords_xyz = point_coords[:, ::-1]  # zyx to xyz
         coords_xyz[:, -1] = increment(coords_xyz[:, -1], upwards)  # Increment the z-coordinate
@@ -435,97 +443,6 @@ def point_propagation(
     all_coords = np.concatenate((upwards_coords, downward_coords[n_clicks:]), axis=0)
     all_labels = np.concatenate((upward_labels, downward_labels[n_clicks:]), axis=0)
     return PromptStep(Points(coords=all_coords, labels=all_labels))
-
-
-def point_propagation_old(inferer: Inferer, seed_prompt: PromptStep, slices_to_infer, seed=None, n_clicks=5):
-    if seed:
-        np.random.seed(seed)
-
-    seed_coords = [seed_prompt.coords]  # keep track of all points
-
-    # Initialise segmentation to store total result
-    segmentation = np.zeros_like(inferer.img).astype(np.uint8)
-    low_res_logits = {}
-
-    pts_prompt = deepcopy(seed_prompt)
-    middle_idx = np.median(slices_to_infer).astype(int)
-
-    # Infer middle slice
-    slice_seg, slice_low_res_logits = inferer.predict(pts_prompt, transform=False)
-    low_res_logits[middle_idx] = slice_low_res_logits[middle_idx]
-    segmentation[middle_idx] = slice_seg[middle_idx]
-
-    # Downwards branch
-    ## Modify seed prompt to exist one axial slice down
-    downwards_coords = []
-    z_col = np.full((len(seed_prompt.coords), 1), middle_idx - 1)
-    pos_coords = np.hstack([z_col, seed_prompt.coords[:, 1:]])
-    pos_coords = pos_coords[:, [2, 1, 0]]  # Change from zyx to xyz
-    downwards_coords.append(pos_coords)
-    pts_prompt = PromptStep(point_prompts=(pos_coords, [1] * len(seed_prompt.coords)))
-
-    downwards_iter = range(middle_idx - 1, slices_to_infer.min() - 1, -1)
-
-    for slice_idx in downwards_iter:
-        slice_seg, slice_low_res_logits = inferer.predict(pts_prompt, transform=False)
-        low_res_logits[slice_idx] = slice_low_res_logits[slice_idx]
-        segmentation[slice_idx] = slice_seg[slice_idx]
-
-        if np.all(segmentation[slice_idx] == 0):  # Terminate if no fg generated
-            logger.debug("No prediction despite prompt given. Stopping propagation.")
-            break
-
-        # Update prompt
-        pos_clicks_slice = get_fg_points_from_slice(slice_seg[slice_idx], n_clicks)
-
-        # Put coords in 3d context
-        z_col = np.full((n_clicks, 1), slice_idx - 1)
-        # create z column to add. Note slice_idx-1: these are the prompts for the next slice down
-        pos_coords = np.hstack([z_col, pos_clicks_slice])
-        pos_coords = pos_coords[:, [2, 1, 0]]  # Change from zyx to xyz
-        downwards_coords.append(pos_coords)
-        pts_prompt = PromptStep(point_prompts=(pos_coords, [1] * n_clicks))
-
-    # Upward branch
-    ## Modify seed prompt to exist one axial slice up
-    upward_coords = []
-    z_col = np.full((len(seed_prompt.coords), 1), middle_idx + 1)
-    pos_coords = np.hstack([z_col, seed_prompt.coords[:, 1:]])
-    pos_coords = pos_coords[:, [2, 1, 0]]  # Change from zyx to xyz
-    upward_coords.append(pos_coords)
-    pts_prompt = PromptStep(point_prompts=(pos_coords, [1] * len(seed_prompt.coords)))
-
-    upwards_iter = range(middle_idx + 1, slices_to_infer.max() + 1)
-
-    for slice_idx in upwards_iter:
-        slice_seg, slice_low_res_logits = inferer.predict(pts_prompt, transform=False)
-        low_res_logits[slice_idx] = slice_low_res_logits[slice_idx]
-        segmentation[slice_idx] = slice_seg[slice_idx]
-
-        if np.all(segmentation[slice_idx] == 0):  # Terminate if no fg generated
-            logger.debug("No prediction despite box prompt given. Stopping propagation.")
-            break
-
-        # Update prompt
-        pos_clicks_slice = get_fg_points_from_slice(slice_seg[slice_idx], n_clicks)
-
-        # Put coords in 3d context
-        z_col = np.full(
-            (n_clicks, 1), slice_idx + 1
-        )  # create z column to add. Note slice_idx+1: these are the prompts for the next slice up
-        pos_coords = np.hstack([z_col, pos_clicks_slice])
-        pos_coords = pos_coords[:, [2, 1, 0]]  # Change from zyx to xyz
-        upward_coords.append(pos_coords)
-        pts_prompt = PromptStep(point_prompts=(pos_coords, [1] * n_clicks))
-
-    coords = np.concatenate(downwards_coords[::-1] + seed_coords + upward_coords, axis=0)
-    is_in_slices_inferred = np.isin(coords[:, 0], slices_to_infer)
-    coords = coords[
-        is_in_slices_inferred
-    ]  # Removes extraneous prompts on bottom_slice-1 and top_slice+1 that weren't used.
-    prompt = PromptStep(point_prompts=(coords, [1] * len(coords)))
-
-    return segmentation, low_res_logits, prompt
 
 
 def get_seed_box(gt):
@@ -573,8 +490,8 @@ def propagate_box(inferer: Inferer, seed_box: PromptStep, slices_to_infer: list[
 
         # If there is no next slice to infer, we can stop here.
         if cnt != len(slices_todo) - 1:
-            segmentation = inferer.predict(current_prompt)[0]
-            segmentation, _ = inferer.transform_to_model_coords(segmentation, is_seg=True)
+            segmentation = inferer.predict(current_prompt)[-1]
+            # segmentation, _ = inferer.transform_to_model_coords(segmentation, is_seg=True)
             if np.all(segmentation[slice_idx] == 0):  # Terminate if no fg generated
                 logger.debug("No prediction despite prompt given. Stopping propagation.")
                 break

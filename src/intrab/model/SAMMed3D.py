@@ -209,7 +209,7 @@ class SAMMed3DInferer(Inferer):
             batch_labels = batch_labels[:, :1]
 
         return batch_points, batch_labels
-    
+
     def create_or_format_low_res_logits(self, prev_low_res_logits: None | np.ndarray):
         """
         SAMMed3D Expects a logit mask (many other models just take None). If a previous mask isn't supplied, a mask of 0s of the right shape is to be created.
@@ -233,7 +233,7 @@ class SAMMed3DInferer(Inferer):
         self,
         prompt: PromptStep,
         crop_pad_params: tuple[tuple, tuple] | None = None,
-        prev_seg: np.ndarray = None, # Argument not used - present to align with prediction for 2d models
+        prev_seg: np.ndarray = None,  # Argument not used - present to align with prediction for 2d models
     ) -> tuple[nib.Nifti1Image, np.ndarray]:  # If iterating, use previous patching, previous embeddings
         cheat = False
         gt = None
@@ -250,25 +250,24 @@ class SAMMed3DInferer(Inferer):
             crop_pad_params = get_crop_pad_params_from_gt_or_prompt(self.img, prompt, cheat, gt)
 
         cropping_params, padding_params = crop_pad_params
-        
+
         patch_list = self.preprocess_img(self.img, cropping_params, padding_params)
 
         prev_low_res_logits = prompt.masks
         coords, labels = self.preprocess_prompt(prompt, cropping_params, padding_params)
-        if crop_pad_params is not None or cheat:  # Check that the prompt lies within the patch - only necessary if using a previously generated patch
+        if (
+            crop_pad_params is not None or cheat
+        ):  # Check that the prompt lies within the patch - only necessary if using a previously generated patch
             if torch.any(torch.logical_or(coords < 0, coords >= 128)):
                 raise RuntimeError("Prompt coordinates do not lie within stored patch!")
-
 
         segmentation = np.zeros_like(self.img, dtype=np.uint8)
         for patch_embedding, pos3D in patch_list:
             logit_mask = self.create_or_format_low_res_logits(prev_low_res_logits)
-            
+
             low_res_logits = self.segment(patch_embedding, logit_mask, coords, labels)
             logits = (
-                F.interpolate(
-                    low_res_logits, size=(128,128,128), mode="trilinear", align_corners=False
-                )
+                F.interpolate(low_res_logits, size=(128, 128, 128), mode="trilinear", align_corners=False)
                 .detach()
                 .cpu()
                 .squeeze()
@@ -284,6 +283,7 @@ class SAMMed3DInferer(Inferer):
             )
 
         # Turn into Nifti object in original space
-        segmentation = self.inv_trans(segmentation)
+        segmentation_model_arr = segmentation
+        segmentation_orig_nib = self.inv_trans(segmentation)
 
-        return segmentation, low_res_logits.cpu().squeeze().numpy()
+        return segmentation_orig_nib, low_res_logits.cpu().squeeze().numpy(), segmentation_model_arr

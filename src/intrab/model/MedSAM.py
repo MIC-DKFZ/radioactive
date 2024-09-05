@@ -174,7 +174,7 @@ class MedSAMInferer(Inferer):
 
         return segmentation
 
-    def predict(self, prompt: PromptStep, prev_seg = None):
+    def predict(self, prompt: PromptStep, prev_seg=None):
         if not (isinstance(prompt, PromptStep)):
             raise TypeError(f"Prompts must be supplied as an instance of the Prompt class.")
         if prompt.has_points:
@@ -221,6 +221,7 @@ class MedSAMInferer(Inferer):
             segmentation = self.merge_seg_with_prev_seg(segmentation, prev_seg, slices_to_infer)
 
         # Turn into Nifti object in original space
-        segmentation = self.inv_trans(segmentation)
+        segmentation_model_arr = segmentation
+        segmentation_orig_nib = self.inv_trans(segmentation)
 
-        return segmentation, low_res_logits
+        return segmentation_orig_nib, low_res_logits.cpu().squeeze().numpy(), segmentation_model_arr
