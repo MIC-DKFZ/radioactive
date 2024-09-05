@@ -342,11 +342,12 @@ def get_fg_points_from_slice(slice: np.ndarray, n_clicks: int, slice_index: int,
     slice_fg = np.array(slice_fg).T
 
     n_fg_pixels = len(slice_fg)
-    point_indices = np.random.choice(n_fg_pixels, size=min(n_clicks, n_fg_pixels), replace=False)
+    actual_clicks = min(n_clicks, n_fg_pixels)
+    point_indices = np.random.choice(n_fg_pixels, size=actual_clicks, replace=False)
 
     pos_clicks_slice = slice_fg[point_indices]
 
-    z_col = np.full((n_clicks, 1), slice_index)
+    z_col = np.full((actual_clicks, 1), slice_index)
     pos_coords = np.hstack([z_col, pos_clicks_slice])
     pos_coords = pos_coords[:, [2, 1, 0]]  # zyx -> xyz
 
