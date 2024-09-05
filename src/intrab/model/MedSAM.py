@@ -174,7 +174,7 @@ class MedSAMInferer(Inferer):
 
         return segmentation
 
-    def predict(self, prompt: PromptStep, prev_seg=None):
+    def predict(self, prompt: PromptStep, prev_seg=None) -> tuple[nib.Nifti1Image, np.ndarray, np.ndarray]:
         if not (isinstance(prompt, PromptStep)):
             raise TypeError(f"Prompts must be supplied as an instance of the Prompt class.")
         if prompt.has_points:

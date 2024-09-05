@@ -234,7 +234,7 @@ class SAMMed3DInferer(Inferer):
         prompt: PromptStep,
         crop_pad_params: tuple[tuple, tuple] | None = None,
         prev_seg: np.ndarray = None,  # Argument not used - present to align with prediction for 2d models
-    ) -> tuple[nib.Nifti1Image, np.ndarray]:  # If iterating, use previous patching, previous embeddings
+    ) -> tuple[nib.Nifti1Image, np.ndarray, np.ndarray]:  # If iterating, use previous patching, previous embeddings
         cheat = False
         gt = None
         if not isinstance(prompt, PromptStep):

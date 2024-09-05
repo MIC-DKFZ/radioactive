@@ -239,7 +239,9 @@ class SAMInferer(Inferer):
 
         return segmentation
 
-    def predict(self, prompt: PromptStep, return_logits: bool = False, prev_seg=None):
+    def predict(
+        self, prompt: PromptStep, return_logits: bool = False, prev_seg=None
+    ) -> tuple[nib.Nifti1Image, np.ndarray, np.ndarray]:
         if not isinstance(prompt, PromptStep):
             raise TypeError(f"Prompts must be supplied as an instance of the Prompt class.")
         if prompt.has_boxes and prompt.has_points:
@@ -300,7 +302,7 @@ class SAMInferer(Inferer):
 
         # Reorient to original orientation and return with metadata
         # Turn into Nifti object in original space
-        segmentation_model = segmentation
+        segmentation_model_arr = segmentation
         segmentation_orig = self.inv_trans(segmentation)
 
-        return segmentation_orig, segmentation_model, low_res_logits
+        return segmentation_orig, low_res_logits, segmentation_model_arr
