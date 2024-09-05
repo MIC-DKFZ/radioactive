@@ -21,7 +21,7 @@ class Inferer(ABC):
         self.loaded_image: Path | None = None
         # Just used for 2D models and not for 3D models
         self.image_embeddings_dict = {}
-        self.inv_trans: callable[[np.ndarray], np.ndarray] = None
+        self.inv_trans: callable[[np.ndarray], nib.Nifti1Image] = None
 
     @abstractmethod
     def load_model(self, checkpoint_path, device):
@@ -44,7 +44,9 @@ class Inferer(ABC):
         pass
 
     @abstractmethod
-    def predict(self, prompts: PromptStep, prev_seg: nib.Nifti1Image):
+    def predict(
+        self, prompts: PromptStep, prev_seg: nib.Nifti1Image
+    ) -> tuple[nib.Nifti1Image, np.ndarray, np.ndarray]:
         """Obtain logits"""
         pass
 
@@ -64,11 +66,13 @@ class Inferer(ABC):
     def get_transformed_groundtruth(self, nifti: Path | nib.Nifti1Image) -> np.ndarray:
         """Transforms the nifti or the groundtruth to the model's coordinate system."""
         return self.transform_to_model_coords(nifti, is_seg=True)[0]
-    
-    def merge_seg_with_prev_seg(self, new_seg: np.ndarray, prev_seg: str | Path | nib.Nifti1Image, slices_inferred: np.ndarray):
+
+    def merge_seg_with_prev_seg(
+        self, new_seg: np.ndarray, prev_seg: str | Path | nib.Nifti1Image, slices_inferred: np.ndarray
+    ):
         # Find slices which were inferred on in old seg, but not in new_seg
         prev_seg, _ = self.transform_to_model_coords(prev_seg, None)
-        old_seg_inferred_slices = np.where(np.any(prev_seg, axis=(1, 2)))[0] 
+        old_seg_inferred_slices = np.where(np.any(prev_seg, axis=(1, 2)))[0]
         missing_slices = np.setdiff1d(old_seg_inferred_slices, slices_inferred)
 
         # Merge segmentations

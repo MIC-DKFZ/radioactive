@@ -227,7 +227,7 @@ def iterate_2d(
             improve_slices = slices_inferred  # improve all slices
 
         # Generate new segmentation and integrate into old one
-        new_seg, low_res_logits = inferer.predict(new_prompt, low_res_logits, transform=False)
+        new_seg, low_res_logits, _ = inferer.predict(new_prompt, low_res_logits, transform=False)
         prompts.append(new_prompt)
         segmentation[improve_slices] = new_seg[improve_slices]
         segmentations.append(segmentation.copy())
@@ -278,7 +278,7 @@ def iterate_3d(
     # Obtain initial segmentation
 
     prompt = get_pos_clicks3D(gt_unprocessed, n, seed=seed)
-    segmentation, logits = inferer.predict(prompt, store_patching=True, transform=False)
+    segmentation, logits, _ = inferer.predict(prompt, store_patching=True, transform=False)
 
     gt_to_compare = gt_unprocessed
     # For SAMMed3D, must sample for new prompts only in a 128x128x128 crop around the initial prompt.
@@ -312,7 +312,7 @@ def iterate_3d(
         prompt = Points(coords=sampled_coords, labels=sampled_labels)
         prompts.append(prompt)
 
-        segmentation, logits = inferer.predict(
+        segmentation, logits, _ = inferer.predict(
             prompt, use_stored_patching=True, prev_low_res_logits=logits, transform=False
         )
 

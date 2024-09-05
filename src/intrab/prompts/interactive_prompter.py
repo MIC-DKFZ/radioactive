@@ -6,8 +6,18 @@ from click import prompt
 from intrab.model.SAMMed3D import SAMMed3DInferer
 from intrab.model.inferer import Inferer
 from intrab.prompts.prompt import PromptStep, merge_prompt_steps
-from intrab.prompts.prompt_3d import get_pos_clicks3D, isolate_patch_around_point, obtain_misclassified_point_prompt_2d, obtain_misclassified_point_prompt_3d
-from intrab.prompts.prompt_utils import get_pos_clicks2D_row_major, get_fg_points_from_cc_centers, interpolate_points, get_middle_seed_point
+from intrab.prompts.prompt_3d import (
+    get_pos_clicks3D,
+    isolate_patch_around_point,
+    obtain_misclassified_point_prompt_2d,
+    obtain_misclassified_point_prompt_3d,
+)
+from intrab.prompts.prompt_utils import (
+    get_pos_clicks2D_row_major,
+    get_fg_points_from_cc_centers,
+    interpolate_points,
+    get_middle_seed_point,
+)
 from intrab.prompts.prompter import Prompter
 from intrab.utils.image import get_crop_pad_params_from_gt_or_prompt
 from intrab.utils.interactivity import gen_contour_fp_scribble
@@ -52,7 +62,7 @@ class InteractivePrompter(Prompter):
             num_it_met = num_iter >= self.max_iter
 
         return dof_met or perf_met or num_it_met
-    
+
     @abstractmethod
     def clear_states(self) -> None:
         """Clear any states saved in generating the image"""
@@ -81,7 +91,7 @@ class InteractivePrompter(Prompter):
 
         all_prompt_results: list[PromptResult] = []
         prompt_step: PromptStep = self.get_initial_prompt_step()
-        pred, logits = self.inferer.predict(prompt_step)
+        pred, logits, _ = self.inferer.predict(prompt_step)
 
         perf = self.get_performance(pred)
         all_prompt_results.append(
@@ -96,7 +106,7 @@ class InteractivePrompter(Prompter):
             if self.always_pass_prev_prompts:
                 prompt_step = merge_prompt_steps([prompt_step, all_prompt_results[-1].prompt_step])
 
-            pred, logits = self.inferer.predict(prompt_step, prev_seg = pred)
+            pred, logits, _ = self.inferer.predict(prompt_step, prev_seg=pred)
             dof += prompt_step.get_dof()
             perf = self.get_performance(pred)
             all_prompt_results.append(
@@ -118,7 +128,7 @@ class threeDInteractivePrompterSAMMed3D(InteractivePrompter):
         dof_bound: int | None = 60,
         perf_bound: float | None = 0.85,
         max_iter: int | None = 10,
-        isolate_around_initial_point_size: int = None
+        isolate_around_initial_point_size: int = None,
     ):
         super().__init__(inferer, seed, dof_bound, perf_bound, max_iter)
         self.n_points = n_points
@@ -127,22 +137,30 @@ class threeDInteractivePrompterSAMMed3D(InteractivePrompter):
 
     def get_initial_prompt_step(self) -> PromptStep:
         return get_pos_clicks3D(self.groundtruth_model, n_clicks=self.n_points, seed=self.seed)
-    
+
     def process_gt_to_compare(self, gt, initial_prompt_step, isolate_around_initial_point_size):
         return isolate_patch_around_point(gt, initial_prompt_step, isolate_around_initial_point_size)
 
-    def get_next_prompt_step(self, pred: np.ndarray, low_res_logits: np.ndarray, all_prompts: list[PromptStep]) -> PromptStep:
-        pred, _ = self.inferer.transform_to_model_coords(pred, is_seg = True) # Transform to the coordinate system in which inference will occur
-        
+    def get_next_prompt_step(
+        self, pred: np.ndarray, low_res_logits: np.ndarray, all_prompts: list[PromptStep]
+    ) -> PromptStep:
+        pred, _ = self.inferer.transform_to_model_coords(
+            pred, is_seg=True
+        )  # Transform to the coordinate system in which inference will occur
+
         if self.gt_to_compare is None:
-            self.gt_to_compare = self.process_gt_to_compare(self.groundtruth_model, all_prompts[0], self.isolate_around_initial_point_size)
+            self.gt_to_compare = self.process_gt_to_compare(
+                self.groundtruth_model, all_prompts[0], self.isolate_around_initial_point_size
+            )
 
         new_prompt = obtain_misclassified_point_prompt_3d(pred, self.gt_to_compare, self.seed)
         new_prompt.set_masks(low_res_logits)
-        
+
         return new_prompt
-    
-    def predict_image(self, image_path: Path) -> list[PromptResult]: # Same as in InteractivePrompter, except need to keep track of crop_pad_params.
+
+    def predict_image(
+        self, image_path: Path
+    ) -> list[PromptResult]:  # Same as in InteractivePrompter, except need to keep track of crop_pad_params.
         """Predicts the image for multiple steps until the stopping criteria is met."""
 
         self.inferer.set_image(image_path)
@@ -153,7 +171,7 @@ class threeDInteractivePrompterSAMMed3D(InteractivePrompter):
         all_prompt_results: list[PromptResult] = []
         prompt_step: PromptStep = self.get_initial_prompt_step()
         crop_pad_params = get_crop_pad_params_from_gt_or_prompt(self.inferer.img, prompt_step)
-        pred, logits = self.inferer.predict(prompt_step, crop_pad_params)
+        pred, logits, _ = self.inferer.predict(prompt_step, crop_pad_params)
 
         perf = self.get_performance(pred)
         all_prompt_results.append(
@@ -168,7 +186,7 @@ class threeDInteractivePrompterSAMMed3D(InteractivePrompter):
             if self.always_pass_prev_prompts:
                 prompt_step = merge_prompt_steps([prompt_step, all_prompt_results[-1].prompt_step])
 
-            pred, logits = self.inferer.predict(prompt_step, crop_pad_params)
+            pred, logits, _ = self.inferer.predict(prompt_step, crop_pad_params)
             dof += prompt_step.get_dof()
             perf = self.get_performance(pred)
             all_prompt_results.append(
@@ -183,7 +201,8 @@ class threeDInteractivePrompterSAMMed3D(InteractivePrompter):
     def clear_states(self):
         self.isolated_gt = None
         self.inferer.clear_embeddings()
-        return 
+        return
+
 
 class twoDNPointsUnrealisticInteractivePrompter(InteractivePrompter):
     def __init__(
@@ -193,35 +212,39 @@ class twoDNPointsUnrealisticInteractivePrompter(InteractivePrompter):
         dof_bound: int | None = 60,
         perf_bound: float | None = 0.85,
         max_iter: int | None = 10,
-        n_init_points_per_slice: int = 5):
-    
+        n_init_points_per_slice: int = 5,
+    ):
+
         super().__init__(inferer, seed, dof_bound, perf_bound, max_iter)
         self.n_init_points_per_slice = n_init_points_per_slice
 
     def get_initial_prompt_step(self) -> PromptStep:
         return super().get_initial_prompt_step()
-    
+
     def get_initial_prompt_step(self) -> PromptStep:
-        initial_prompt_step = get_pos_clicks2D_row_major(self.groundtruth_model, self.n_init_points_per_slice, self.seed)
+        initial_prompt_step = get_pos_clicks2D_row_major(
+            self.groundtruth_model, self.n_init_points_per_slice, self.seed
+        )
 
         return initial_prompt_step
-    
-    def get_next_prompt_step(self, pred: np.ndarray, low_res_logits: np.ndarray, all_prompts: list[PromptStep]) -> PromptStep:
-        pred, _ = self.inferer.transform_to_model_coords(pred, is_seg = True)
+
+    def get_next_prompt_step(
+        self, pred: np.ndarray, low_res_logits: np.ndarray, all_prompts: list[PromptStep]
+    ) -> PromptStep:
+        pred, _ = self.inferer.transform_to_model_coords(pred, is_seg=True)
         slices_inferred = all_prompts[0].get_slices_to_infer()
         all_slice_prompt_steps = []
 
         for slice_idx in slices_inferred:
             slice_seg = pred[slice_idx]
             slice_gt = self.groundtruth_model[slice_idx]
-            slice_prompt_step = obtain_misclassified_point_prompt_2d(slice_seg, slice_gt,  slice_idx, self.seed)
+            slice_prompt_step = obtain_misclassified_point_prompt_2d(slice_seg, slice_gt, slice_idx, self.seed)
             all_slice_prompt_steps.append(slice_prompt_step)
-        
-        new_prompt_step = merge_prompt_steps(all_slice_prompt_steps) 
+
+        new_prompt_step = merge_prompt_steps(all_slice_prompt_steps)
         new_prompt_step.set_masks(low_res_logits)
 
         return new_prompt_step
-
 
 
 # ToDo: Check prompts generated are of decent 'quality'
@@ -243,7 +266,7 @@ class twoDInteractivePrompter(InteractivePrompter):
         self.disk_size_range = disk_size_range
         self.scribble_length = scribble_length
 
-        self.bottom_seed_prompt = None # Store these to avoid repeated computation
+        self.bottom_seed_prompt = None  # Store these to avoid repeated computation
         self.top_seed_prompt = None
 
     @staticmethod
@@ -272,9 +295,7 @@ class twoDInteractivePrompter(InteractivePrompter):
         slices_inferred: set,
     ) -> PromptStep:
 
-        bottom_seed_prompt, _, top_seed_prompt = get_fg_points_from_cc_centers(
-                self.groundtruth_model, 3
-            )
+        bottom_seed_prompt, _, top_seed_prompt = get_fg_points_from_cc_centers(self.groundtruth_model, 3)
 
         # Try to find fn coord in the middle 40% axially of the volume
         new_middle_seed_prompt = get_middle_seed_point(fn_mask, slices_inferred)
@@ -354,7 +375,9 @@ class twoDInteractivePrompter(InteractivePrompter):
     def get_next_prompt_step(
         self, pred: nib.Nifti1Image, low_res_logits: np.ndarray, all_prompts: list[PromptStep]
     ) -> PromptStep:
-        pred, _ = self.inferer.transform_to_model_coords(pred, is_seg = True) # Transform to the coordinate system in which inference will occur
+        pred, _ = self.inferer.transform_to_model_coords(
+            pred, is_seg=True
+        )  # Transform to the coordinate system in which inference will occur
         fn_mask = (pred == 0) & (self.groundtruth_model == 1)
         fp_mask = (pred == 1) & (self.groundtruth_model == 0)
 
@@ -373,7 +396,7 @@ class twoDInteractivePrompter(InteractivePrompter):
         prompt_step.set_masks(low_res_logits)
 
         return prompt_step
-    
+
     def clear_states(self) -> None:
         self.top_seed_prompt = None
         self.bottom_seed_prompt = None
@@ -393,11 +416,15 @@ class NPointsPer2DSliceInteractivePrompter(twoDInteractivePrompter):
         self.n_init_points_per_slice = n_init_points_per_slice
 
     def get_initial_prompt_step(self) -> PromptStep:
-        initial_prompt_step = get_pos_clicks2D_row_major(self.groundtruth_model, self.n_init_points_per_slice, self.seed)
+        initial_prompt_step = get_pos_clicks2D_row_major(
+            self.groundtruth_model, self.n_init_points_per_slice, self.seed
+        )
 
         return initial_prompt_step
 
 
-interactive_prompt_styles = Literal["NPointsPer2DSliceInteractivePrompter",
-                                    "threeDInteractivePrompterSAMMed3D",
-                                    "twoDNPointsUnrealisticInteractivePrompter"]
+interactive_prompt_styles = Literal[
+    "NPointsPer2DSliceInteractivePrompter",
+    "threeDInteractivePrompterSAMMed3D",
+    "twoDNPointsUnrealisticInteractivePrompter",
+]

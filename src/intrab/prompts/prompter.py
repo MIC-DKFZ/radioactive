@@ -59,6 +59,10 @@ class Prompter:
         dice = 2 * tps / (2 * tps + fps + fns)
         return float(dice)
 
+    def get_slices_to_infer(self) -> list[int]:
+        """Get the slices to infer from the groundtruth."""
+        return np.where(np.any(self.groundtruth_model, axis=(1, 2)))[0]
+
     def set_groundtruth(self, groundtruth: nib.Nifti1Image) -> None:
         """
         Sets the groundtruth that we want to predict.
@@ -86,7 +90,7 @@ class Prompter:
         prompt: PromptStep = self.get_prompt()
         pred: nib.Nifti1Image
         logits: np.ndarray
-        pred, logits = self.inferer.predict(prompt)
+        pred, logits, _ = self.inferer.predict(prompt)
         perf = self.get_performance(pred.get_fdata())
 
         return PromptResult(predicted_image=pred, logits=logits, prompt_step=prompt, perf=perf, n_step=0, dof=0)
@@ -117,10 +121,14 @@ class PointInterpolationPrompter(Prompter):
 
     def get_prompt(self) -> PromptStep:
         """
-        Generate segmentation given prompt-style and model behavior.
-        :return: str (Path to the predicted segmentation)
+        Simulates the user clicking in the connected component's center of mass `n_slice_point_interpolation` times.
+        Slices are selected equidistantly between min and max slices with foreground (if not contiguous defaults to closest neighbors).
+        Then the points are interpolated between the slices centers and prompted to the model.
+
+        :return: The PromptStep from the interpolation of the points.
         """
-        return point_interpolation(gt=self.groundtruth_model, n_slices=self.n_slice_point_interpolation)
+        max_possible_clicks = min(self.n_slice_point_interpolation, len(self.get_slices_to_infer()))
+        return point_interpolation(gt=self.groundtruth_model, n_slices=max_possible_clicks)
 
 
 class PointPropagationPrompter(Prompter):
@@ -184,7 +192,8 @@ class BoxInterpolationPrompter(Prompter):
         self.n_slice_box_interpolation = n_slice_box_interpolation
 
     def get_prompt(self) -> PromptStep:
-        box_seed_prompt: PromptStep = get_seed_boxes(self.groundtruth_model, self.n_slice_box_interpolation)
+        max_possible_clicks = min(self.n_slice_point_interpolation, len(self.get_slices_to_infer()))
+        box_seed_prompt: PromptStep = get_seed_boxes(self.groundtruth_model, max_possible_clicks)
         return box_interpolation(box_seed_prompt)
 
 
