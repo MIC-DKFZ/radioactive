@@ -1,5 +1,6 @@
 from pathlib import Path
 from pathlib import Path
+from loguru import logger
 import torch
 import numpy as np
 import torch.nn.functional as F
@@ -241,6 +242,9 @@ class SAMMed3DInferer(Inferer):
             raise TypeError(f"Prompts must be supplied as an instance of the Prompt class.")
         if prompt.has_boxes:
             raise ValueError(f"Box prompts have been supplied, but are not supported by SAMMed3D.")
+
+        if len(prompt.coords) > 1:
+            logger.warning('SAMMed3D Can break when multiple points are passed, especially if the points are more than 128 apart in any dimension')
 
         prompt.coords = prompt.coords[
             :, ::-1

@@ -7,7 +7,6 @@ import torchio as tio
 from intrab.prompts.prompt import PromptStep
 
 def get_crop_pad_params_from_gt_or_prompt(img3D: np.ndarray, prompt: PromptStep | None = None, cheat: bool = False, gt: np.ndarray | None = None):
-    prompt.coords = prompt.coords[:,[2,1,0]] # Prompt coords are in xyz. Need to get them to zyx to align with the image. One day all this should be removed.
     img3D = torch.from_numpy(img3D)
 
     subject = tio.Subject(image=tio.ScalarImage(tensor=img3D.unsqueeze(0)))
