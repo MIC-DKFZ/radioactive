@@ -6,7 +6,7 @@ from intrab.model.inferer import Inferer
 from intrab.prompts.prompt_hparams import PromptConfig
 from intrab.model.model_utils import inferer_registry, checkpoint_registry, model_registry
 
-from intrab.experiments import run_experiments
+from intrab.experiments import run_experiments, run_experiments_lesions
 from intrab.utils.io import get_labels_from_dataset_json, get_dataset_path_by_id, get_img_gts, read_yaml_config
 from intrab.utils.paths import get_results_path
 from argparse import ArgumentParser
@@ -39,12 +39,12 @@ if __name__ == "__main__":
         twoD_n_slice_box_interpolation=5,
         twoD_n_seed_points_point_propagation=5,
         twoD_n_points_propagation=5,
-        interactive_dof_bound = 60,
-        interactive_perf_bound = 0.9,
-        interactive_max_iter = 10,
-        twoD_interactive_n_points_per_slice = 5,
-        threeD_interactive_n_init_points = 5,
-        threeD_patch_size = (128,128,128) # This argument is only for SAMMed3D - should be different for segvol
+        interactive_dof_bound=60,
+        interactive_perf_bound=0.9,
+        interactive_max_iter=10,
+        twoD_interactive_n_points_per_slice=5,
+        threeD_interactive_n_init_points=5,
+        threeD_patch_size=(128, 128, 128),  # This argument is only for SAMMed3D - should be different for segvol
     )
 
     # Potentially move the seeds inside to not create new models each seed, but save that time.
@@ -62,13 +62,17 @@ if __name__ == "__main__":
             logger.info(f"Found {len(imgs_gts)} image-groundtruth pairs")
             for model_name in config["models"]:
                 # Get dataset and the corresponding img, groundtruth Pairs
-                results_path = Path(get_results_path() / (model_name + "_" + dataset_name))
+                results_path = Path(get_results_path() / dataset_name / model_name)
                 # Load the model
                 checkpoint_path: Path = checkpoint_registry[model_name]
                 logger.info(f"Instantiating '{model_name}' with checkpoint '{checkpoint_path}'")
                 inferer: Inferer = inferer_registry[model_name](checkpoint_path, device)
-                
-                run_experiments(
+
+                if dataset["type"] == "organ":
+                    runner = run_experiments
+                else:
+                    runner = run_experiments_lesions
+                runner(
                     inferer,
                     imgs_gts,
                     results_path,
