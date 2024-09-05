@@ -9,7 +9,6 @@ from scipy.interpolate import interp1d
 
 from intrab.model.inferer import Inferer
 from intrab.prompts.prompt import Points, PromptStep
-from intrab.prompts.prompt_hparams import PromptConfig
 
 # def get_neg_clicks_3D(gt, n_clicks, border_distance = 10): # Warning: dilation function is VERY slow! ~ 13 seconds on my machine
 #     struct_element = ball(border_distance)
