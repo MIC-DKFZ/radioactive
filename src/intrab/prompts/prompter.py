@@ -192,7 +192,7 @@ class BoxInterpolationPrompter(Prompter):
         self.n_slice_box_interpolation = n_slice_box_interpolation
 
     def get_prompt(self) -> PromptStep:
-        max_possible_clicks = min(self.n_slice_point_interpolation, len(self.get_slices_to_infer()))
+        max_possible_clicks = min(self.n_slice_box_interpolation, len(self.get_slices_to_infer()))
         box_seed_prompt: PromptStep = get_seed_boxes(self.groundtruth_model, max_possible_clicks)
         return box_interpolation(box_seed_prompt)
 
