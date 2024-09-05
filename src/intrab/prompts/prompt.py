@@ -140,44 +140,59 @@ class PromptStep:
         return slices_to_infer
 
 
-def _merge_two_promptsteps(prompt1: PromptStep, prompt2: PromptStep) -> PromptStep:
-    # Need to have empty values as {}, not None. Need to discuss with Tilo since he preferred None
-    if prompt1.boxes is None: prompt1.boxes = {}
-    if prompt2.boxes is None: prompt2.boxes = {}
-    if prompt1.masks is None: prompt1.masks = {}
-    if prompt2.masks is None: prompt2.masks = {}
+def _merge_dict_prompts(prompt_dict_1: dict[int, np.ndarray] | None, prompt_dict_2: dict[int, np.ndarray] | None) -> dict[int, np.ndarray] | None:
+    """
+    Merges prompts given as a dictionary, ensuring that they don't have any conflicts (to merge, any slice indices they share must have the same prompt)
+    """
+    if prompt_dict_1 is None:
+        return prompt_dict_2
+    if prompt_dict_2 is None:
+        return prompt_dict_1
+    
+    merged_dict = prompt_dict_1.copy()
+    for slice_idx, prompt in prompt_dict_1.items():
+        if slice_idx in prompt_dict_2.keys() and not np.array_equal(prompt_dict_1[slice_idx], prompt_dict_2[slice_idx]):
+            raise ValueError("Merging would cause having two distinct box/mask prompts on one slice, which is not permitted")
+    merged_dict.update(prompt_dict_2)
+    
+    return merged_dict
 
-    # Merge boxes
-    boxes = prompt1.boxes
-    for slice_idx, bbox in prompt1.boxes.items():  # Check no slice gets two distinct boxes
-        if slice_idx in prompt2.boxes.keys() and not np.array_equal(prompt1.boxes[slice_idx], prompt2.boxes[slice_idx]):
-            raise ValueError("Merging would cause having two distinct boxes on one slice, which is not permitted")
-        boxes.update(prompt2.boxes)
 
-    # Merge points
-    # Ensure both point arrays are 2d to permit concatenation
-    # This will break if the coords are none.
-    coords1 = np.atleast_2d(prompt1.coords)
-    coords2 = np.atleast_2d(prompt2.coords)
+def _merge_point_prompts(coords1: np.ndarray | None, labels1: np.ndarray | None, coords2: np.ndarray | None, labels2: np.ndarray | None) -> tuple[np.ndarray | None, np.ndarray | None]:
+    """
+    Merges two point prompts, handling if either/both is/are None.
+    """
+    if coords1 is None:
+        return coords2, labels2
+    if coords2 is None:
+        return coords1, labels1
+    
+    coords1 = np.atleast_2d(coords1)
+    coords2 = np.atleast_2d(coords2)
 
     coords = np.concatenate([coords1, coords2], axis=0)
-    labels = np.concatenate([prompt1.labels, prompt2.labels])
+    labels = np.concatenate([labels1, labels2])
 
-    
-    # Merge masks 
-    masks = prompt1.masks
-    for slice_idx, mask in prompt1.masks.items():  # Check no slice gets two distinct boxes
-        if slice_idx in prompt2.masks.keys() and not np.array_equal(prompt1.masks[slice_idx], prompt2.masks[slice_idx]):
-            raise ValueError("Merging would cause having two distinct masks on one slice, which is not permitted")
-        masks.update(prompt2.masks)
+    return coords, labels
+
+
+def _merge_two_promptsteps(prompt1: PromptStep, prompt2: PromptStep) -> PromptStep:
+    """
+    Merges two promptsteps. Requires that if prompt 1 and prompt 2 have box prompts for the same slice, then the box prompts must be the same
+    """
+
+    coords, labels = _merge_point_prompts(prompt1.coords, prompt1.labels, prompt2.coords, prompt2.labels)   
+    boxes = _merge_dict_prompts(prompt1.boxes, prompt2.boxes)
+    masks = _merge_dict_prompts(prompt1.masks, prompt2.masks)
 
     merged_prompt = PromptStep(point_prompts=(coords, labels), box_prompts=boxes, mask_prompts=masks)
 
     return merged_prompt
 
+
 def merge_prompt_steps(prompt_steps: list[PromptStep]) -> PromptStep:
     """
-    Merge a list of prompt steps into one singple prompt step
+    Merge a list of prompt steps into one single prompt step
     """
     assert isinstance(prompt_steps, list), 'prompt_steps argument must be a list'
     assert len(prompt_steps) > 0, 'At least one prompt step must be passed'

@@ -39,11 +39,6 @@ def get_pos_clicks3D(gt, n_clicks, seed=None):
         )
 
     n_clicks = min(n_fg_voxels, n_clicks)
-    # if n_fg_voxels < n_clicks:
-    #     n_clicks = n_fg_voxels
-    # raise RuntimeError(
-    #     f"More foreground points were requested than the number of foreground voxels in the volume"
-    # )
 
     point_indices = np.random.choice(n_fg_voxels, size=n_clicks, replace=False)
     pos_coords = volume_fg[point_indices]
