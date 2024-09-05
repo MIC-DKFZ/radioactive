@@ -327,13 +327,14 @@ def point_interpolation(gt, n_slices, interpolation="linear"):
 #   Or a random point from a strongly eroded version of the groundtruth.
 
 
-def get_fg_points_from_slice(slice, n_clicks, seed=None):
+def get_fg_points_from_slice(slice: np.ndarray, n_clicks: int, slice_index: int, seed=None):
     """
     Gets random forground points from a slice.
     If n_clicks > n_fg_pixels, will return all n_fg_pixels -- May be lower than n_clicks.
 
     :param slice: A 2D binary mask.
     :param n_clicks: (int) The number of clicks to generate.
+    :return: (np.ndarray n x 3) The coordinates of the foreground points in (x y z) format.
     """
     if seed:
         np.random.seed(seed)
@@ -344,7 +345,12 @@ def get_fg_points_from_slice(slice, n_clicks, seed=None):
     point_indices = np.random.choice(n_fg_pixels, size=min(n_clicks, n_fg_pixels), replace=False)
 
     pos_clicks_slice = slice_fg[point_indices]
-    return pos_clicks_slice
+
+    z_col = np.full((n_clicks, 1), slice_index)
+    pos_coords = np.hstack([z_col, pos_clicks_slice])
+    pos_coords = pos_coords[:, [2, 1, 0]]  # zyx -> xyz
+
+    return pos_coords
 
 
 def get_seed_boxes(gt, n) -> PromptStep:
@@ -393,12 +399,10 @@ def get_seed_point(gt, n_clicks, seed) -> PromptStep:
     # ToDo: Maybe pull not always the median slice.
     middle_idx = np.median(slices_to_infer).astype(int)
 
-    pos_clicks_slice = get_fg_points_from_slice(gt[middle_idx], n_clicks, seed)
+    pos_coords = get_fg_points_from_slice(gt[middle_idx], n_clicks, middle_idx, seed)
 
     ## Put coords in 3d context
-    z_col = np.full((n_clicks, 1), middle_idx)
-    pos_coords = np.hstack([z_col, pos_clicks_slice])
-    pos_coords = pos_coords[:, [2, 1, 0]]  # zyx -> xyz
+
     pts_prompt = PromptStep(point_prompts=(pos_coords, [1] * n_clicks))
 
     return pts_prompt
@@ -417,12 +421,14 @@ def propagate_point(
     all_coords = [seed_prompt.coords]
     all_labels = [seed_prompt.labels]
     current_prompt = seed_prompt
-    for slice in slices_todo:
-        _, _, current_seg = inferer.predict(current_prompt)
-        point_coords = get_fg_points_from_slice(current_seg, n_clicks=n_clicks, seed=seed)
-        coords_xyz = point_coords[:, ::-1]  # zyx to xyz
+    for slice_id in slices_todo:
+        current_seg_nib, _, _ = inferer.predict(current_prompt)
+        current_seg = inferer.transform_to_model_coords(current_seg_nib, is_seg=True)[0]
+        coords_xyz = get_fg_points_from_slice(
+            current_seg[slice_id], n_clicks=n_clicks, slice_index=slice_id, seed=seed
+        )
         coords_xyz[:, -1] = increment(coords_xyz[:, -1], upwards)  # Increment the z-coordinate
-        labels = np.ones_like(point_coords[:, 0])
+        labels = np.ones_like(coords_xyz[:, 0])
         all_coords.append(coords_xyz)
         all_labels.append(labels)
         current_prompt = PromptStep(Points(coords=coords_xyz, labels=labels))
