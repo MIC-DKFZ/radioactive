@@ -404,7 +404,7 @@ def get_seed_point(gt, n_clicks, seed) -> PromptStep:
 
     ## Put coords in 3d context
 
-    pts_prompt = PromptStep(point_prompts=(pos_coords, [1] * n_clicks))
+    pts_prompt = PromptStep(point_prompts=(pos_coords, [1] * pos_coords.shape[0]))
 
     return pts_prompt
 
