@@ -60,7 +60,7 @@ if __name__ == "__main__":
             logger.info(f"Found {len(imgs_gts)} image-groundtruth pairs")
             for model_name in config["models"]:
                 # Get dataset and the corresponding img, groundtruth Pairs
-                results_path = Path(get_results_path() / (model_name + "_" + dataset_name))
+                results_path = Path(get_results_path() / dataset_name / model_name)
                 # Load the model
                 checkpoint_path: Path = checkpoint_registry[model_name]
                 logger.info(f"Instantiating '{model_name}' with checkpoint '{checkpoint_path}'")

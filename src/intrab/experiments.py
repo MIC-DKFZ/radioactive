@@ -61,7 +61,7 @@ def run_experiments(
 
     # Loop through all image and label pairs
     target_names: set[str] = set()
-    for img_path, gt_path in tqdm(imgs_gts, desc="looping through files\n", leave=True):
+    for img_path, gt_path in tqdm(imgs_gts, desc="looping through files\n", leave=False):
         # Loop through each organ label except the background
         for target, target_label in tqdm(targets.items(), desc="Predicting targets...\n", leave=False):
             target_name: str = f"{target_label:03d}" + "__" + target
@@ -134,7 +134,6 @@ def run_experiments_lesions(
     targets: dict = {k.replace("/", "_"): v for k, v in label_dict.items() if k != "background"}
     assert len(targets) == 1, "Lesion experiments only support two classes -- background and lesions"
     prompters: list[Prompter] = get_wanted_supported_prompters(inferer, pro_conf, wanted_prompt_styles, seed)
-    verify_results_dir_exist(targets=targets, results_dir=results_dir, prompters=prompters)
 
     if debug:
         logger.warning("Debug mode activated. Only running on the first three images.")
@@ -145,23 +144,23 @@ def run_experiments_lesions(
         + "Right now this is assumed to be correct"
     )
 
-    gt_output_path = results_dir / "instance_gts"
-    pred_output_path = results_dir / "instance_pred"
+    gt_output_path = results_dir.parent / "instance_gts"  # GTs are the same for all Models.
+    pred_output_path = results_dir
+    gt_output_path.mkdir(exist_ok=True)
+    pred_output_path.mkdir(exist_ok=True)
     # Loop through all image and label pairs
     for img_path, gt_path in tqdm(imgs_gts, desc="looping through files\n", leave=True):
         # Loop through each organ label except the background
         filename = os.path.basename(gt_path)
-        filename_wo_ext = ".".split(filename)[0]  # Remove the extension
+        filename_wo_ext = filename.split(".")[0]  # Remove the extension
         instance_filename = f"{filename_wo_ext}__ins__.nii.gz"
         semantic_filename = f"{filename_wo_ext}__sem__.nii.gz"
         semantic_gt_path = gt_output_path / semantic_filename
         instance_gt_path = gt_output_path / instance_filename
 
         # ---------------- Get binary gt in original coordinate system --------------- #
-        base_name = os.path.basename(gt_path)
-        bin_gt_filepath = pred_output_path / base_name
         semantic_nib, instance_nib, lesion_ids = create_instance_gt(gt_path)
-        if semantic_gt_path.exists() and instance_gt_path.exists():
+        if (not semantic_gt_path.exists()) and (not instance_gt_path.exists()):
             semantic_nib.to_filename(semantic_gt_path)
             instance_nib.to_filename(instance_gt_path)
 
@@ -172,55 +171,70 @@ def run_experiments_lesions(
             leave=False,
             # disable=True,
         ):
-            base_name = pred_output_path / prompter.name
+            prompt_pred_path = pred_output_path / prompter.name
+            prompt_pred_path.mkdir(exist_ok=True)
+
+            # --------------- Skip prediction if the results already exist. -------------- #
+            if prompter.is_static:
+                semantic_pd_path = prompt_pred_path / semantic_filename
+                instance_pd_path = prompt_pred_path / instance_filename
+
+                if semantic_pd_path.exists() and instance_pd_path.exists() and not results_overwrite:
+                    logger.debug(f"Skipping {gt_path} as it has already been processed.")
+                    continue
+            else:
+                expected_sem_paths = [
+                    prompt_pred_path / f"iter_{i}" / semantic_filename for i in range(prompter.num_iterations)
+                ]
+                expected_ins_paths = [
+                    prompt_pred_path / f"iter_{i}" / instance_filename for i in range(prompter.num_iterations)
+                ]
+                if (
+                    all([path.exists() for path in expected_sem_paths])
+                    and all([path.exists() for path in expected_ins_paths])
+                    and not results_overwrite
+                ):
+                    logger.debug(f"Skipping {gt_path} as it has already been processed.")
+                    continue
+
             all_prompt_result: list[PromptResult] | list[list[PromptResult]] = []
             for lesion_id in lesion_ids:
                 binary_gt_orig_coords = binarize_gt(gt_path, lesion_id)
                 prompter.set_groundtruth(binary_gt_orig_coords)
 
-                # Handle non-interactive experiments
                 if prompter.is_static:
-                    semantic_pd_path = base_name / semantic_filename
-                    instance_pd_path = base_name / instance_filename
-
-                    if semantic_pd_path.exists() and instance_pd_path.exists() and not results_overwrite:
-                        logger.debug(f"Skipping {gt_path} as it has already been processed.")
-                        continue
                     prediction_result: PromptResult
                     prediction_result = prompter.predict_image(image_path=img_path)
                     # Save the prediction
                     all_prompt_result.append(prediction_result)
-                # Handle interactive experiments
-                else:
-                    expected_sem_paths = [
-                        base_name / f"iter_{i}" / semantic_filename for i in range(prompter.num_iterations)
-                    ]
-                    expected_ins_paths = [
-                        base_name / f"iter_{i}" / instance_filename for i in range(prompter.num_iterations)
-                    ]
-                    if (
-                        all([path.exists() for path in expected_sem_paths])
-                        and all([path.exists() for path in expected_ins_paths])
-                        and not results_overwrite
-                    ):
-                        logger.debug(f"Skipping {gt_path} as it has already been processed.")
-                        continue
-                    all_prompt_result.append(prompter.predict_image(image_path=img_path))
 
-            # -------------------- Save static or interactive results -------------------- #
+                    # Handle interactive experiments
+                else:
+                    all_prompt_result.append(prompter.predict_image(image_path=img_path))
+                # -------------------- Save static or interactive results -------------------- #
             if prompter.is_static:
-                save_static_lesion_results(all_prompt_result, base_name, semantic_filename, instance_filename)
+                save_static_lesion_results(
+                    all_prompt_result,
+                    prompt_pred_path,
+                    semantic_filename,
+                    instance_filename,
+                )
             else:
-                save_interactive_lesion_results(all_prompt_result, base_name, semantic_filename, instance_filename)
+                save_interactive_lesion_results(
+                    all_prompt_result,
+                    prompt_pred_path,
+                    semantic_filename,
+                    instance_filename,
+                )
 
     # We always run the semantic eval on the created folders directly.
     for prompter in prompters:
         if prompter.is_static:
             with logger.catch(level="WARNING"):
                 instance_evaluation(
-                    semantic_gt_path=gt_output_path,
-                    semantic_pd_path=pred_output_path / prompter.name,
-                    output_path=results_dir / prompter.name,
+                    instance_gt_path=gt_output_path,
+                    instance_pd_path=pred_output_path / prompter.name,
+                    output_path=pred_output_path / prompter.name,
                     classes_of_interest=(1,),
                     dice_threshold=1e-9,
                 )

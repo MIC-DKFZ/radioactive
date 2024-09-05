@@ -38,10 +38,12 @@ def get_pos_clicks3D(gt, n_clicks, seed=None):
             f"No foreground voxels found! Check that the supplied label is a binary segmentation mask with foreground coded as 1"
         )
 
-    if n_fg_voxels < n_clicks:
-        raise RuntimeError(
-            f"More foreground points were requested than the number of foreground voxels in the volume"
-        )
+    n_clicks = min(n_fg_voxels, n_clicks)
+    # if n_fg_voxels < n_clicks:
+    #     n_clicks = n_fg_voxels
+    # raise RuntimeError(
+    #     f"More foreground points were requested than the number of foreground voxels in the volume"
+    # )
 
     point_indices = np.random.choice(n_fg_voxels, size=n_clicks, replace=False)
     pos_coords = volume_fg[point_indices]

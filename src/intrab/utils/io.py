@@ -167,38 +167,66 @@ def binarize_gt(gt_path: Path, label_of_interest: int):
 
 def create_instance_gt(gt_path: Path) -> tuple[nib.Nifti1Image, nib.Nifti1Image, list[int]]:
     gt_nib: nib.Nifti1Image = nib.load(gt_path)
-    gt = gt_nib.get_fdata()
-    instances = np.unique(gt)
+    gt = gt_nib.get_fdata().astype(np.int16)
+    instances = set(np.unique(gt))
+    instances = list(instances - {0})
     semantic_gt_np = np.where(gt != 0, 1, 0)
-    semantic_gt = nib.Nifti1Image(semantic_gt_np.astype(np.uint8), gt_nib.affine)
+    semantic_gt = nib.Nifti1Image(semantic_gt_np.astype(np.int8), gt_nib.affine)
     instance_gt = gt_nib
     return semantic_gt, instance_gt, instances
 
 
+def resolve_lesion_overlap(pred_instance: list[PromptResult]) -> list[PromptResult]:
+    """
+    Removes overlap between the predicted lesion instances.
+
+    DISCLAIMER: Overlapping lesions are not allowed, hence predictions that overlap need to be stratified.
+    This is done by taking the lesion with the highest performance, and cutting away that positive region from the worse performing lesion.
+    This will artificially inflate the performance of the worse lesion, as false positive regions are removed.
+    """
+    bin_maps = [pred.predicted_image.get_fdata() for pred in pred_instance]
+    bin_map_perf = [pred.perf for pred in pred_instance]
+    high_to_low_perf = np.argsort(bin_map_perf)[::-1]
+    # ---------- Set previously segmented regions to 0 to avoid overlap ---------- #
+    # This has the caveat that if a model considers all lesions as positive instead of the instance, this will make the performance very good.
+    disallowed_region = np.zeros_like(bin_maps[0])
+    for bin_map_id in high_to_low_perf:
+        # Where the disallowed region is 1, set the bin_map to 0
+        bin_maps[bin_map_id] = np.where(disallowed_region == 1, 0, bin_maps[bin_map_id])
+        disallowed_region = np.logical_or(disallowed_region, bin_maps[bin_map_id])
+
+    for cnt in range(len(pred_instance)):
+        pred_instance[cnt].predicted_image = nib.Nifti1Image(bin_maps[cnt], pred_instance[cnt].predicted_image.affine)
+
+    return pred_instance
+
+
 def save_static_lesion_results(
-    prompt_results: list[PromptResult], base_name: Path, semantic_filename: str, instance_filename: str
+    prompt_results: list[PromptResult], pred_out: Path, semantic_filename: str, instance_filename: str
 ):
     """Iterate through all single prompt results that are"""
-    semantic_pd_path = base_name / semantic_filename
-    instance_pd_path = base_name / instance_filename
+    semantic_pd_path = pred_out / semantic_filename
+    instance_pd_path = pred_out / instance_filename
+
+    prompt_result = resolve_lesion_overlap(prompt_results)
+
+    img = np.zeros_like(prompt_results[0].predicted_image.get_fdata())
     for i, prompt_result in enumerate(prompt_results):
         if i == 0:
-            img = prompt_result.predicted_image.get_fdata()
             affine = prompt_result.predicted_image.affine
-            continue
-        img = img + (prompt_result.predicted_image.get_fdata() + i)
-    semantic_img = nib.Nifti1Image(np.where(np.nonzero(img), 1, 0), affine)
-    instance_img = nib.Nifti1Image(img, affine)
+        img = img + np.where(prompt_result.predicted_image.get_fdata() != 0, i + 1, 0)
+    semantic_img = nib.Nifti1Image(np.where(img != 0, np.ones_like(img), np.zeros_like(img)), affine, dtype=np.int8)
+    instance_img = nib.Nifti1Image(img, affine, dtype=np.int8)
 
-    semantic_pd_path = base_name / semantic_filename
-    instance_pd_path = base_name / instance_filename
+    semantic_pd_path = pred_out / semantic_filename
+    instance_pd_path = pred_out / instance_filename
     # ToDo: Save the prompt steps as well.
     instance_img.to_filename(instance_pd_path)
     semantic_img.to_filename(semantic_pd_path)
 
 
 def save_interactive_lesion_results(
-    all_prompt_results: list[list[PromptResult]], base_name: Path, semantic_filename: str, instance_filename: str
+    all_prompt_results: list[list[PromptResult]], pred_out: Path, semantic_filename: str, instance_filename: str
 ):
     """
     Save the interactive lesion results.
@@ -221,7 +249,7 @@ def save_interactive_lesion_results(
     for cnt in range(iter_wise_arr.shape[0]):
         semantic_img = nib.Nifti1Image(np.where(np.nonzero(iter_wise_arr[cnt]), 1, 0), affine)
         instance_img = nib.Nifti1Image(iter_wise_arr[cnt], affine)
-        semantic_pd_path = base_name / f"iter_{cnt}" / semantic_filename
-        instance_pd_path = base_name / f"iter_{cnt}" / instance_filename
+        semantic_pd_path = pred_out / f"iter_{cnt}" / semantic_filename
+        instance_pd_path = pred_out / f"iter_{cnt}" / instance_filename
         semantic_img.to_filename(semantic_pd_path)
         instance_img.to_filename(instance_pd_path)
