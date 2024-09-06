@@ -115,7 +115,7 @@ class NPointsPer2DSlicePrompter(Prompter):
 
 
 class PointInterpolationPrompter(Prompter):
-    def __init__(self, inferer: Inferer, seed: int = 11111, n_slice_point_interpolation: int = 5):
+    def __init__(self, inferer: Inferer, n_slice_point_interpolation: int = 5, seed: int = 11111):
         super().__init__(inferer, seed)
         self.n_slice_point_interpolation = n_slice_point_interpolation
 
