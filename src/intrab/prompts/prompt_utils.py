@@ -307,7 +307,7 @@ def get_middle_seed_point(fn_mask, slices_inferred):
     return new_middle_seed_prompt
 
 
-def point_interpolation(gt, n_slices, interpolation="linear"):
+def point_interpolation(gt: np.ndarray, n_slices: int, interpolation: str ="linear") -> PromptStep:
     """
     Simulates a clinician clicking in the 'center of the main mass of the roi' per slice.
     Between these slices, the points are interpolated using linear or cubic spline interpolation.
@@ -315,6 +315,8 @@ def point_interpolation(gt, n_slices, interpolation="linear"):
     :param gt: The ground truth volume.
     :param n_slices: The number of slices to interpolate points between.
     """
+    if n_slices == 1:
+        logger.warning(f'For point interpolation, need multiple points to interpolate between. One point was given, unexpected behaviour may occur.')
     simulated_clicks = get_fg_points_from_cc_centers(gt, n_slices)
     coords = interpolate_points(simulated_clicks, kind=interpolation).astype(int)
     coords = coords[:, [2, 1, 0]]  # Gt is in row-major; need to reorder to xyz
