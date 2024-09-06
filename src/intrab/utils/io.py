@@ -111,7 +111,7 @@ def read_yaml_config(config_path: str) -> dict:
     return config
 
 
-def get_img_gts(dataset_dir):
+def get_img_gts(dataset_dir: str) -> list[tuple[str,str]]:
     images_dir = os.path.join(dataset_dir, "imagesTr")
     labels_dir = os.path.join(dataset_dir, "labelsTr")
     imgs_gts = [
@@ -125,7 +125,7 @@ def get_img_gts(dataset_dir):
     return list(sorted(imgs_gts, key=lambda x: x[0]))
 
 
-def verify_results_dir_exist(targets, results_dir, prompters: list[Prompter]):
+def verify_results_dir_exist(targets, results_dir, prompters: list[Prompter]) -> None:
     """Creates all output paths if they don't exist"""
     [
         Path(results_dir / p.name / (f"{target_label:03d}" + "__" + target)).mkdir(exist_ok=True, parents=True)
@@ -154,7 +154,7 @@ def get_labels_from_dataset_json(dataset_dir: Path) -> dict[str:int]:
     return label_dict
 
 
-def binarize_gt(gt_path: Path, label_of_interest: int):
+def binarize_gt(gt_path: Path, label_of_interest: int) -> nib.Nifti1Image:
     """
     Creates a binary mask from a multi-class groundtruth in the same spacing.
     """
@@ -203,7 +203,7 @@ def resolve_lesion_overlap(pred_instance: list[PromptResult]) -> list[PromptResu
 
 def save_static_lesion_results(
     prompt_results: list[PromptResult], pred_out: Path, semantic_filename: str, instance_filename: str
-):
+) -> None:
     """Iterate through all single prompt results that are"""
     semantic_pd_path = pred_out / semantic_filename
     instance_pd_path = pred_out / instance_filename
@@ -227,7 +227,7 @@ def save_static_lesion_results(
 
 def save_interactive_lesion_results(
     all_prompt_results: list[list[PromptResult]], pred_out: Path, semantic_filename: str, instance_filename: str
-):
+) -> None:
     """
     Save the interactive lesion results.
     Each lesion has it's own interactive results. The outer list count goes through the lesions and the inner list goes through the iterations.
