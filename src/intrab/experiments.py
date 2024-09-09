@@ -219,11 +219,13 @@ def run_experiments_lesions(
                 )
         else:
             for i in range(prompter.num_iterations):
-                with logger.catch(level="WARNING"):
-                    instance_evaluation(
-                        instance_gt_path=gt_output_path,
-                        instance_pd_path=pred_output_path / prompter.name / f"iter_{i}",
-                        output_path=pred_output_path / prompter.name / f"iter_{i}",
-                        classes_of_interest=(1,),
-                        dice_threshold=1e-9,
-                    )
+                pred_path = pred_output_path / prompter.name / f"iter_{i}"
+                if pred_path.exists():
+                    with logger.catch(level="WARNING"):
+                        instance_evaluation(
+                            instance_gt_path=gt_output_path,
+                            instance_pd_path=pred_output_path / prompter.name / f"iter_{i}",
+                            output_path=pred_output_path / prompter.name / f"iter_{i}",
+                            classes_of_interest=(1,),
+                            dice_threshold=1e-9,
+                        )
