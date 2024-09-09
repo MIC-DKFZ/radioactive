@@ -4,6 +4,7 @@ import pytest
 
 from intrab.prompts.prompt_3d import get_bbox3d, get_pos_clicks3D
 from intrab.prompts.prompt_utils import (
+    box_interpolation,
     get_bbox3d_sliced,
     get_minimal_boxes_row_major,
     get_pos_clicks2D_row_major,
@@ -14,6 +15,12 @@ from intrab.prompts.prompt_utils import (
 
 
 locations = Literal["bottom", "center", "top"]
+
+"""
+Tests verifying that all prompters can handle a single receiving a single point.
+Guarantees that e.g. multi click logic does not break when fewer foreground than clicks exist.
+
+"""
 
 
 def get_single_point_gt(x: locations, y: locations, z: locations) -> np.ndarray:
@@ -97,6 +104,16 @@ def test_single_point_get_bbox3d_sliced(x_loc: locations, y_loc: locations, z_lo
 def test_single_point_get_seed_boxes(x_loc: locations, y_loc: locations, z_loc: locations, N: int):
     gt = get_single_point_gt(x_loc, y_loc, z_loc)
     points = get_seed_boxes(gt, N)
+
+
+@pytest.mark.parametrize("x_loc", ["bottom", "center", "top"])
+@pytest.mark.parametrize("y_loc", ["bottom", "center", "top"])
+@pytest.mark.parametrize("z_loc", ["bottom", "center", "top"])
+@pytest.mark.parametrize("N", [1, 3, 5, 10, 20])
+def test_single_point_box_interpolation(x_loc: locations, y_loc: locations, z_loc: locations, N: int):
+    gt = get_single_point_gt(x_loc, y_loc, z_loc)
+    box_seed_prompt = get_seed_boxes(gt, N)
+    box_interpolation(box_seed_prompt)
 
 
 @pytest.mark.parametrize("x_loc", ["bottom", "center", "top"])
