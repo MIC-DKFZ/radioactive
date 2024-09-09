@@ -1,14 +1,18 @@
 import json
 import os
 from pathlib import Path
-from typing import get_args
+from typing import Any, get_args
 import yaml
 from intrab.model.model_utils import model_registry
 from intrab.utils.paths import get_dataset_path
 from intrab.prompts.prompter import Prompter, static_prompt_styles
 from loguru import logger
 import nibabel as nib
+import SimpleITK as sitk
+from nrrd import NRRDHeader, read, write
 import numpy as np
+import tempfile
+from toinstance import InstanceNrrd
 
 from intrab.utils.result_data import PromptResult
 
@@ -165,91 +169,74 @@ def binarize_gt(gt_path: Path, label_of_interest: int):
     return binary_gt
 
 
-def create_instance_gt(gt_path: Path) -> tuple[nib.Nifti1Image, nib.Nifti1Image, list[int]]:
+def create_instance_gt(gt_path: Path) -> tuple[nib.Nifti1Image, list[int]]:
     gt_nib: nib.Nifti1Image = nib.load(gt_path)
     gt = gt_nib.get_fdata().astype(np.int16)
     instances = set(np.unique(gt))
     instances = list(instances - {0})
-    semantic_gt_np = np.where(gt != 0, 1, 0)
-    semantic_gt = nib.Nifti1Image(semantic_gt_np.astype(np.int8), gt_nib.affine)
     instance_gt = gt_nib
-    return semantic_gt, instance_gt, instances
+    return instance_gt, instances
 
 
-def resolve_lesion_overlap(pred_instance: list[PromptResult]) -> list[PromptResult]:
+def nifti_to_nrrd(nifti: nib.Nifti1Image) -> tuple[np.ndarray, dict]:
     """
-    Removes overlap between the predicted lesion instances.
-
-    DISCLAIMER: Overlapping lesions are not allowed, hence predictions that overlap need to be stratified.
-    This is done by taking the lesion with the highest performance, and cutting away that positive region from the worse performing lesion.
-    This will artificially inflate the performance of the worse lesion, as false positive regions are removed.
+    Convert a nifti image to nrrd.
     """
-    bin_maps = [pred.predicted_image.get_fdata() for pred in pred_instance]
-    bin_map_perf = [pred.perf for pred in pred_instance]
-    high_to_low_perf = np.argsort(bin_map_perf)[::-1]
-    # ---------- Set previously segmented regions to 0 to avoid overlap ---------- #
-    # This has the caveat that if a model considers all lesions as positive instead of the instance, this will make the performance very good.
-    disallowed_region = np.zeros_like(bin_maps[0])
-    for bin_map_id in high_to_low_perf:
-        # Where the disallowed region is 1, set the bin_map to 0
-        bin_maps[bin_map_id] = np.where(disallowed_region == 1, 0, bin_maps[bin_map_id])
-        disallowed_region = np.logical_or(disallowed_region, bin_maps[bin_map_id])
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # What a mess
+        nifti.to_filename(tmpdir + "/tmp.nii.gz")
+        instance_sitk = sitk.ReadImage(tmpdir + "/tmp.nii.gz")
+        sitk.WriteImage(instance_sitk, tmpdir + "/tmp.nrrd")
+        nrrd_arr, nrrd_header = read(tmpdir + "/tmp.nrrd")
+    return nrrd_arr, nrrd_header
 
-    for cnt in range(len(pred_instance)):
-        pred_instance[cnt].predicted_image = nib.Nifti1Image(bin_maps[cnt], pred_instance[cnt].predicted_image.affine)
 
-    return pred_instance
+def create_innrrd_instance_im(prompt_results: list[PromptResult]) -> InstanceNrrd:
+    """
+    Create a nrrd instance groundtruth from the prompt results.
+    """
+
+    # Need header information.
+    _, nrrd_header = nifti_to_nrrd(prompt_results[0].predicted_image)
+    prompt_result_bin_maps = [prompt_result.predicted_image.get_fdata() for prompt_result in prompt_results]
+
+    innrrd = InstanceNrrd.from_binary_instance_maps({1: prompt_result_bin_maps}, nrrd_header)
+
+    return innrrd
+
+
+def save_nib_instance_gt_as_nrrd(nib_gt: nib.Nifti1Image, out_path: Path):
+    """
+    Save the instance groundtruth as a nrrd file.
+    """
+    nrrd_arr, nrrd_header = nifti_to_nrrd(nib_gt)
+    innrrd = InstanceNrrd.from_instance_map(nrrd_arr, nrrd_header, class_name=1)
+    innrrd.to_file(out_path)
 
 
 def save_static_lesion_results(
-    prompt_results: list[PromptResult], pred_out: Path, semantic_filename: str, instance_filename: str
+    prompt_results: list[PromptResult] | list[list[PromptResult]],
+    pred_out: Path,
+    instance_filename: str,
 ):
     """Iterate through all single prompt results that are"""
-    semantic_pd_path = pred_out / semantic_filename
+    innrrd_im = create_innrrd_instance_im(prompt_results)
+    pred_out.mkdir(exist_ok=True, parents=True)
     instance_pd_path = pred_out / instance_filename
-
-    prompt_result = resolve_lesion_overlap(prompt_results)
-
-    img = np.zeros_like(prompt_results[0].predicted_image.get_fdata())
-    for i, prompt_result in enumerate(prompt_results):
-        if i == 0:
-            affine = prompt_result.predicted_image.affine
-        img = img + np.where(prompt_result.predicted_image.get_fdata() != 0, i + 1, 0)
-    semantic_img = nib.Nifti1Image(np.where(img != 0, np.ones_like(img), np.zeros_like(img)), affine, dtype=np.int8)
-    instance_img = nib.Nifti1Image(img, affine, dtype=np.int8)
-
-    semantic_pd_path = pred_out / semantic_filename
-    instance_pd_path = pred_out / instance_filename
-    # ToDo: Save the prompt steps as well.
-    instance_img.to_filename(instance_pd_path)
-    semantic_img.to_filename(semantic_pd_path)
+    innrrd_im.to_file(instance_pd_path)
 
 
 def save_interactive_lesion_results(
-    all_prompt_results: list[list[PromptResult]], pred_out: Path, semantic_filename: str, instance_filename: str
+    all_prompt_results: list[list[PromptResult]], pred_out: Path, instance_filename: str
 ):
     """
     Save the interactive lesion results.
     Each lesion has it's own interactive results. The outer list count goes through the lesions and the inner list goes through the iterations.
     """
-    all_arr = []
-    affine = None
-    for lesion_id, prompt_results in enumerate(all_prompt_results):
-        all_arr_iter = []
-        prompt_res: PromptResult
-        for cnt, prompt_res in enumerate(prompt_results):
-            if lesion_id == 0 and cnt == 0:
-                affine - prompt_res.predicted_image.affine
-            img = (prompt_res.predicted_image.get_fdata()) + lesion_id
-            all_arr_iter.append(img)
-        all_arr.append(all_arr_iter)
-    joint_arr = np.array(all_arr)  # Shape: (num_lesions, num_iterations, x, y, z)
-    iter_wise_arr = np.sum(joint_arr, axis=0, keepdims=False)  # Shape: (num_iterations, x, y, z)
-    # Save the results iteratively
-    for cnt in range(iter_wise_arr.shape[0]):
-        semantic_img = nib.Nifti1Image(np.where(np.nonzero(iter_wise_arr[cnt]), 1, 0), affine)
-        instance_img = nib.Nifti1Image(iter_wise_arr[cnt], affine)
-        semantic_pd_path = pred_out / f"iter_{cnt}" / semantic_filename
-        instance_pd_path = pred_out / f"iter_{cnt}" / instance_filename
-        semantic_img.to_filename(semantic_pd_path)
-        instance_img.to_filename(instance_pd_path)
+
+    # Outer list holds the lesions, inner list holds the iterations.
+    n_iterations = len(all_prompt_results[0])
+
+    for n_iters in range(n_iterations):
+        same_iter_prompt_results = [apr[n_iters] for apr in all_prompt_results]
+        save_static_lesion_results(same_iter_prompt_results, pred_out / f"iter_{n_iters}", instance_filename)
