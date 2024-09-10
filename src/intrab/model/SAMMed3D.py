@@ -66,9 +66,9 @@ class SAMMed3DInferer(Inferer):
         if self._image_already_loaded(img_path=img_path):
             return
         # Original code: the ToCanonical function doesn't work without metadata anyway, so it efectively only reads in the image. For ease of preserving metadata, I use nib
-        self.img, self.inv_trans = self.transform_to_model_coords(img_path, is_seg=False)
+        self.img, self.inv_trans = self.transform_to_model_coords_dense(img_path, is_seg=False)
 
-    def transform_to_model_coords(self, nifti: Path | str | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
+    def transform_to_model_coords_dense(self, nifti: Path | str | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
         if isinstance(nifti, (Path, str)):
             nifti = nib.load(nifti)
         affine = nifti.affine

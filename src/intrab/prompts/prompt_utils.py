@@ -425,7 +425,7 @@ def propagate_point(
     current_prompt = seed_prompt
     for slice_id in slices_todo:
         current_seg_nib, _, _ = inferer.predict(current_prompt)
-        current_seg = inferer.transform_to_model_coords(current_seg_nib, is_seg=True)[0]
+        current_seg = inferer.transform_to_model_coords_dense(current_seg_nib, is_seg=True)[0]
         coords_xyz = get_fg_points_from_slice(
             current_seg[slice_id], n_clicks=n_clicks, slice_index=slice_id, seed=seed
         )

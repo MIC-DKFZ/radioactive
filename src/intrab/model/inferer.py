@@ -59,19 +59,24 @@ class Inferer(ABC):
         pass
 
     @abstractmethod
-    def transform_to_model_coords(self, nifti: Path | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
-        """Transform the coordinates to the model's coordinate system"""
+    def transform_to_model_coords_dense(self, nifti: Path | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
+        """Transform a dense array (segmentation or image) to the model's coordinate system"""
+        pass
+
+    @abstractmethod
+    def transform_to_model_coords_sparse(self, coords: np.ndarray) -> np.ndarray:
+        """Transform a sparse array (sparse coordinates) to the model's coordinate system"""
         pass
 
     def get_transformed_groundtruth(self, nifti: Path | nib.Nifti1Image) -> np.ndarray:
         """Transforms the nifti or the groundtruth to the model's coordinate system."""
-        return self.transform_to_model_coords(nifti, is_seg=True)[0]
+        return self.transform_to_model_coords_dense(nifti, is_seg=True)[0]
 
     def merge_seg_with_prev_seg(
         self, new_seg: np.ndarray, prev_seg: str | Path | nib.Nifti1Image, slices_inferred: np.ndarray
     ):
         # Find slices which were inferred on in old seg, but not in new_seg
-        prev_seg, _ = self.transform_to_model_coords(prev_seg, None)
+        prev_seg, _ = self.transform_to_model_coords_dense(prev_seg, None)
         old_seg_inferred_slices = np.where(np.any(prev_seg, axis=(1, 2)))[0]
         missing_slices = np.setdiff1d(old_seg_inferred_slices, slices_inferred)
 

@@ -144,7 +144,7 @@ class threeDInteractivePrompterSAMMed3D(InteractivePrompter):
     def get_next_prompt_step(
         self, pred: np.ndarray, low_res_logits: np.ndarray, all_prompts: list[PromptStep]
     ) -> PromptStep:
-        pred, _ = self.inferer.transform_to_model_coords(
+        pred, _ = self.inferer.transform_to_model_coords_dense(
             pred, is_seg=True
         )  # Transform to the coordinate system in which inference will occur
 
@@ -231,7 +231,7 @@ class twoDNPointsUnrealisticInteractivePrompter(InteractivePrompter):
     def get_next_prompt_step(
         self, pred: np.ndarray, low_res_logits: np.ndarray, all_prompts: list[PromptStep]
     ) -> PromptStep:
-        pred, _ = self.inferer.transform_to_model_coords(pred, is_seg=True)
+        pred, _ = self.inferer.transform_to_model_coords_dense(pred, is_seg=True)
         slices_inferred = all_prompts[0].get_slices_to_infer()
         all_slice_prompt_steps = []
 
@@ -375,7 +375,7 @@ class twoDInteractivePrompter(InteractivePrompter):
     def get_next_prompt_step(
         self, pred: nib.Nifti1Image, low_res_logits: np.ndarray, all_prompts: list[PromptStep]
     ) -> PromptStep:
-        pred, _ = self.inferer.transform_to_model_coords(
+        pred, _ = self.inferer.transform_to_model_coords_dense(
             pred, is_seg=True
         )  # Transform to the coordinate system in which inference will occur
         fn_mask = (pred == 0) & (self.groundtruth_model == 1)

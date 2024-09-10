@@ -85,10 +85,10 @@ class SAMMed2DInferer(Inferer):
         if self.image_embeddings_dict:
             self.image_embeddings_dict = {}
 
-        self.img, self.inv_trans = self.transform_to_model_coords(img_path, None)
+        self.img, self.inv_trans = self.transform_to_model_coords_dense(img_path, None)
         self.loaded_image = img_path
 
-    def transform_to_model_coords(self, nifti: str | Path | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
+    def transform_to_model_coords_dense(self, nifti: str | Path | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
         if isinstance(nifti, (str, Path)):
             nifti: nib.Nifti1Image = nib.load(nifti)
         orientation_old = io_orientation(nifti.affine)
