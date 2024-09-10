@@ -8,7 +8,8 @@ import torch
 
 from functools import partial
 
-from .modeling import ImageEncoderViT3D, MaskDecoder3D, PromptEncoder3D, Sam3D
+from intrab.utils.SAMMed3D_segment_anything.modeling import ImageEncoderViT3D, MaskDecoder3D, PromptEncoder3D, Sam3D
+
 
 def build_sam3D_vit_h(checkpoint=None):
     return _build_sam3D(
@@ -43,6 +44,7 @@ def build_sam3D_vit_b(checkpoint=None):
         checkpoint=checkpoint,
     )
 
+
 def build_sam3D_vit_b_ori(checkpoint=None):
     return _build_sam3D_ori(
         encoder_embed_dim=768,
@@ -60,7 +62,6 @@ sam_model_registry3D = {
     "vit_b": build_sam3D_vit_b,
     "vit_b_ori": build_sam3D_vit_b_ori,
 }
-
 
 
 def _build_sam3D(
