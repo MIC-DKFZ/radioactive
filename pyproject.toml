@@ -38,6 +38,8 @@ dependencies = [
     'nbstripout',
     'einops',
     'nneval',
+    'gdown',
+    'tcia_utils'
 ]
 
 readme = "README.md"

@@ -6,5 +6,5 @@ def load_groundtruth_nifti() -> Path:
     return nib.load(some_path).get_fdata().astype(np.uint8)
 
 
-def test_points_are_static():
+def test_():
     assert True
