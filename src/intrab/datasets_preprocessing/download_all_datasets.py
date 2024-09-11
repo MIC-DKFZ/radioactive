@@ -15,19 +15,19 @@ from loguru import logger
 import glob
 
 
-def extract_zips_in_dir(dataset_dict: dict):
+def extract_zips_in_dir(dataset_dict: dict, pwd: str | None):
     """Unzip the HaN Seg dataset"""
-    pwd: str = dataset_dict.get("pwd", None)
     zip_files = glob.glob(str(dataset_dict / "*.zip"))
     for file in zip_files:
         file_path = Path(file)
         print(f"Extracting {file}")
+        file_dir = file_path.parent / file_path.name.removesuffix(".zip")
         with zipfile.ZipFile(file_path, "r") as zip_ref:
             # PWD provided on https://han-seg2023.grand-challenge.org/
             if pwd is not None:
-                zip_ref.extractall(str(file_path), pwd=pwd.encode("utf-8"))
+                zip_ref.extractall(str(file_dir), pwd=pwd.encode("utf-8"))
             else:
-                zip_ref.extractall(str(file_path))
+                zip_ref.extractall(str(file_dir))
 
 
 def download_datasets(datasets_to_download: dict[dataset_keys, dict]):
@@ -44,15 +44,15 @@ def download_datasets(datasets_to_download: dict[dataset_keys, dict]):
         cur_dataset_path.mkdir(exist_ok=True)
         logger.info(f"Starting download of {dataset_key} dataset.")
         if infos["source"] == "zenodo":
-            download_from_zenodo(infos["id"], cur_dataset_path)
+            download_from_zenodo(infos["zenodo_id"], cur_dataset_path)
         elif infos["source"] == "tcia":
             download_from_tcia(infos["collection"], cur_dataset_path)
         elif infos["source"] == "gdrive":
-            download_from_gdrive(infos["id"], cur_dataset_path)
+            download_from_gdrive(infos["url"], cur_dataset_path)
         elif infos["source"] == "mendeley":
-            download_from_mendeley(infos["id"], cur_dataset_path)
+            download_from_mendeley(infos["dataset_id"], cur_dataset_path)
         logger.info("Extracting zips in dataset directory")
-        extract_zips_in_dir(cur_dataset_path)
+        extract_zips_in_dir(cur_dataset_path, pwd=infos.get("pwd", None))
     pass
 
 

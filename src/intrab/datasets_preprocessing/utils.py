@@ -14,7 +14,11 @@ from tqdm import tqdm
 import gdown
 
 import os
-from tcia_utils import nbia
+
+try:
+    from tcia_utils import nbia
+except ImportError:
+    nbia = None
 
 
 dataset_keys = Literal[
@@ -31,9 +35,11 @@ dataset_keys = Literal[
     "pengwin",
 ]
 
+
 DATASET_URLS: dict[dataset_keys, dict] = {
     # ------------------------------- Mendeley Data ------------------------------ #
-    "ms_brain": {"source": "mendeley", "url": "https://data.mendeley.com/datasets/8bctsm8jz7/1", "size": 0.7},
+    "ms_brain": {"source": "mendeley", "dataset_id": "8bctsm8jz7", "size": 0.7},
+    # https://data.mendeley.com/datasets/8bctsm8jz7/1
     # ----------------------------------- TCIA ----------------------------------- #
     "hcc_tace": {"source": "tcia", "collection": "hcc-tace-seg", "size": 28.57},
     "adrenal_acc": {"source": "tcia", "collection": "adrenal-acc-ki67-seg", "size": 9.89},
@@ -63,25 +69,35 @@ def download_from_tcia(collection_name: str, download_dir: Path) -> None:
 
     os.makedirs(download_dir, exist_ok=True)
     data = nbia.getSeries(collection=collection_name)
-    nbia.downloadSeries(data, path=download_dir, csv_filename=f"{download_dir}/metadata")
+    nbia.downloadSeries(data, path=str(download_dir), csv_filename=f"{download_dir}/metadata")
 
 
 def download_from_zenodo(zenodo_id: int, download_dir: Path) -> None:
-    zenodo_url = f"https://zenodo.org/records/{zenodo_id}"
+    zenodo_url = f"https://zenodo.org/api/records/{zenodo_id}"
     download_dir.mkdir(parents=True, exist_ok=True)
 
-    with requests.get(zenodo_url, stream=True) as response:
-        # Check if the request was successful (status code 200)
-        if response.status_code == 200:
-            # Open the output file and write the response content in chunks
-            with open(download_dir, "wb") as output_file:
-                print(f"Downloading into temp dir {download_dir}...")
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:  # Filter out keep-alive chunks
-                        output_file.write(chunk)
-                print(f"Download complete: {download_dir}")
-        else:
-            print(f"Failed to download. Status code: {response.status_code}")
+    response = requests.get(zenodo_url)
+    # Check if the request was successful (status code 200)
+    if response.status_code == 200:
+        record_data = response.json()
+
+        # Extract the list of files from the metadata
+        files = record_data.get("files", [])
+
+        # Return the list of file names and their download links
+        file_list = [(file["key"], file["links"]["self"]) for file in files]
+
+        # Open the output file and write the response content in chunks
+        for filename, link in file_list:
+            if (download_dir / filename).exists():
+                continue
+            with requests.get(link, stream=True) as r:
+                r.raise_for_status()
+                with open(download_dir / filename, "wb") as f:
+                    for chunk in r.iter_content(chunk_size=8192):
+                        f.write(chunk)
+    else:
+        print(f"Failed to download. Status code: {response.status_code}")
     return download_dir
 
 
@@ -113,24 +129,54 @@ def download_from_gdrive(gdrive_url: str, download_dir: Path) -> None:
     return
 
 
-def download_from_mendeley(mendeley_url: str, download_dir: Path) -> None:
+def get_auth_token() -> str:
+    """
+    Get the authentication token for Mendeley API.
+    """
+    # Get the authentication token from the environment variable
+    token_url = "https://auth.data.mendeley.com/oauth2/authorize"
+    client_id = "tassilo.wald@gmail.com"  # input("Enter your Mendeley client ID: ")
+    client_secret = "CqTpyBx3e8ePO1pdRnkci02EP8YWnW"  # input("Enter your Mendeley client secret: ")
+
+    payload = {"client_id": client_id, "client_secret": client_secret, "grant_type": "client_credentials"}
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+
+    response = requests.get(token_url, data=payload, headers=headers)
+
+    if response.status_code == 200:
+        token_data = response.json()
+        return token_data["access_token"]
+    else:
+        print(f"Error: Unable to obtain access token. Status code: {response.status_code}")
+        print(response.text)
+        return None
+
+
+def download_from_mendeley(dataset_id: str, download_dir: Path) -> None:
     download_dir.mkdir(parents=True, exist_ok=True)
     # Download the dataset from Mendeley
     # The dataset in the repo is public and can be downloaded without any authentication
 
-    # Download the dataset from Mendeley
-    with requests.get(mendeley_url, stream=True) as response:
-        # Check if the request was successful (status code 200)
-        if response.status_code == 200:
-            # Open the output file and write the response content in chunks
-            with open(download_dir, "wb") as output_file:
-                print(f"Downloading {download_dir}...")
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:  # Filter out keep-alive chunks
-                        output_file.write(chunk)
-                print(f"Download complete: {download_dir}")
-        else:
-            print(f"Failed to download {download_dir}. Status code: {response.status_code}")
+    logger.warning(
+        f"Mendeley Download is currently not working. Please download the dataset manually and deposit it in {download_dir}"
+    )
+    # dataset_url = f"https://api.data.mendeley.com/datasets/{dataset_id}"
+    # access_token = get_auth_token()
+    # if access_token is None:
+    #     headers = {"Authorization": f"Bearer {access_token}"}
+    # # Download the dataset from Mendeley
+    # response = requests.get(dataset_url, stream=True, headers=headers)
+    # # Check if the request was successful (status code 200)
+    # if response.status_code == 200:
+    #     # Open the output file and write the response content in chunks
+    #     with open(download_dir, "wb") as output_file:
+    #         print(f"Downloading {download_dir}...")
+    #         for chunk in response.iter_content(chunk_size=8192):
+    #             if chunk:  # Filter out keep-alive chunks
+    #                 output_file.write(chunk)
+    #         print(f"Download complete: {download_dir}")
+    # else:
+    #     print(f"Failed to download {download_dir}. Status code: {response.status_code}")
 
     return download_dir
 
