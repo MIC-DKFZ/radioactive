@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import get_args
 import zipfile
 from intrab.utils.paths import get_dataset_path
-from src.intrab.datasets_preprocessing.utils import (
+from intrab.datasets_preprocessing.utils import (
     DATASET_URLS,
     dataset_keys,
     download_from_tcia,
