@@ -39,7 +39,8 @@ dependencies = [
     'einops',
     'nneval',
     'gdown',
-    'tcia_utils'
+    'tcia_utils',
+    'pydicom'
 ]
 
 readme = "README.md"
