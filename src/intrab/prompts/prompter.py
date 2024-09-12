@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from functools import partial
 from pathlib import Path
 from typing import Literal
 import numpy as np
@@ -22,8 +23,8 @@ from intrab.prompts.prompt_utils import (
     point_propagation,
 )
 
-from intrab.utils.analysis import compute_dice
 from intrab.utils.result_data import PromptResult
+from intrab.utils.transforms import canonical_to_orig_sparse_coords, orig_to_SAR_dense, transform_prompt_to_model_coords
 
 
 # ToDo: Save the Prompt before feeding into the model.
@@ -40,8 +41,12 @@ class Prompter:
         self.groundtruth_nib: None | nib.Nifti1Image = None
         self.groundtruth_model: np.ndarray = None
         self.groundtruth_orig: np.ndarray | torch.Tensor = None
+        self.groundtruth_SAR: np.ndarray = None
         self.seed = seed
         self.name = self.__class__.__name__
+
+        self.orig_affine: tuple[float, float, float] = None
+        self.orig_shape: tuple[int, int, int] = None
 
     def get_performance(self, pred: np.ndarray | nib.Nifti1Image) -> float:
         """Get the DICE between prediciton and groundtruths."""
@@ -61,7 +66,7 @@ class Prompter:
 
     def get_slices_to_infer(self) -> list[int]:
         """Get the slices to infer from the groundtruth."""
-        return np.where(np.any(self.groundtruth_model, axis=(1, 2)))[0]
+        return np.where(np.any(self.groundtruth_SAR, axis=(1, 2)))[0]
 
     def set_groundtruth(self, groundtruth: nib.Nifti1Image) -> None:
         """
@@ -73,8 +78,12 @@ class Prompter:
         self.groundtruth_nib = groundtruth
         self.groundtruth_model = self.inferer.get_transformed_groundtruth(groundtruth)
         self.groundtruth_orig = groundtruth.get_fdata()
+        self.groundtruth_SAR = orig_to_SAR_dense(groundtruth)[0]
         if torch.cuda.is_available():
             self.groundtruth_orig = torch.from_numpy(self.groundtruth_orig).cuda().to(torch.int8)
+
+        self.orig_affine = self.groundtruth_nib.affine
+        self.orig_shape = self.groundtruth_nib.shape
 
     def predict_image(self, image_path: Path) -> PromptResult:
         """Generate segmentation given prompt-style and model behavior."""
@@ -99,6 +108,10 @@ class Prompter:
     def get_prompt(self) -> PromptStep:
         pass
 
+    def transform_prompt_to_original_coords(self, prompt_orig: PromptStep) -> PromptStep:
+        sparse_transform = partial(canonical_to_orig_sparse_coords, orig_affine = self.orig_affine, orig_shape = self.orig_shape)
+        return transform_prompt_to_model_coords(prompt_orig, sparse_transform)
+
 
 class NPointsPer2DSlicePrompter(Prompter):
     def __init__(self, inferer: Inferer, seed: int = 11111, n_points_per_slice: int = 5):
@@ -111,7 +124,9 @@ class NPointsPer2DSlicePrompter(Prompter):
         :return: str (Path to the predicted segmentation)
         """
         # Maybe name this SlicePrompts  to be less ambiguous
-        return get_pos_clicks2D_row_major(self.groundtruth_model, self.n_points_per_slice, self.seed)
+        prompt_RAS = get_pos_clicks2D_row_major(self.groundtruth_SAR, self.n_points_per_slice, self.seed)
+        prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
+        return prompt_orig
 
 
 class PointInterpolationPrompter(Prompter):
@@ -128,7 +143,9 @@ class PointInterpolationPrompter(Prompter):
         :return: The PromptStep from the interpolation of the points.
         """
         max_possible_clicks = min(self.n_slice_point_interpolation, len(self.get_slices_to_infer()))
-        return point_interpolation(gt=self.groundtruth_model, n_slices=max_possible_clicks)
+        prompt_RAS = point_interpolation(gt=self.groundtruth_SAR, n_slices=max_possible_clicks)
+        prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
+        return prompt_orig
 
 
 class PointPropagationPrompter(Prompter):
@@ -148,12 +165,13 @@ class PointPropagationPrompter(Prompter):
         Generate segmentation given prompt-style and model behavior.
         :return: str (Path to the predicted segmentation)
         """
-        seed_points_prompt = get_seed_point(self.groundtruth_model, self.n_seed_points_point_propagation, self.seed)
-        slices_to_infer = np.where(np.any(self.groundtruth_model, axis=(1, 2)))[0]
+        seed_points_prompt_RAS = get_seed_point(self.groundtruth_SAR, self.n_seed_points_point_propagation, self.seed)
+        slices_to_infer = np.where(np.any(self.groundtruth_SAR, axis=(1, 2)))[0] # Warning: won't work if set image involves resampling along z dimension
+        seed_points_prompt_orig = self.transform_prompt_to_original_coords(seed_points_prompt_RAS)
 
         all_point_prompts: PromptStep = point_propagation(
             self.inferer,
-            seed_points_prompt,
+            seed_points_prompt_orig,
             slices_to_infer,
             self.seed,
             self.n_points_propagation,
@@ -170,14 +188,17 @@ class BoxPer2DSlicePrompter(Prompter):
         :return: str (Path to the predicted segmentation)
         """
 
-        return get_minimal_boxes_row_major(self.groundtruth_model)
+        prompt_RAS = get_minimal_boxes_row_major(self.groundtruth_SAR)
+        prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
+        return prompt_orig
 
 
 class BoxPer2dSliceFrom3DBoxPrompter(Prompter):
 
     def get_prompt(self) -> PromptStep:
-
-        return get_bbox3d_sliced(self.groundtruth_model)
+        prompt_RAS = get_bbox3d_sliced(self.groundtruth_SAR)
+        prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
+        return prompt_orig
 
 
 class BoxInterpolationPrompter(Prompter):
@@ -193,17 +214,19 @@ class BoxInterpolationPrompter(Prompter):
 
     def get_prompt(self) -> PromptStep:
         max_possible_clicks = min(self.n_slice_box_interpolation, len(self.get_slices_to_infer()))
-        box_seed_prompt: PromptStep = get_seed_boxes(self.groundtruth_model, max_possible_clicks)
-        return box_interpolation(box_seed_prompt)
+        prompt_RAS = get_seed_boxes(self.groundtruth_SAR, max_possible_clicks)
+        prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
+        return prompt_orig
 
 
 class BoxPropagationPrompter(Prompter):
 
     def get_prompt(self) -> tuple[nib.Nifti1Image, dict[int, np.ndarray]]:
+        median_box_seed_prompt_RAS: PromptStep = get_seed_boxes(self.groundtruth_SAR, 1)
+        slices_to_infer = np.where(np.any(self.groundtruth_SAR, axis=(1, 2)))[0]
 
-        median_box_seed_prompt: PromptStep = get_seed_boxes(self.groundtruth_model, 1)
-        slices_to_infer = np.where(np.any(self.groundtruth_model, axis=(1, 2)))[0]
-        return box_propagation(self.inferer, median_box_seed_prompt, slices_to_infer)
+        median_box_seed_prompt_orig = self.transform_prompt_to_original_coords(median_box_seed_prompt_RAS)
+        return box_propagation(self.inferer, median_box_seed_prompt_orig, slices_to_infer)
 
 
 class NPoints3DVolumePrompter(Prompter):
@@ -213,13 +236,17 @@ class NPoints3DVolumePrompter(Prompter):
         self.n_points = n_points
 
     def get_prompt(self) -> tuple[nib.Nifti1Image, dict[int, np.ndarray]]:
-        return get_pos_clicks3D(self.groundtruth_model, n_clicks=self.n_points, seed=self.seed)
+        prompt_RAS = get_pos_clicks3D(self.groundtruth_SAR, n_clicks=self.n_points, seed=self.seed)
+        prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
+        return prompt_orig
 
 
 class Box3DVolumePrompter(Prompter):
 
     def get_prompt(self) -> tuple[nib.Nifti1Image, dict[int, np.ndarray]]:
-        return get_bbox3d(self.groundtruth_model)
+        prompt_RAS = get_bbox3d(self.groundtruth_SAR)
+        prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
+        return prompt_orig
 
 
 static_prompt_styles = Literal[

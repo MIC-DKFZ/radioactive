@@ -11,10 +11,12 @@ import nibabel as nib
 
 
 from intrab.model.inferer import Inferer
-from intrab.prompts.prompt import Boxes, Boxes3D, Points, PromptStep
+from intrab.prompts.prompt import PromptStep
 from intrab.utils.SAMMed3D_segment_anything.build_sam3D import build_sam3D_vit_b_ori
+from intrab.utils.SAMMed3D_segment_anything.modeling.sam3D import Sam3D
 from intrab.utils.image import get_crop_pad_params_from_gt_or_prompt
 from intrab.utils.resample import get_current_spacing_from_affine, resample_to_shape, resample_to_spacing
+from intrab.utils.transforms import resample_to_spacing_sparse
 
 
 def load_sammed3d(checkpoint_path, device="cuda"):
@@ -27,14 +29,12 @@ def load_sammed3d(checkpoint_path, device="cuda"):
         sam_model_tune.eval()
 
     return sam_model_tune
-
-
-# ToDo: Make sure the spacing is correct for SAMMed3D
 class SAMMed3DInferer(Inferer):
     dim = 3
     supported_prompts = ("point", "mask")
     offset_mode = "center"  # Changing this will require siginificant reworking of code; currently doesn't matter anyway since the other method doesn't work
     pass_prev_prompts = True
+    target_spacing = (1.5, 1.5, 1.5)
 
     def __init__(self, checkpoint, device="cuda", use_only_first_point=True):
         super().__init__(checkpoint, device)
@@ -59,16 +59,24 @@ class SAMMed3DInferer(Inferer):
 
         return low_res_logits
 
-    def load_model(self, checkpoint_path, device):
+    def load_model(self, checkpoint_path: str | Path, device: str) -> Sam3D:
         return load_sammed3d(checkpoint_path, device)
 
-    def set_image(self, img_path):
+    def set_image(self, img_path: str | Path) -> None:
         if self._image_already_loaded(img_path=img_path):
             return
-        # Original code: the ToCanonical function doesn't work without metadata anyway, so it efectively only reads in the image. For ease of preserving metadata, I use nib
-        self.img, self.inv_trans = self.transform_to_model_coords_dense(img_path, is_seg=False)
+        img_nib = nib.load(img_path)
+        self.orig_affine = img_nib.affine
+        self.orig_shape = img_nib.shape
+        
+        self.img, self.inv_trans_dense = self.transform_to_model_coords_dense(img_path, is_seg=False)
+        self.new_shape = self.img.shape
+        self.loaded_image = img_path
 
     def transform_to_model_coords_dense(self, nifti: Path | str | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
+        """
+        Doesn't include a to_canonical call since in the training the call was broken (attempted without metadata)
+        """
         if isinstance(nifti, (Path, str)):
             nifti = nib.load(nifti)
         affine = nifti.affine
@@ -77,18 +85,23 @@ class SAMMed3DInferer(Inferer):
 
         # Resample to 1.5mm, 1.5mm, 1.5mm
         orig_spacing = get_current_spacing_from_affine(affine)
-        new_spacing = (1.5, 1.5, 1.5)
 
-        img_respaced = resample_to_spacing(data, orig_spacing, new_spacing, is_seg=is_seg)
+        img_respaced = resample_to_spacing(data, orig_spacing, self.target_spacing, is_seg=is_seg)
 
-        def inv_transform(arr: np.ndarray):
+        def inv_trans_dense(arr: np.ndarray):
             img_orig_spacing = resample_to_shape(
-                arr, current_spacing=new_spacing, new_shape=orig_shape, new_spacing=orig_spacing, is_seg=True
+                arr, current_spacing=self.target_spacing, new_shape=orig_shape, new_spacing=orig_spacing, is_seg=True
             )
             output_nib = nib.Nifti1Image(img_orig_spacing, affine)
             return output_nib
 
-        return img_respaced, inv_transform
+        return img_respaced, inv_trans_dense
+    
+    def transform_to_model_coords_sparse(self, coords: np.ndarray) -> np.ndarray:
+        current_spacing = get_current_spacing_from_affine(self.orig_affine)
+        coords_respaced = resample_to_spacing_sparse(coords, current_spacing, self.target_spacing, self.new_shape, round=True)
+
+        return coords_respaced
 
     def preprocess_img(self, img3D: np.ndarray, cropping_params, padding_params):
         img3D = torch.from_numpy(img3D)
@@ -235,6 +248,7 @@ class SAMMed3DInferer(Inferer):
         prompt: PromptStep,
         crop_pad_params: tuple[tuple, tuple] | None = None,
         prev_seg: np.ndarray = None,  # Argument not used - present to align with prediction for 2d models
+        promptstep_in_model_coord_system = False
     ) -> tuple[nib.Nifti1Image, np.ndarray, np.ndarray]:  # If iterating, use previous patching, previous embeddings
         cheat = False
         gt = None
@@ -245,6 +259,9 @@ class SAMMed3DInferer(Inferer):
 
         if len(prompt.coords) > 1:
             logger.warning('SAMMed3D Can break when multiple points are passed, especially if the points are more than 128 apart in any dimension')
+
+        if not promptstep_in_model_coord_system:
+            prompt = self.transform_promptstep_to_model_coords(prompt)
 
         prompt.coords = prompt.coords[
             :, ::-1
@@ -288,6 +305,6 @@ class SAMMed3DInferer(Inferer):
 
         # Turn into Nifti object in original space
         segmentation_model_arr = segmentation
-        segmentation_orig_nib = self.inv_trans(segmentation)
+        segmentation_orig_nib = self.inv_trans_dense(segmentation)
 
         return segmentation_orig_nib, low_res_logits.detach().cpu().squeeze(), segmentation_model_arr

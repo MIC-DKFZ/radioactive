@@ -2,11 +2,9 @@ from pathlib import Path
 import torch
 import numpy as np
 import torch.nn.functional as F
-from tqdm import tqdm
 from copy import deepcopy
 from argparse import Namespace
 import nibabel as nib
-from nibabel.orientations import io_orientation, ornt_transform
 from loguru import logger
 
 from intrab.model.inferer import Inferer
@@ -14,7 +12,7 @@ from intrab.prompts.prompt import PromptStep
 from intrab.utils.SAMMed3D_segment_anything.build_sam import sam_model_registry as registry_sam
 
 
-from intrab.utils.transforms import ResizeLongestSide
+from intrab.utils.transforms import ResizeLongestSide, orig_to_SAR_dense, orig_to_canonical_sparse_coords, transform_prompt_to_model_coords
 
 
 def load_sam(checkpoint_path, device="cuda", image_size=1024):
@@ -74,63 +72,29 @@ class SAMInferer(Inferer):
 
         return best_mask
 
-    def set_image_old(self, img_path):
-        if self._image_already_loaded(img_path=img_path):
-            return
-        if self.image_embeddings_dict:
-            self.image_embeddings_dict = {}
-        img = nib.load(img_path)
-        img_ras = img  # Set in case already in RAS
-        affine = img.affine
-
-        if nib.aff2axcodes(affine) != ("R", "A", "S"):
-            img_ras = nib.as_closest_canonical(img)
-
-        ornt_old = io_orientation(img.affine)
-        ornt_new = io_orientation(img_ras.affine)
-        ornt_trans = ornt_transform(ornt_new, ornt_old)
-        img_data = img_ras.get_fdata()
-        img_data = img_data.transpose(2, 1, 0)  # Reorient to zyx
-
-        def inv_trans(seg: np.array):
-            seg = seg.transpose(2, 1, 0)  # Reorient back from zyx to RAS
-            seg_nib = nib.Nifti1Image(seg, img.affine)
-            seg_orig_ori = seg_nib.as_reoriented(ornt_trans)
-
-            return seg_orig_ori
-
-        self.img, self.inv_trans = img_data, inv_trans
-
     def set_image(self, img_path: Path):
         if self._image_already_loaded(img_path=img_path):
             return
         # Load in and reorient to RAS
         if self.image_embeddings_dict:
             self.image_embeddings_dict = {}
+        
+        img_nib = nib.load(img_path)
+        self.orig_affine = img_nib.affine
+        self.orig_shape = img_nib.shape
 
-        self.img, self.inv_trans = self.transform_to_model_coords_dense(img_path, None)
+        self.img, self.inv_trans_dense = self.transform_to_model_coords_dense(img_path, is_seg = False)
+        self.loaded_image = img_path
+        self.new_shape = self.img.shape
         self.loaded_image = img_path
 
     def transform_to_model_coords_dense(self, nifti: Path | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
-        if isinstance(nifti, (str, Path)):
-            nifti: nib.Nifti1Image = nib.load(nifti)
-        orientation_old = io_orientation(nifti.affine)
-
-        if nib.aff2axcodes(nifti.affine) != ("R", "A", "S"):
-            nifti = nib.as_closest_canonical(nifti)
-        orientation_new = io_orientation(nifti.affine)
-        orientation_transform = ornt_transform(orientation_new, orientation_old)
-        data = nifti.get_fdata()
-        data = data.transpose(2, 1, 0)  # Reorient to zyx
-
-        def inv_trans(arr: np.ndarray) -> nib.Nifti1Image:
-            arr = arr.transpose(2, 1, 0)
-            arr_nib = nib.Nifti1Image(arr, nifti.affine)
-            arr_orig_ori = arr_nib.as_reoriented(orientation_transform)
-            return arr_orig_ori
-
-        # Return the data in the new format and transformation function
+        data, inv_trans = orig_to_SAR_dense(nifti)
+        
         return data, inv_trans
+
+    def transform_to_model_coords_sparse(self, coords: np.ndarray) -> np.ndarray:
+        return orig_to_canonical_sparse_coords(coords, self.orig_affine, self.orig_shape)
 
     def preprocess_img(self, img, slices_to_process):
         """
@@ -168,13 +132,16 @@ class SAMInferer(Inferer):
         self.slices_processed = slices_processed
         return slices_processed
 
-    def preprocess_prompt(self, prompt):
+    def preprocess_prompt(self, prompt, promptstep_in_model_coord_system = False):
         """
         Preprocessing steps:
             - Modify in line with the volume cropping
             - Modify in line with the interpolation
             - Collect into a dictionary of slice:slice prompt
         """
+        if not promptstep_in_model_coord_system:
+            prompt = transform_prompt_to_model_coords(prompt, self.transform_to_model_coords_sparse)
+
         preprocessed_prompts_dict = {
             slice_idx: {"point": None, "box": None} for slice_idx in prompt.get_slices_to_infer()
         }
@@ -240,12 +207,18 @@ class SAMInferer(Inferer):
         return segmentation
 
     def predict(
-        self, prompt: PromptStep, return_logits: bool = False, prev_seg=None
+        self, prompt: PromptStep, return_logits: bool = False, prev_seg=None, promptstep_in_model_coord_system = False,
     ) -> tuple[nib.Nifti1Image, np.ndarray, np.ndarray]:
         if not isinstance(prompt, PromptStep):
             raise TypeError(f"Prompts must be supplied as an instance of the Prompt class.")
         if prompt.has_boxes and prompt.has_points:
             logger.warning("Both point and box prompts have been supplied; the model has not been trained on this.")
+        
+        # Transform prompt if needed
+        if not promptstep_in_model_coord_system:
+            prompt = self.transform_promptstep_to_model_coords(prompt)
+
+            
         slices_to_infer = prompt.get_slices_to_infer()
 
         prompt = deepcopy(prompt)
@@ -303,6 +276,6 @@ class SAMInferer(Inferer):
         # Reorient to original orientation and return with metadata
         # Turn into Nifti object in original space
         segmentation_model_arr = segmentation
-        segmentation_orig = self.inv_trans(segmentation)
+        segmentation_orig = self.inv_trans_dense(segmentation)
 
         return segmentation_orig, low_res_logits, segmentation_model_arr

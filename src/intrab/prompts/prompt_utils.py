@@ -1,3 +1,4 @@
+from functools import partial
 from loguru import logger
 import numpy as np
 from copy import deepcopy
@@ -9,6 +10,7 @@ from scipy.interpolate import interp1d
 
 from intrab.model.inferer import Inferer
 from intrab.prompts.prompt import Points, PromptStep
+from intrab.utils.transforms import orig_to_canonical_sparse_coords, transform_prompt_to_model_coords
 
 # def get_neg_clicks_3D(gt, n_clicks, border_distance = 10): # Warning: dilation function is VERY slow! ~ 13 seconds on my machine
 #     struct_element = ball(border_distance)
@@ -411,8 +413,10 @@ def get_seed_point(gt, n_clicks, seed) -> PromptStep:
 
 
 def propagate_point(
-    inferer: Inferer, seed_prompt: PromptStep, slices_to_infer: list[int], upwards: bool, seed: int, n_clicks=5
+    inferer: Inferer, seed_prompt_orig: PromptStep, slices_to_infer: list[int], upwards: bool, seed: int, n_clicks=5
 ) -> tuple[np.ndarray, np.ndarray]:
+    # Seed prompt is supplied in orig coordinates, need to transform to model coordinates so that the later prompts are all consistent
+    seed_prompt = inferer.transform_promptstep_to_model_coords(seed_prompt_orig)
 
     # assert len(seed_prompt.coords) == 1, "Seed point must contain only one point prompt."
     start_slice = seed_prompt.coords[0][-1]
@@ -424,7 +428,7 @@ def propagate_point(
     all_labels = [seed_prompt.labels]
     current_prompt = seed_prompt
     for slice_id in slices_todo:
-        current_seg_nib, _, _ = inferer.predict(current_prompt)
+        current_seg_nib, _, _ = inferer.predict(current_prompt, promptstep_in_model_coord_system = True)
         current_seg = inferer.transform_to_model_coords_dense(current_seg_nib, is_seg=True)[0]
         coords_xyz = get_fg_points_from_slice(
             current_seg[slice_id], n_clicks=n_clicks, slice_index=slice_id, seed=seed
@@ -466,7 +470,7 @@ def get_seed_box(gt):
     return box_prompt
 
 
-def propagate_box(inferer: Inferer, seed_box: PromptStep, slices_to_infer: list[int], upwards: bool) -> dict:
+def propagate_box(inferer: Inferer, seed_box_orig: PromptStep, slices_to_infer: list[int], upwards: bool) -> dict:
     """"""
     # if upwards:
 
@@ -480,7 +484,9 @@ def propagate_box(inferer: Inferer, seed_box: PromptStep, slices_to_infer: list[
     #         min_slice = slices_to_infer.min()
     #         return list(range(current_slice - 1, min_slice - 1, -1))
 
-    assert len(seed_box.boxes) == 1, "Seed box must contain only one box prompt."
+    assert len(seed_box_orig.boxes) == 1, "Seed box must contain only one box prompt."
+    seed_box = inferer.transform_promptstep_to_model_coords(seed_box_orig)
+
     start_slice = list(seed_box.boxes.keys())[0]
     slices_todo = get_slices_to_do(start_slice, slices_to_infer, upwards, include_start=False, include_end=True)
     if len(slices_todo) == 0:
@@ -498,7 +504,7 @@ def propagate_box(inferer: Inferer, seed_box: PromptStep, slices_to_infer: list[
 
         # If there is no next slice to infer, we can stop here.
         if cnt != len(slices_todo) - 1:
-            segmentation = inferer.predict(current_prompt)[-1]
+            segmentation = inferer.predict(current_prompt, promptstep_in_model_coord_system=True)[-1]
             # segmentation, _ = inferer.transform_to_model_coords(segmentation, is_seg=True)
             if np.all(segmentation[slice_idx] == 0):  # Terminate if no fg generated
                 logger.debug("No prediction despite prompt given. Stopping propagation.")

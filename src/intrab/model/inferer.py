@@ -1,10 +1,13 @@
 from abc import ABC, abstractmethod
+from functools import partial
 from pathlib import Path
-from typing import Literal, Sequence
+from typing import Callable, Literal, Sequence
 
+from loguru import logger
 import nibabel as nib
 import numpy as np
-from intrab.prompts.prompt import PromptStep
+from intrab.prompts.prompt import Boxes3D, PromptStep
+from intrab.utils.transforms import transform_prompt_to_model_coords
 
 # Mask corresponds to being an interactive method allowing
 prompt_categories = Literal["box", "point", "mask"]
@@ -21,7 +24,12 @@ class Inferer(ABC):
         self.loaded_image: Path | None = None
         # Just used for 2D models and not for 3D models
         self.image_embeddings_dict = {}
-        self.inv_trans: callable[[np.ndarray], nib.Nifti1Image] = None
+        
+        self.orig_affine: tuple[float, float, float] = None
+        self.orig_shape: tuple[int, int, int] = None
+        self.img: np.ndarray = None
+        self.new_shape: tuple[int, int, int] = None
+        self.inv_trans_dense: Callable[[np.ndarray], nib.Nifti1Image] = None
 
     @abstractmethod
     def load_model(self, checkpoint_path, device):
@@ -45,7 +53,7 @@ class Inferer(ABC):
 
     @abstractmethod
     def predict(
-        self, prompts: PromptStep, prev_seg: nib.Nifti1Image
+        self, prompts: PromptStep, prev_seg: nib.Nifti1Image, promptstep_in_model_coord_system: bool,
     ) -> tuple[nib.Nifti1Image, np.ndarray, np.ndarray]:
         """Obtain logits"""
         pass
@@ -71,6 +79,9 @@ class Inferer(ABC):
     def get_transformed_groundtruth(self, nifti: Path | nib.Nifti1Image) -> np.ndarray:
         """Transforms the nifti or the groundtruth to the model's coordinate system."""
         return self.transform_to_model_coords_dense(nifti, is_seg=True)[0]
+    
+    def transform_promptstep_to_model_coords(self, prompt_orig: PromptStep) -> PromptStep:
+        return transform_prompt_to_model_coords(prompt_orig, self.transform_to_model_coords_sparse)
 
     def merge_seg_with_prev_seg(
         self, new_seg: np.ndarray, prev_seg: str | Path | nib.Nifti1Image, slices_inferred: np.ndarray
