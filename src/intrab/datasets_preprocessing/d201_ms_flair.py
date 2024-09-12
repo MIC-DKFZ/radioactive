@@ -98,13 +98,13 @@ def preprocess(raw_download_path: Path):
             img = sitk.ReadImage(str(Path(tempdir) / "tmp_file.nrrd"))
             sitk.WriteImage(img, label_target_path / f"{case_id}_Flair.nii.gz")
         sitk.WriteImage(flair_img, image_target_path / f"{case_id}_Flair_0000.nii.gz")
-        # ------------------------------- Dataset Json ------------------------------- #
+    # ------------------------------- Dataset Json ------------------------------- #
     with open(output_dir / "dataset.json", "w") as f:
         json.dump(
             {
                 "channel_names": {"0": "T1 MRI"},
                 "labels": {"background": 0, "lesion": 1},
-                "numTraining": len(cases),
+                "numTraining": len(list(cases)),
                 "file_ending": ".nrrd",
                 "name": "D201 MS FLAIR",
                 "reference": "https://data.mendeley.com/datasets/8bctsm8jz7/1",
