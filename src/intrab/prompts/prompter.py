@@ -214,7 +214,8 @@ class BoxInterpolationPrompter(Prompter):
 
     def get_prompt(self) -> PromptStep:
         max_possible_clicks = min(self.n_slice_box_interpolation, len(self.get_slices_to_infer()))
-        prompt_RAS = get_seed_boxes(self.groundtruth_SAR, max_possible_clicks)
+        seed_prompt_RAS = get_seed_boxes(self.groundtruth_SAR, max_possible_clicks)
+        prompt_RAS = box_interpolation(seed_prompt_RAS)
         prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
         return prompt_orig
 
