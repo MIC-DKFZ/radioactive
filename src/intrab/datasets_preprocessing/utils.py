@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 import shutil
-from typing import Literal
+from typing import Literal, Sequence
 from loguru import logger
 import nibabel as nib
 import numpy as np
@@ -24,7 +24,7 @@ except ImportError:
 dataset_keys = Literal[
     "segrap",
     "hanseg",
-    "ms_brain",
+    "ms_flair",
     "mets_to_brain",
     "hntsmrg",
     "hcc_tace",
@@ -35,18 +35,31 @@ dataset_keys = Literal[
     "pengwin",
 ]
 
+"""
+INFO:
+TCIA_MANIFEST:
+    Some collections are not downloadable via the TCIA API, so we provide manifest files to download them.
+    The path given needs to be relative to the datasets_preprocessing folder.
+"""
 
 DATASET_URLS: dict[dataset_keys, dict] = {
     # ------------------------------- Mendeley Data ------------------------------ #
-    "ms_brain": {"source": "mendeley", "dataset_id": "8bctsm8jz7", "size": 0.7},
+    "ms_flair": {"source": "mendeley", "dataset_id": "8bctsm8jz7", "size": 0.7},
     # https://data.mendeley.com/datasets/8bctsm8jz7/1
     # ----------------------------------- TCIA ----------------------------------- #
     "hcc_tace": {"source": "tcia", "collection": "hcc-tace-seg", "size": 28.57},
     "adrenal_acc": {"source": "tcia", "collection": "adrenal-acc-ki67-seg", "size": 9.89},
-    "rider_lung": {"source": "tcia", "collection": "rider-lungct-seg", "size": 8.53},  #
+    "rider_lung": {
+        "source": "tcia_manifest",
+        "files": (
+            "rider_tcia/RIDER-Lung-CT-Scans.tcia",
+            "rider_tcia/RIDER-Lung-CT-Seg.tcia",
+        ),
+        "size": 8.53,
+    },  #
     "colorectal": {"source": "tcia", "collection": "colorectal-liver-metastases", "size": 10.91},
     "lnq": {"source": "tcia", "collection": "mediastinal-lymph-node-seg", "size": 35.3},
-    "mets_to_brain": {"source": "tcia", "collection": "pretreat-metstobrain-masks", "size": 1.7},  # 1.7 GB
+    "mets_to_brain": {"source": "tcia", "collection": "Pretreat-MetsToBrain-Masks", "size": 1.7},  # 1.7 GB
     # ---------------------------------- Zenodo ---------------------------------- #
     "hanseg": {"source": "zenodo", "zenodo_id": 7442914, "size": 4.9},
     "hntsmrg": {"source": "zenodo", "zenodo_id": 11199559, "size": 15},
@@ -70,6 +83,24 @@ def download_from_tcia(collection_name: str, download_dir: Path) -> None:
     os.makedirs(download_dir, exist_ok=True)
     data = nbia.getSeries(collection=collection_name)
     nbia.downloadSeries(data, path=str(download_dir), csv_filename=f"{download_dir}/metadata")
+
+
+def download_from_tcia_manifest(manifest_files: Sequence[str], download_dir: Path) -> None:
+    """
+    Download from TCIA using the NBIA API.
+    Unfortunately this can be very unresponsive since TCIA Servers / APIs are bad.
+    """
+
+    os.makedirs(download_dir, exist_ok=True)
+
+    for manifest in manifest_files:
+        manifest_path = Path(__file__).parent / manifest
+        download_dir_man = download_dir / (Path(manifest).name.split(".")[0])
+        download_dir_man.mkdir(parents=True, exist_ok=True)
+        nbia.downloadSeries(
+            manifest_path, path=str(download_dir_man), input_type="manifest", csv_filename=f"{download_dir}/metadata"
+        )
+        # nbia.downloadSeries(data, path=str(download_dir), csv_filename=f"{download_dir}/metadata")
 
 
 def download_from_zenodo(zenodo_id: int, download_dir: Path) -> None:
