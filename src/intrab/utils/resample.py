@@ -7,6 +7,12 @@ def get_current_spacing_from_affine(affine: np.ndarray):
     return np.abs(affine.diagonal()[:-1])
 
 def resample_to_spacing(seg:np.ndarray, current_spacing: Tuple|np.ndarray, new_spacing: Tuple|np.ndarray = (1.5, 1.5, 1.5), is_seg:bool = True):
+    """
+    Resample an image to a given spacing.
+    Warning: This function is not a true self inverse. In particular, the dense version applied twice to a mask might not
+    return something of the same shape. Thus, when returning to the original spacing, it's better to use resample_to_shape_sparse
+    using the original shape.
+    """
     # Find new shape to change to
     new_shape = compute_new_shape(seg.shape, current_spacing, new_spacing)
 

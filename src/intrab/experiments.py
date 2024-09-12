@@ -112,7 +112,7 @@ def run_experiments_organ(
             if prompter.is_static:
                 with logger.catch(level="WARNING"):
                     semantic_evaluation(
-                        semantic_gt_path=results_dir / "binarised_gts" / target_name,
+                        semantic_gt_path=results_dir.parent / "binarised_gts" / target_name,
                         semantic_pd_path=results_dir / prompter.name / target_name,
                         output_path=results_dir / prompter.name,
                         classes_of_interest=(1,),
