@@ -70,7 +70,7 @@ def preprocess(raw_download_path: Path):
 
     cases = data_dir.glob("Patient*")
 
-    for cur_case in tqdm(list(cases), desc="Processing MS FLAIR dataset"):
+    for cur_case in tqdm(list(cases), desc="Processing MS FLAIR dataset", leave=False):
         case_id = int(cur_case.name.split("-")[-1])
         flair_path = cur_case / f"{case_id}-Flair.nii"
         flair_seg_path = cur_case / f"{case_id}-LesionSeg-Flair.nii"
