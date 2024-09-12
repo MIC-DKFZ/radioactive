@@ -48,6 +48,10 @@ class Prompter:
         self.orig_affine: tuple[float, float, float] = None
         self.orig_shape: tuple[int, int, int] = None
 
+        # Overwrite this if the prompt that get_prompt supplies is in model coordinates, not orig
+        # like point/box propagation
+        self.promptstep_in_model_coord_system = False
+
     def get_performance(self, pred: np.ndarray | nib.Nifti1Image) -> float:
         """Get the DICE between prediciton and groundtruths."""
         if isinstance(pred, nib.Nifti1Image):
@@ -99,7 +103,7 @@ class Prompter:
         prompt: PromptStep = self.get_prompt()
         pred: nib.Nifti1Image
         logits: np.ndarray
-        pred, logits, _ = self.inferer.predict(prompt)
+        pred, logits, _ = self.inferer.predict(prompt, promptstep_in_model_coord_system=self.promptstep_in_model_coord_system)
         perf = self.get_performance(pred.get_fdata())
 
         return PromptResult(predicted_image=pred, logits=logits, prompt_step=prompt, perf=perf, n_step=0, dof=0)
@@ -159,6 +163,8 @@ class PointPropagationPrompter(Prompter):
         super().__init__(inferer, seed)
         self.n_seed_points_point_propagation = n_seed_points_point_propagation
         self.n_points_propagation = n_points_propagation
+
+        self.promptstep_in_model_coord_system = True # Overwrite default
 
     def get_prompt(self) -> PromptStep:
         """
@@ -221,13 +227,18 @@ class BoxInterpolationPrompter(Prompter):
 
 
 class BoxPropagationPrompter(Prompter):
+    def __init__(self, inferer: Inferer, seed: int = 11111):
+        super().__init__(inferer, seed)
+
+        self.promptstep_in_model_coord_system = True # Overwrite default
 
     def get_prompt(self) -> tuple[nib.Nifti1Image, dict[int, np.ndarray]]:
         median_box_seed_prompt_RAS: PromptStep = get_seed_boxes(self.groundtruth_SAR, 1)
         slices_to_infer = np.where(np.any(self.groundtruth_SAR, axis=(1, 2)))[0]
 
         median_box_seed_prompt_orig = self.transform_prompt_to_original_coords(median_box_seed_prompt_RAS)
-        return box_propagation(self.inferer, median_box_seed_prompt_orig, slices_to_infer)
+        all_boxes_model = box_propagation(self.inferer, median_box_seed_prompt_orig, slices_to_infer)
+        return all_boxes_model
 
 
 class NPoints3DVolumePrompter(Prompter):
