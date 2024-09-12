@@ -25,7 +25,40 @@
             "console": "integratedTerminal",
             "args": [
                 "--datasets",
-                "pengwin"
+                // "hcc_tace",˚
+                // "adrenal_acc",
+                "rider_lung",
+                // "colorectal",
+                // "lnq",
+                // "mets_to_brain",
+            ],
+            "env":{
+                "INTRAB_DATA_PATH": "/mnt/cluster-data-all/t006d/intra_bench/datasets",
+                //"INTRAB_DATA_PATH": "/mnt/E132-Projekte/Projects/2023_Rokuss_Tracking/Datasets",
+                "INTRAB_MODEL_PATH": "/mnt/cluster-data-all/t006d/intra_bench/checkpoints",
+                "INTRAB_RESULTS_PATH": "/mnt/cluster-data-all/t006d/intra_bench/results"
+            }
+        },
+        {
+            "name": "Preprocess datasets",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/intrab/datasets_preprocessing/preprocess_datasets.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "--datasets",
+                    // "segrap",
+                    // "hanseg",
+                    // "ms_flair",
+                    // "mets_to_brain",
+                    // "hntsmrg",
+                    // "hcc_tace",
+                    // "adrenal_acc",
+                    // "rider_lung",
+                    // "colorectal",
+                    "lnq",
+                    // "pengwin",
             ],
             "env":{
                 "INTRAB_DATA_PATH": "/mnt/cluster-data-all/t006d/intra_bench/datasets",
