@@ -6,6 +6,7 @@ from intrab.datasets_preprocessing.utils import (
     DATASET_URLS,
     dataset_keys,
     download_from_tcia,
+    download_from_tcia_manifest,
     download_from_zenodo,
     download_from_gdrive,
     download_from_mendeley,
@@ -40,19 +41,25 @@ def download_datasets(datasets_to_download: dict[dataset_keys, dict]):
     download_path = get_dataset_path().parent / "raw_dataset_downloads"
     download_path.mkdir(exist_ok=True)
     for dataset_key, infos in datasets_to_download.items():
-        cur_dataset_path = download_path / dataset_key
-        cur_dataset_path.mkdir(exist_ok=True)
-        logger.info(f"Starting download of {dataset_key} dataset.")
-        if infos["source"] == "zenodo":
-            download_from_zenodo(infos["zenodo_id"], cur_dataset_path)
-        elif infos["source"] == "tcia":
-            download_from_tcia(infos["collection"], cur_dataset_path)
-        elif infos["source"] == "gdrive":
-            download_from_gdrive(infos["url"], cur_dataset_path)
-        elif infos["source"] == "mendeley":
-            download_from_mendeley(infos["dataset_id"], cur_dataset_path)
-        logger.info("Extracting zips in dataset directory")
-        extract_zips_in_dir(cur_dataset_path, pwd=infos.get("pwd", None))
+        try:
+            cur_dataset_path = download_path / dataset_key
+            cur_dataset_path.mkdir(exist_ok=True)
+            logger.info(f"Starting download of {dataset_key} dataset.")
+            if infos["source"] == "zenodo":
+                download_from_zenodo(infos["zenodo_id"], cur_dataset_path)
+            elif infos["source"] == "tcia":
+                download_from_tcia(infos["collection"], cur_dataset_path)
+            elif infos["source"] == "tcia_manifest":
+                download_from_tcia_manifest(infos["files"], cur_dataset_path)
+            elif infos["source"] == "gdrive":
+                download_from_gdrive(infos["url"], cur_dataset_path)
+            elif infos["source"] == "mendeley":
+                download_from_mendeley(infos["dataset_id"], cur_dataset_path)
+            logger.info("Extracting zips in dataset directory")
+            extract_zips_in_dir(str(cur_dataset_path), pwd=infos.get("pwd", None))
+        except Exception as e:
+            logger.error(f"Failed to download {dataset_key} dataset.")
+            logger.error(e)
     pass
 
 
