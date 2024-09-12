@@ -225,8 +225,8 @@ def _transform_box_dict_to_model_coords(box_dict: dict[int, np.ndarray], transfo
         vertices_combined = np.array([transform_coords(min_vertex),
                                     transform_coords(max_vertex)])
 
-        min_vertex_transformed = np.max(vertices_combined, axis = 0)
-        max_vertex_transformed = np.min(vertices_combined, axis = 0)
+        min_vertex_transformed = np.min(vertices_combined, axis = 0)
+        max_vertex_transformed = np.max(vertices_combined, axis = 0)
 
         if min_vertex_transformed[2] != max_vertex_transformed[2]:
             logger.warning('Transformed bounding box does not lie in one slice in the final axis; was it formatted correctly on input?')
