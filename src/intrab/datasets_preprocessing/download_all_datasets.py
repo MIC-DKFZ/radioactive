@@ -10,15 +10,16 @@ from intrab.datasets_preprocessing.utils import (
     download_from_zenodo,
     download_from_gdrive,
     download_from_mendeley,
+    download_from_idc,
 )
 from argparse import ArgumentParser
 from loguru import logger
 import glob
 
 
-def extract_zips_in_dir(dataset_dict: dict, pwd: str | None):
+def extract_zips_in_dir(dataset_path: Path, pwd: str | None):
     """Unzip the HaN Seg dataset"""
-    zip_files = glob.glob(str(dataset_dict / "*.zip"))
+    zip_files = glob.glob(str(dataset_path / "*.zip"))
     for file in zip_files:
         file_path = Path(file)
         print(f"Extracting {file}")
@@ -55,6 +56,8 @@ def download_datasets(datasets_to_download: dict[dataset_keys, dict]):
                 download_from_gdrive(infos["url"], cur_dataset_path)
             elif infos["source"] == "mendeley":
                 download_from_mendeley(infos["dataset_id"], cur_dataset_path)
+            elif infos["source"] == "idc":
+                download_from_idc(infos["collection"], cur_dataset_path)
             logger.info("Extracting zips in dataset directory")
             extract_zips_in_dir(str(cur_dataset_path), pwd=infos.get("pwd", None))
         except Exception as e:
