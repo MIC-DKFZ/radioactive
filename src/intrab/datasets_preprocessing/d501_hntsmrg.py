@@ -60,7 +60,7 @@ def preprocess(raw_dataset_path: Path):
     with open(get_dataset_path() / "Dataset501_hntsmrg_pre_primarytumor" / "dataset.json", "w") as f:
         json.dump(
             {
-                "channel_names": {"0": "CT"},
+                "channel_names": {"0": "T1 MRI"},
                 "labels": {"background": 0, "Primary Tumor": 1},
                 "numTraining": 150,
                 "file_ending": ".nii.gz",
