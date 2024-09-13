@@ -59,7 +59,7 @@ def download_datasets(datasets_to_download: dict[dataset_keys, dict]):
             elif infos["source"] == "idc":
                 download_from_idc(infos["collection"], cur_dataset_path)
             logger.info("Extracting zips in dataset directory")
-            extract_zips_in_dir(str(cur_dataset_path), pwd=infos.get("pwd", None))
+            extract_zips_in_dir(cur_dataset_path, pwd=infos.get("pwd", None))
         except Exception as e:
             logger.error(f"Failed to download {dataset_key} dataset.")
             logger.error(e)
