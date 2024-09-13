@@ -50,7 +50,7 @@ def read_dicom_meta_data(dicom_folder: Path) -> dict:
     return dicom
 
 
-def get_matching_dicoms(dicoms: list[Path]) -> dict[str, dict[str, list[Path]]]:
+def get_dicoms_meta_info(dicoms: list[Path]) -> dict[str, dict[str, list[Path]]]:
     # Looks through a list of dicom folders and returns a dictionary with the matching CT and SEG dicoms.
     all_dicoms = {}
     for d in tqdm(dicoms, desc="Reading DICOM meta data", leave=False):
@@ -58,10 +58,62 @@ def get_matching_dicoms(dicoms: list[Path]) -> dict[str, dict[str, list[Path]]]:
         study_name: str = meta_data.StudyInstanceUID
         modality = meta_data.Modality
 
+        content = {"filepath": d, "PatientID": meta_data.PatientID, "StudyInstanceUID": study_name}
+
         if study_name not in all_dicoms:
             all_dicoms[study_name] = {}
 
         if modality not in all_dicoms[study_name]:
             all_dicoms[study_name][modality] = []
-        all_dicoms[study_name][modality].append(d)
+        if modality == "SEG":
+            content["reference_series"] = meta_data.ReferencedSeriesSequence[0].SeriesInstanceUID
+
+        all_dicoms[study_name][modality].append(content)
     return all_dicoms
+
+
+def get_matching_img(img_dicom_meta_info: list[dict], seg_dicom_meta_info: dict) -> dict:
+    """
+    Finds the reference image for the segmentation and returns the matching image UUID.
+    """
+    # Matches the image to the segmentation
+    for img in img_dicom_meta_info:
+        im_uid = seg_dicom_meta_info["reference_series"]
+        if img["filepath"] == im_uid:
+            return img
+    return None
+
+
+def resample_to_match(reference_img: sitk.Image, resample_img: sitk.Image, is_seg: bool) -> sitk.Image:
+    """
+    Resample the target image to match the reference image's size, spacing, origin, and direction.
+
+    Args:
+    - reference_img (sitk.Image): The image whose properties (size, spacing, origin, direction) you want to match.
+    - target_img (sitk.Image): The image to be resampled to match the reference.
+
+    Returns:
+    - sitk.Image: The resampled target image.
+    """
+    # Create the resample filter
+    resample = sitk.ResampleImageFilter()
+
+    # Set reference properties: size, spacing, origin, and direction
+    resample.SetSize(reference_img.GetSize())
+    resample.SetOutputSpacing(reference_img.GetSpacing())
+    resample.SetOutputOrigin(reference_img.GetOrigin())
+    resample.SetOutputDirection(reference_img.GetDirection())
+
+    # Set the interpolator - use nearest neighbor for label images or linear for continuous data
+    if is_seg:
+        resample.SetInterpolator(sitk.sitkNearestNeighbor)
+    else:
+        resample.SetInterpolator(sitk.sitkLinear)  # Change to sitkNearestNeighbor if working with segmentation
+
+    # Set the default pixel value for any padding area (e.g., 0 for background)
+    resample.SetDefaultPixelValue(0)
+
+    # Resample the target image
+    resampled_img = resample.Execute(resample_img)
+
+    return resampled_img
