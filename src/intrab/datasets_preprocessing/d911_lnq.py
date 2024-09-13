@@ -75,8 +75,9 @@ def preprocess(raw_download_dir: Path):
         with TemporaryDirectory() as tempdir:
             innrrd.to_file(Path(tempdir) / f"tmp.nrrd")
             seg = sitk.ReadImage(str(Path(tempdir) / "tmp.nrrd"))
-            ct = sitk.ReadImage(str(ct_path))
-            padded_seg = resample_to_match(reference_img=ct, resample_img=seg, is_seg=True)
+            nrrd.write(str(Path(tempdir) / "tmp_ct.nrrd"), ct[0], ct[1])
+            temp_ct = sitk.ReadImage(str(Path(tempdir) / "tmp_ct.nrrd"))
+            padded_seg = resample_to_match(reference_img=temp_ct, resample_img=seg, is_seg=True)
             sitk.WriteImage(padded_seg, str(labels_dir / f"lnq_{cnt:04d}.nrrd"))
 
         innrrd.to_file(labels_dir / f"not_padded_lnq_{cnt:04d}.nrrd")
