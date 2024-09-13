@@ -12,6 +12,8 @@ import tempfile
 import SimpleITK as sitk
 from tqdm import tqdm
 import gdown
+from idc_index import index
+
 
 import os
 
@@ -47,8 +49,8 @@ DATASET_URLS: dict[dataset_keys, dict] = {
     "ms_flair": {"source": "mendeley", "dataset_id": "8bctsm8jz7", "size": 0.7},
     # https://data.mendeley.com/datasets/8bctsm8jz7/1
     # ----------------------------------- TCIA ----------------------------------- #
-    "hcc_tace": {"source": "tcia", "collection": "hcc-tace-seg", "size": 28.57},
-    "adrenal_acc": {"source": "tcia", "collection": "adrenal-acc-ki67-seg", "size": 9.89},
+    "hcc_tace": {"source": "idc", "collection": "hcc_tace_seg", "size": 28.57},
+    "adrenal_acc": {"source": "idc", "collection": "adrenal_acc_ki67_seg", "size": 9.89},
     "rider_lung": {
         "source": "tcia_manifest",
         "files": (
@@ -57,7 +59,7 @@ DATASET_URLS: dict[dataset_keys, dict] = {
         ),
         "size": 8.53,
     },  #
-    "colorectal": {"source": "tcia", "collection": "colorectal-liver-metastases", "size": 10.91},
+    "colorectal": {"source": "idc", "collection": "colorectal_liver_metastases", "size": 10.91},
     "lnq": {"source": "tcia", "collection": "mediastinal-lymph-node-seg", "size": 35.3},
     "mets_to_brain": {"source": "tcia", "collection": "Pretreat-MetsToBrain-Masks", "size": 1.7},  # 1.7 GB
     # ---------------------------------- Zenodo ---------------------------------- #
@@ -101,6 +103,16 @@ def download_from_tcia_manifest(manifest_files: Sequence[str], download_dir: Pat
             manifest_path, path=str(download_dir_man), input_type="manifest", csv_filename=f"{download_dir}/metadata"
         )
         # nbia.downloadSeries(data, path=str(download_dir), csv_filename=f"{download_dir}/metadata")
+
+
+def download_from_idc(collection_id: str, download_dir: Path) -> None:
+    """
+    Download from TCIA using the NBIA API.
+    Unfortunately this can be very unresponsive since TCIA Servers / APIs are bad.
+    """
+    os.makedirs(download_dir, exist_ok=True)
+    idc_client = index.IDCClient()
+    idc_client.download_collection(collection_id=collection_id, downloadDir=str(download_dir), use_s5cmd_sync=True)
 
 
 def download_from_zenodo(zenodo_id: int, download_dir: Path) -> None:
