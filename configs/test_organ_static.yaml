@@ -15,6 +15,7 @@ prompting:
   type: "static"
   prompt_styles:
     - "NPointsPer2DSlicePrompter"
+    - "CenterPointPrompter"
     - "PointInterpolationPrompter"
     - "PointPropagationPrompter"
     - "BoxPer2DSlicePrompter"

@@ -13,6 +13,7 @@ from intrab.prompts.prompt_utils import (
     box_interpolation,
     box_propagation,
     get_bbox3d_sliced,
+    get_fg_point_from_cc_center,
     get_fg_points_from_cc_centers,
     get_minimal_boxes_row_major,
     get_pos_clicks2D_row_major,
@@ -124,11 +125,34 @@ class NPointsPer2DSlicePrompter(Prompter):
 
     def get_prompt(self) -> PromptStep:
         """
-        Generate segmentation given prompt-style and model behavior.
-        :return: str (Path to the predicted segmentation)
+        Prompt by creating n randomly chosen foregroudn points per slice
         """
         # Maybe name this SlicePrompts  to be less ambiguous
         prompt_RAS = get_pos_clicks2D_row_major(self.groundtruth_SAR, self.n_points_per_slice, self.seed)
+        prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
+        return prompt_orig
+    
+class CenterPointPrompter(Prompter):
+    def get_prompt(self) -> PromptStep:
+        """
+        Prompt by taking the largest connected component of each slice, taking its centroid and correcting it to the nearest foreground pixel
+        """
+        # Get fg slices
+        volume_fg = np.where(self.groundtruth_SAR == 1)  # Get foreground indices (formatted as triple of arrays)
+        volume_fg = np.array(volume_fg).T  # Reformat to numpy array of shape n_fg_voxels x 3
+
+        fg_slices = np.unique(
+            volume_fg[:, 0]
+        )
+
+        slice_prompts = []
+        for slice_idx in fg_slices:
+            gt_slice = self.groundtruth_SAR[slice_idx]
+            slice_prompt = get_fg_point_from_cc_center(gt_slice)
+            slice_prompts.append(np.array([slice_prompt[1], slice_prompt[0], slice_idx])) # reverse order of slice_prompt since it's an axial slice from SAR, and add 3d context to put prompt into xyz
+
+        coords_RAS = np.array(slice_prompts)
+        prompt_RAS = PromptStep(point_prompts = (coords_RAS, np.ones(len(coords_RAS))))
         prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
         return prompt_orig
 
@@ -271,4 +295,5 @@ static_prompt_styles = Literal[
     "BoxPropagationPrompter",
     "NPoints3DVolumePrompter",
     "Box3DVolumePrompter",
+    "CenterPointPrompter"
 ]

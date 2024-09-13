@@ -10,6 +10,7 @@ from intrab.prompts.prompter import (
     BoxPer2DSlicePrompter,
     BoxPer2dSliceFrom3DBoxPrompter,
     BoxPropagationPrompter,
+    CenterPointPrompter,
     NPoints3DVolumePrompter,
     NPointsPer2DSlicePrompter,
     PointInterpolationPrompter,
@@ -72,6 +73,10 @@ def get_wanted_supported_prompters(
                         n_points_per_slice=pro_conf.twoD_n_click_random_points,
                         seed=seed,
                     )
+                )
+            if "CenterPointPrompter" in wanted_prompt_styles:
+                prompters.append(
+                    CenterPointPrompter(inferer, seed)
                 )
             if "PointInterpolationPrompter" in wanted_prompt_styles:
                 prompters.append(
