@@ -10,7 +10,7 @@ import nrrd
 from toinstance import InstanceNrrd
 from tqdm import tqdm
 
-from intrab.datasets_preprocessing.conversion_utils import dicom_to_nrrd, get_matching_dicoms
+from intrab.datasets_preprocessing.conversion_utils import dicom_to_nrrd, get_dicoms_meta_info, resample_to_match
 from intrab.utils.paths import get_dataset_path
 
 
@@ -56,13 +56,13 @@ def preprocess(raw_download_dir: Path):
     labels_dir.mkdir(parents=True, exist_ok=True)
 
     # Get Image Label Pairs
-    all_dicoms = get_matching_dicoms(dicoms)
+    all_dicoms = get_dicoms_meta_info(dicoms)
     all_dicoms = {key: all_dicoms[key] for key in sorted(all_dicoms)}
     cnt_dicom_map = {}
 
     for cnt, (study_name, dicom_data) in tqdm(enumerate(all_dicoms.items()), desc="Converting LNQ DICOMs to NRRD"):
-        ct_path = dicom_data["CT"][0]  # We only have one CT and one SEG in LNQ
-        seg_path = dicom_data["SEG"][0]
+        ct_path = dicom_data["CT"][0]["filepath"]  # We only have one CT and one SEG in LNQ
+        seg_path = dicom_data["SEG"][0]["filepath"]
         ct: tuple[np.ndarray, dict] = dicom_to_nrrd(ct_path)
         seg: tuple[np.ndarray, dict] = dicom_to_nrrd(seg_path)
 
@@ -72,7 +72,14 @@ def preprocess(raw_download_dir: Path):
             do_cc=True,
             cc_kwargs={"dilation_kernel_radius": 0, "label_connectivity": 3},
         )
-        innrrd.to_file(labels_dir / f"lnq_{cnt:04d}.nrrd")
+        with TemporaryDirectory() as tempdir:
+            innrrd.to_file(Path(tempdir) / f"tmp.nrrd")
+            seg = sitk.ReadImage(str(Path(tempdir) / "tmp.nrrd"))
+            ct = sitk.ReadImage(str(ct_path))
+            padded_seg = resample_to_match(reference_img=ct, resample_img=seg, is_seg=True)
+            sitk.WriteImage(padded_seg, str(labels_dir / f"lnq_{cnt:04d}.nrrd"))
+
+        innrrd.to_file(labels_dir / f"not_padded_lnq_{cnt:04d}.nrrd")
         nrrd.write(str(images_dir / f"lnq_{cnt:04d}_0000.nrrd"), ct[0], ct[1])
         cnt_dicom_map[cnt] = study_name
     # ------------------------------- Dataset Json ------------------------------- #
