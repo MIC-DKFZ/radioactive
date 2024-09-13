@@ -79,7 +79,7 @@ def preprocess(raw_download_dir: Path):
     with open(output_dir / "dataset.json", "w") as f:
         json.dump(
             {
-                "channel_names": {"0": "T1 MRI"},
+                "channel_names": {"0": "CT"},
                 "labels": {"background": 0, "lesion": 1},
                 "numTraining": len(list(all_dicoms)),
                 "file_ending": ".nrrd",
