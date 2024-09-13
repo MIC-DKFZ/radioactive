@@ -504,12 +504,13 @@ def propagate_box(inferer: Inferer, seed_box_orig: PromptStep, slices_to_infer: 
 
         # If there is no next slice to infer, we can stop here.
         if cnt != len(slices_todo) - 1:
-            segmentation = inferer.predict(current_prompt, promptstep_in_model_coord_system=True)[-1]
-            # segmentation, _ = inferer.transform_to_model_coords(segmentation, is_seg=True)
+            segmentation = inferer.predict(current_prompt, promptstep_in_model_coord_system=True)[0]
+            segmentation, _ = inferer.transform_to_model_coords_dense(segmentation, is_seg=True)
             if np.all(segmentation[slice_idx] == 0):  # Terminate if no fg generated
                 logger.debug("No prediction despite prompt given. Stopping propagation.")
                 break
-            bbox_slice = _get_bbox2d_row_major(segmentation)
+
+            bbox_slice = _get_bbox2d_row_major(segmentation[slice_idx])
             current_prompt = PromptStep(box_prompts={0: bbox_slice})
             # The slice index is 0 deliberately as it is never needed.
     return all_boxes

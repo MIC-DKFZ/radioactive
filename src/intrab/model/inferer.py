@@ -67,7 +67,7 @@ class Inferer(ABC):
         pass
 
     @abstractmethod
-    def transform_to_model_coords_dense(self, nifti: Path | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
+    def transform_to_model_coords_dense(self, nifti: Path | nib.Nifti1Image, is_seg: bool) -> tuple[np.ndarray, Callable]:
         """Transform a dense array (segmentation or image) to the model's coordinate system"""
         pass
 
