@@ -144,21 +144,21 @@ def preprocess(raw_download_dir: Path):
 
                 ct = dicom_to_nrrd(tp_dir / ct_path)
                 orig_seg = dicom_to_nrrd(tp_dir / seg_path)
-                (liver_output_dir / "orig").mkdir(parents=True, exist_ok=True)
-                # (liver_output_dir / "orig_seg").mkdir(parents=True, exist_ok=True)
-                for tmp_ct_path, tmp_ct_h in ct_headers.items():
-                    tmp_ct = dicom_to_nrrd(tp_dir / tmp_ct_path)
-                    nrrd.write(
-                        str(
-                            liver_output_dir
-                            / "orig"
-                            / f"ct_{tmp_ct_h.SeriesDescription.replace("/","")}_{patient}.nrrd"
-                        ),
-                        tmp_ct[0],
-                        tmp_ct[1],
-                    )
-                # nrrd.write(str(liver_output_dir / "orig_ct" / f"{patient}.nrrd"), ct[0], ct[1])
-                nrrd.write(str(liver_output_dir / "orig" / f"{patient}.nrrd"), orig_seg[0], orig_seg[1])
+                # (liver_output_dir / "orig").mkdir(parents=True, exist_ok=True)
+                # # (liver_output_dir / "orig_seg").mkdir(parents=True, exist_ok=True)
+                # for tmp_ct_path, tmp_ct_h in ct_headers.items():
+                #     tmp_ct = dicom_to_nrrd(tp_dir / tmp_ct_path)
+                #     nrrd.write(
+                #         str(
+                #             liver_output_dir
+                #             / "orig"
+                #             / f"ct_{tmp_ct_h.SeriesDescription.replace("/","")}_{patient}.nrrd"
+                #         ),
+                #         tmp_ct[0],
+                #         tmp_ct[1],
+                #     )
+                # # nrrd.write(str(liver_output_dir / "orig_ct" / f"{patient}.nrrd"), ct[0], ct[1])
+                # nrrd.write(str(liver_output_dir / "orig" / f"{patient}.nrrd"), orig_seg[0], orig_seg[1])
 
                 if ct[0].shape != orig_seg[0].shape[1:]:
                     print(f"Shape mismatch for {patient} {tp}")
@@ -173,7 +173,7 @@ def preprocess(raw_download_dir: Path):
                 }
 
                 print(f"Processing patient {patient} at timepoint {tp}")
-                for output_dir, sem_class in [(liver_output_dir, "liver"), (lesion_output_dir, "lestion")]:
+                for output_dir, sem_class in [(liver_output_dir, "liver"), (lesion_output_dir, "lesion")]:
                     images_dir = output_dir / "imagesTr"
                     labels_dir = output_dir / "labelsTr"
                     images_dir.mkdir(parents=True, exist_ok=True)
@@ -196,12 +196,12 @@ def preprocess(raw_download_dir: Path):
                         )
                     elif sem_class == "lesion":
                         keys_of_interest = [v for k, v in keys_in_labels.items() if k in ["Mass", "Necrosis"]]
-                        seg = (np.where(orig_seg[0][keys_of_interest] != 0, 1, 0), ct[1])
+                        seg = (np.sum(np.where(orig_seg[0][keys_of_interest] != 0, 1, 0), axis=0), ct[1])
                         innrrd = InstanceNrrd.from_semantic_map(
                             semantic_map=seg[0],
                             header=deepcopy(seg[1]),
-                            do_cc=False,
-                            cc_kwargs={"dilation_kernel_radius": 0, "label_connectivity": 3},
+                            do_cc=True,
+                            cc_kwargs={"dilation_kernel_radius": 0, "label_connectivity": 2},
                         )
 
                     innrrd.to_file(labels_dir / f"{patient}.nrrd")
