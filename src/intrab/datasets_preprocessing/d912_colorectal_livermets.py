@@ -75,7 +75,7 @@ def preprocess(raw_download_dir: Path):
     logger.info(f"Processing not-excluded {len(cases)} cases")
     matches = {}
 
-    for case_id in tqdm(list(cases)):
+    for case_id in tqdm(list(cases), desc="Reading DICOM meta data"):
         case_path = dicom_dir / case_id
         series_dir = list(case_path.iterdir())[0]
 
@@ -99,7 +99,7 @@ def preprocess(raw_download_dir: Path):
     imagesTr_dir.mkdir(parents=True, exist_ok=True)
     labelsTr_dir.mkdir(parents=True, exist_ok=True)
 
-    for case_id, paths in matches.items():
+    for case_id, paths in tqdm(matches.items(), desc="Converting DICOM to NRRD"):
         if (imagesTr_dir / (case_id + ".nrrd")).exists():
             continue
 
