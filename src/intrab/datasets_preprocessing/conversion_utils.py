@@ -36,6 +36,7 @@ def dicom_to_nrrd(dicom_series_path: Path | str) -> tuple[np.ndarray, dict]:
     Then reads it with SimpleITK and returns the image.
     """
     dicom_series_path = Path(dicom_series_path)
+    dicom_series_path = Path(dicom_series_path)
     maybe_download_mitk()
     mitk_path = list(get_MITK_path().iterdir())[0] / "apps"  # Now in the MITK Snapshot folder
     if dicom_series_path.is_dir():
