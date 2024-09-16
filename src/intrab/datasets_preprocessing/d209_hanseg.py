@@ -250,7 +250,7 @@ def convert_HanSeg(inputfolder: Path, outputfolder: Path):
         ct_img = sitk.ReadImage(ct_img_path)
         im_MR = sitk.ReadImage(mr_img_path)
 
-        sitk.WriteImage(im_MR, output_image_dir / (mr_img_path.name.replace(".nrrd", "_0000.nrrd")))
+        sitk.WriteImage(im_MR, output_image_dir / (mr_img_path.name.replace("_IMG_MR_T1.nrrd", "_0000.nrrd")))
 
         # Preprocess MR to match the size and spacing of CT
         im_MR.SetDirection((1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0))
