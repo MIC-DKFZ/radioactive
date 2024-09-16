@@ -1,15 +1,16 @@
 # **IntRa** Bench: Introducing the **Int**eractive **Ra**diology Benchmark
-The IntRa Bench provides the medical segmentation field a comprehensive benchmark, that fairly compares existing open-set interactive segmentatio methods on a broad-range of tasks and modalities. 
+The IntRa Bench provides the medical segmentation field a comprehensive benchmark, that fairly compares existing open-set interactive segmentatio methods on a broad-range of tasks and modalities.
 The benchmark is intended to provide users with a clear understanding of how to best prompt existing methods and provides developers with a extendaable framework to easily compare their newly developed methods against the currently available methods.
 
 ## ToDo's
-
+- [ ] Single center Points (Static Predictions)
+- [ ] Single bbox (deterministic)
 - [ ] Check-out current checkpoints or provide version (last-accessed) time point when checkpoints were loaded
   - [ ] Upload checkpoints to Zenodo to allow auto-downloading them on-demand
 - [ ] Move preprocessing lesions into the normal call
   - [ ] Try reading -- if not exists create.
 - [ ] Add some more seeds of the same model to get more robust results
-- [ ] SegVol does sample from foreground mask it creates in zoom-in zoom-out mode, so it does not receive the "same" prompt 
+- [ ] SegVol does sample from foreground mask it creates in zoom-in zoom-out mode, so it does not receive the "same" prompt
 
 ## Installing the Benchmark
 ToDo
@@ -59,7 +60,7 @@ In particular:
 Point prompts are generated first to permit using the same prompts for each model. Generate them with `generate_points.py` taking flags
 - -tdp, or --test_data_path: Where the query images are stored (in the directory structure specified in Directory Strucutre)
 - -rp, or --results_path: Where the prompts file should be stored. Use the same directory in `validation.py` for the segmentation maps.
-- -nc, or --n_clicks [default = 5]: The number of clicks to generate per volume per foreground label (for 3D models) or per slice containing foreground per foreground label (for 2D models). 
+- -nc, or --n_clicks [default = 5]: The number of clicks to generate per volume per foreground label (for 3D models) or per slice containing foreground per foreground label (for 2D models).
 
 For example:
 ```
@@ -75,7 +76,7 @@ Perform inference with `validation_interface.py` (in progress. Use validation_in
 ### Evaluation
 Obtain evaluation results with `evaluate_folder.py`. Requires flags
 - -tdp, or --test_data_path: Where the test data are stored (format as in Directory Structure)
-- -rp, or --results_path: Where the segmentations are stored. Use the same directory in `validation.py` 
+- -rp, or --results_path: Where the segmentations are stored. Use the same directory in `validation.py`
 
 Evaluation results will be stored in the `-rp` folder as `evaluation_dice.json`
 

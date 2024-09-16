@@ -39,7 +39,11 @@ dependencies = [
     'einops',
     'nneval',
     'gdown',
-    'tcia_utils'
+    'tcia_utils',
+    'pydicom',
+    'SimpleITK-SimpleElastix',
+    'natsort',
+    'pandas',
 ]
 
 readme = "README.md"
@@ -51,7 +55,7 @@ classifiers = [
 
 [tool.black]
 line-length = 118
-target-version = ['py310', 'py311']
+target-version = ['py310', 'py311', 'py312']
 # required-version = "23.3.0"
 
 # [tool.setuptools.packages.find]
