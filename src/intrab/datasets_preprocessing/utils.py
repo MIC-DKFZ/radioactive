@@ -164,9 +164,9 @@ class suppress_output:
 
 def download_from_gdrive(gdrive_url: str, download_dir: Path) -> None:
 
-    gdrive_link = "https://drive.google.com/drive/folders/115mzmNlZRIewnSR2QFDwW_-RkNM0LC9D?usp=sharing"
+    # gdrive_link = "https://drive.google.com/drive/folders/115mzmNlZRIewnSR2QFDwW_-RkNM0LC9D?usp=sharing"
 
-    logger.info(f"Downloading dataset from {gdrive_link} to a {download_dir}.")
+    logger.info(f"Downloading dataset from {gdrive_url} to a {download_dir}.")
 
     download_dir.mkdir(parents=True, exist_ok=True)
 
@@ -175,17 +175,17 @@ def download_from_gdrive(gdrive_url: str, download_dir: Path) -> None:
     # drive = GoogleDrive(gauth)
     # filelist = drive.ListFile({"q": f"'{folder}' in parents and trashed=false"}).GetList()
 
-    file_list = gdown.download_folder(gdrive_url, str(download_dir), quiet=False, skip_download=True)
+    file_list = gdown.download_folder(url=gdrive_url, output=str(download_dir), quiet=False, skip_download=True)
 
     # logger.info(f"Downloading SegRap from {gdrive_link}")
-    for name, idx in file_list.items():
-        logger.info(f"Downloading {name}")
-        if (download_dir / name).exists():
-            logger.info(f"File {name} already exists. Skipping Download")
+    for file in file_list:
+        logger.info(f"Downloading {file.path}")
+        if Path(file.local_path).exists():
+            logger.info(f"File {file.path} already exists. Skipping Download")
             continue
         else:
             # download_from_gdrive(idx, str(hanseg_temp_dir / name))
-            gdown.download(f"https://drive.google.com/uc?id={idx}", str(download_dir / name), quiet=False)
+            gdown.download(f"https://drive.google.com/uc?id={file.id}", str(download_dir / file.path), quiet=False)
 
     return
 
