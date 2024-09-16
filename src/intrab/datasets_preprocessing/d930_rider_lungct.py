@@ -6,7 +6,7 @@ import nrrd
 import numpy as np
 from tqdm import tqdm
 
-from intrab.datasets_preprocessing.conversion_utils import dicom_to_nrrd, get_matching_dicoms
+from intrab.datasets_preprocessing.conversion_utils import dicom_to_nrrd, get_dicoms_meta_info
 from intrab.utils.paths import get_dataset_path
 from toinstance import InstanceNrrd
 
@@ -22,13 +22,13 @@ def preprocess(raw_download_dir: Path):
     labels_dir.mkdir(parents=True, exist_ok=True)
 
     # Get Image Label Pairs
-    all_dicoms = get_matching_dicoms(dicoms_ct + dicoms_seg)
+    all_dicoms = get_dicoms_meta_info(dicoms_ct + dicoms_seg)
     all_dicoms = {key: all_dicoms[key] for key in sorted(all_dicoms)}
     cnt_dicom_map = {}
 
     for cnt, (study_name, dicom_data) in tqdm(enumerate(all_dicoms.items()), desc="Converting LNQ DICOMs to NRRD"):
-        ct_path = dicom_data["CT"][0]  # We only have one CT and one SEG in LNQ
-        seg_path = dicom_data["SEG"][0]
+        ct_path = dicom_data["CT"][0]["filepath"]  # We only have one CT and one SEG in LNQ
+        seg_path = dicom_data["SEG"][0]["filepath"]
         ct: tuple[np.ndarray, dict] = dicom_to_nrrd(ct_path)
         seg: tuple[np.ndarray, dict] = dicom_to_nrrd(seg_path)
         # nrrd.write(str(labels_dir / f"original_seg_rider_lung_{cnt:04d}.nrrd"), seg[0], seg[1])
