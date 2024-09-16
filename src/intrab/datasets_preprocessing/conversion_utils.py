@@ -31,6 +31,26 @@ def maybe_download_mitk():
         os.system(f"rm {mitk_tar}")
 
 
+def nrrd_to_sitk(nrrd_arr, nrrd_header) -> sitk.Image:
+    """Converts an nrrd array to an sitk Image."""
+    with TemporaryDirectory() as temp_dir:
+        nrrd.write(temp_dir + "/tmp.nrrd", nrrd_arr, nrrd_header)
+        image = sitk.ReadImage(temp_dir + "/tmp.nrrd")
+        # Need to make sure image is in memory before deleting
+        image_arr = sitk.GetArrayFromImage(image)
+        new_img = sitk.GetImageFromArray(image_arr)
+        new_img.CopyInformation(image)
+    return new_img
+
+
+def sitk_to_nrrd(sitk_img: sitk.Image) -> tuple[np.ndarray, dict]:
+    """Converts a sitk image to an nrrd array."""
+    with TemporaryDirectory() as temp_dir:
+        sitk.WriteImage(sitk_img, temp_dir + "/tmp.nrrd")
+        nrrd_arr, nrrd_header = nrrd.read(temp_dir + "/tmp.nrrd")
+    return nrrd_arr, nrrd_header
+
+
 def dicom_to_nrrd(dicom_series_path: Path | str) -> tuple[np.ndarray, dict]:
     """
     Takes a dicom series and converts it to a temporary nifti with MITK.
