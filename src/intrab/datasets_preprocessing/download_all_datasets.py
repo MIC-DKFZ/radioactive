@@ -21,15 +21,21 @@ def extract_zips_in_dir(dataset_path: Path, pwd: str | None):
     """Unzip the HaN Seg dataset"""
     zip_files = glob.glob(str(dataset_path / "*.zip"))
     for file in zip_files:
-        file_path = Path(file)
-        print(f"Extracting {file}")
-        file_dir = file_path.parent / file_path.name.removesuffix(".zip")
-        with zipfile.ZipFile(file_path, "r") as zip_ref:
-            # PWD provided on https://han-seg2023.grand-challenge.org/
-            if pwd is not None:
-                zip_ref.extractall(str(file_dir), pwd=pwd.encode("utf-8"))
-            else:
-                zip_ref.extractall(str(file_dir))
+        try:
+            file_path = Path(file)
+            print(f"Extracting {file}")
+            file_dir = file_path.parent / file_path.name.removesuffix(".zip")
+            with zipfile.ZipFile(file_path, "r") as zip_ref:
+                # PWD provided on https://han-seg2023.grand-challenge.org/
+                if pwd is not None:
+                    try:
+                        zip_ref.extractall(str(file_dir), pwd=pwd.encode("utf-8"))
+                    except Exception:
+                        logger.error(f"Failed to extract {file} with password. Trying without password.")
+                        zip_ref.extractall(str(file_dir))
+        except Exception as e:
+            logger.error(f"Failed to extract {file}.")
+            logger.error(e)
 
 
 def download_datasets(datasets_to_download: dict[dataset_keys, dict]):
