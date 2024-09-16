@@ -98,7 +98,9 @@ def preprocess(raw_download_dir: Path):
 
     patients = os.listdir(IN_DIR)
 
-    for patient in sorted(patients):
+    for patient in tqdm(list(sorted(patients))):
+        if patient not in included_cases:
+            continue
         timepoint = IN_DIR / patient
         print(f"\nProcessing {patient}")
 
@@ -126,19 +128,24 @@ def preprocess(raw_download_dir: Path):
                 seg_headers = {
                     serie: read_dicom_meta_data(tp_dir / serie) for serie in series if serie.startswith("SEG")
                 }
-                seg_of_interests = {
-                    serie: seg_h
-                    for serie, seg_h in seg_headers.items()
-                    if seg_h.ReferencedSeriesSequence[0].SeriesInstanceUID == ct_of_interest
-                }
+                # try:
+                #     seg_of_interests = {
+                #         serie: seg_h
+                #         for serie, seg_h in seg_headers.items()
+                #         if seg_h.ReferencedSeriesSequence[0].SeriesInstanceUID == ct_of_interest
+                #     }
+                # except AttributeError:
+                #     seg_of_interests = {
+                #         serie: seg_h
+                #         for serie, seg_h in seg_headers.items()
+                #         if
+                #     }
 
                 seg_of_interests = {
-                    serie: seg_h
-                    for serie, seg_h in seg_of_interests.items()
-                    if seg_h.SeriesDescription == "Segmentation"
+                    serie: seg_h for serie, seg_h in seg_headers.items() if seg_h.SeriesDescription == "Segmentation"
                 }
                 if len(seg_of_interests) != 1:
-                    # logger.info(f"Found {len(seg_of_interests)} SEGs - skipping")
+                    logger.info(f"Found {len(seg_of_interests)} SEGs - skipping")
                     continue
                 seg_path = list(seg_of_interests.keys())[0]
 
