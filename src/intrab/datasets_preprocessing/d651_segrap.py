@@ -8,13 +8,12 @@ from toinstance import InstanceNrrd
 import numpy as np
 import nrrd
 from tqdm import tqdm
-from pydrive.drive import GoogleDrive, GoogleDriveFileList
-from pydrive.auth import GoogleAuth
 import zipfile
 import gdown
 import SimpleITK as sitk
 
 
+from intrab.datasets_preprocessing.conversion_utils import sitk_to_nrrd
 from intrab.utils.paths import get_dataset_path
 
 GRDRIVE_FILE_LIST = {
@@ -132,33 +131,6 @@ SEGRAP_SUBSETS = {
 }
 
 
-def download_from_gdrive(file_id, filename):
-    # Step 1: Get the initial confirmation token (if needed) using wget
-    command_1 = f"wget --save-cookies cookies.txt 'https://docs.google.com/uc?export=download&id={file_id}' -O-"
-    result = subprocess.run(command_1, shell=True, capture_output=True, text=True)
-
-    # Step 2: Extract the confirmation token
-    confirm_token = None
-    for line in result.stdout.splitlines():
-        if "confirm=" in line:
-            confirm_token = line.split("confirm=")[1].split("&")[0]
-            break
-
-    # Step 3: Download the file with the confirmation token (if token is found)
-    if confirm_token:
-        command_2 = f"wget --load-cookies cookies.txt 'https://docs.google.com/uc?export=download&confirm={confirm_token}&id={file_id}' -O {filename}"
-    else:
-        # If no confirmation token is needed (small file), proceed to download
-        command_2 = (
-            f"wget --load-cookies cookies.txt 'https://docs.google.com/uc?export=download&id={file_id}' -O {filename}"
-        )
-
-    subprocess.run(command_2, shell=True)
-
-    # Step 4: Clean up the cookies.txt file
-    subprocess.run("rm -f cookies.txt", shell=True)
-
-
 def create_label_instance_nrrd_for_segrap_case(case_dir: Path) -> tuple[InstanceNrrd, dict]:
     """
     Creates label maps of regions for certain organs.
@@ -189,39 +161,54 @@ def create_label_instance_nrrd_for_segrap_case(case_dir: Path) -> tuple[Instance
     return InstanceNrrd.from_binary_instance_maps(innrrd_binmaps, header), dataset_json
 
 
-def main():
-    temp_segrap_path = download_segrap_dataset()
+def preprocess(raw_download_dir: Path):
 
-    cases_dir = temp_segrap_path / "SegRap2023_Training_Set_120cases"
-    assert (cases_dir).exists(), f"Directory {cases_dir} does not contain the expected structure."
-    f: Path
-    # assert (
-    #     len([f for f in cases_dir.iterdir() if f.is_dir()]) == 42
-    # ), f"Directory {hanseg_dir} does not contain 42 cases."
+    cases_labels_dir = (
+        raw_download_dir
+        / "SegRap2023_Training_Set_120cases_Update_Labels(Task001)"
+        / "SegRap2023_Training_Set_120cases_Update_Labels"
+    )
+    cases_images_dir = raw_download_dir / "SegRap2023_Training_Set_120cases" / "SegRap2023_Training_Set_120cases"
 
-    output_dir = get_dataset_path() / "Dataset651_segrap_mr"
+    output_dir = get_dataset_path() / "Dataset651_segrap"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # ------------------------------- Do MR Images ------------------------------- #
+    CLS_MAP_TO_VALUE = {k: cnt for cnt, k in enumerate(SEGRAP_SUBSETS.keys())}
+
+    # ------------------------------- Conversion ------------------------------- #
     output_image_dir = output_dir / "imagesTr"
     output_image_dir.mkdir(parents=True, exist_ok=True)
-    for case_dir in tqdm(list(cases_dir.iterdir()), desc="Copying MR Images"):
-        if case_dir.name.startswith("segrap"):
-            mr_img = case_dir / "image.nii.gz"  # OR: image_contrast.nii.gz
-            sitk_im = sitk.ReadImage(str(mr_img))
-            sitk.WriteImage(sitk_im, str(output_image_dir / f"{case_dir.name}_0000.nrrd"))
-
-    # --------------------------------- Do Labels -------------------------------- #
     output_label_dir = output_dir / "labelsTr"
     output_label_dir.mkdir(parents=True, exist_ok=True)
-    for case_dir in tqdm(list(cases_dir.iterdir()), desc="Creating Labels"):
-        if case_dir.name.startswith("segrap"):
-            instance_nrrd, dataset_json = create_label_instance_nrrd_for_segrap_case(case_dir)
-            instance_nrrd.to_file(output_label_dir / f"{case_dir.name}.in.nrrd")
+    for case_dir in tqdm(list(cases_labels_dir.iterdir()), desc="Creating Image Labels"):
+        joint_labels: dict[str, np.ndarray] = {}
+        for organ in case_dir.iterdir():
+            joint_labels[organ.name] = sitk.ReadImage(str(organ))
 
+        res_labels: dict[int, sitk.Image] = {
+            CLS_MAP_TO_VALUE[organ_name]: img for organ_name, img in joint_labels.items()
+        }
+
+        header = sitk_to_nrrd(res_labels.values()[0])
+        instance_dict = {cnt: sitk.GetArrayFromImage(img) for cnt, img in res_labels.items()}
+        innrrd = InstanceNrrd.from_binary_instance_maps(instance_dict, header, maps_mutually_exclusive=False)
+        innrrd.to_file(output_label_dir / f"{case_dir.name}.nrrd")
+
+    for case_dir in tqdm(list(cases_images_dir.iterdir()), desc="Creating Image Labels"):
+        if case_dir.is_dir():
+            img_path = case_dir / "image.nii.gz"
+            read_img = sitk.ReadImage(img_path)
+            img_arr, img_header = sitk_to_nrrd(read_img)
+            nrrd.write(output_image_dir / f"{case_dir.name}_0000.nrrd", img_arr, img_header)
+    # ------------------------------- DATASET JSON ------------------------------- #
     with open(output_dir / "dataset.json", "w") as f:
-        json.dump(dataset_json, f)
-
-
-if __name__ == "__main__":
-    main()
+        json.dump(
+            {
+                "channel_names": {"0": "non CE CT"},
+                "labels": {k: v for k, v in CLS_MAP_TO_VALUE.items()},
+                "numTraining": len(list(cases_labels_dir.iterdir())),
+                "file_ending": ".nrrd",
+                "name": "Dataset651_segrap_organ_CT",
+            },
+            f,
+        )
