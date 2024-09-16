@@ -30,14 +30,18 @@ def maybe_download_mitk():
         os.system(f"rm {mitk_tar}")
 
 
-def dicom_to_nrrd(dicom_series_path: Path) -> tuple[np.ndarray, dict]:
+def dicom_to_nrrd(dicom_series_path: Path | str) -> tuple[np.ndarray, dict]:
     """
     Takes a dicom series and converts it to a temporary nifti with MITK.
     Then reads it with SimpleITK and returns the image.
     """
+    dicom_series_path = Path(dicom_series_path)
     maybe_download_mitk()
     mitk_path = list(get_MITK_path().iterdir())[0] / "apps"  # Now in the MITK Snapshot folder
-    dcm_sub_file = list(dicom_series_path.glob("*.dcm"))[0]
+    if not dicom_series_path.is_dir():
+        dcm_sub_file = list(dicom_series_path.glob("*.dcm"))[0]
+    else:
+        dcm_sub_file = dicom_series_path
     with TemporaryDirectory() as temp_dir:
         os.system(f"cd {mitk_path} && ./MitkFileConverter.sh -i {dcm_sub_file} -o {temp_dir + "/tmp.nrrd"}")
         array, header = nrrd.read(temp_dir + "/tmp.nrrd")
@@ -45,7 +49,11 @@ def dicom_to_nrrd(dicom_series_path: Path) -> tuple[np.ndarray, dict]:
 
 
 def read_dicom_meta_data(dicom_folder: Path) -> dict:
-    dicom_paths = list(dicom_folder.rglob("*.dcm"))[0]
+    """Reads the meta data from a DICOM file or from one image of a Series."""
+    if dicom_folder.is_dir():
+        dicom_paths = list(dicom_folder.glob("*.dcm"))[0]
+    else:
+        dicom_paths = dicom_folder
     dicom = pydicom.dcmread(dicom_paths)
     return dicom
 
