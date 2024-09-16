@@ -5,6 +5,7 @@ from loguru import logger
 import nrrd
 import pydicom
 from tqdm import tqdm
+from intrab.datasets_preprocessing.utils import suppress_output
 from intrab.utils.paths import get_MITK_path
 import os
 import numpy as np
@@ -35,17 +36,18 @@ def dicom_to_nrrd(dicom_series_path: Path | str) -> tuple[np.ndarray, dict]:
     Takes a dicom series and converts it to a temporary nifti with MITK.
     Then reads it with SimpleITK and returns the image.
     """
-    dicom_series_path = Path(dicom_series_path)
-    dicom_series_path = Path(dicom_series_path)
-    maybe_download_mitk()
-    mitk_path = list(get_MITK_path().iterdir())[0] / "apps"  # Now in the MITK Snapshot folder
-    if dicom_series_path.is_dir():
-        dcm_sub_file = list(dicom_series_path.glob("*.dcm"))[0]
-    else:
-        dcm_sub_file = dicom_series_path
-    with TemporaryDirectory() as temp_dir:
-        os.system(f"cd {mitk_path} && ./MitkFileConverter.sh -i {dcm_sub_file} -o {temp_dir + "/tmp.nrrd"}")
-        array, header = nrrd.read(temp_dir + "/tmp.nrrd")
+    with suppress_output():
+        dicom_series_path = Path(dicom_series_path)
+        dicom_series_path = Path(dicom_series_path)
+        maybe_download_mitk()
+        mitk_path = list(get_MITK_path().iterdir())[0] / "apps"  # Now in the MITK Snapshot folder
+        if dicom_series_path.is_dir():
+            dcm_sub_file = list(dicom_series_path.glob("*.dcm"))[0]
+        else:
+            dcm_sub_file = dicom_series_path
+        with TemporaryDirectory() as temp_dir:
+            os.system(f"cd {mitk_path} && ./MitkFileConverter.sh -i {dcm_sub_file} -o {temp_dir + "/tmp.nrrd"}")
+            array, header = nrrd.read(temp_dir + "/tmp.nrrd")
     return array, header
 
 

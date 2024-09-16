@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 import shutil
+import sys
 from typing import Literal, Sequence
 from loguru import logger
 import nibabel as nib
@@ -142,6 +143,23 @@ def download_from_zenodo(zenodo_id: int, download_dir: Path) -> None:
     else:
         print(f"Failed to download. Status code: {response.status_code}")
     return download_dir
+
+
+class suppress_output:
+    def __enter__(self):
+        # Save the actual stdout and stderr so they can be restored later
+        self._stdout = sys.stdout
+        self._stderr = sys.stderr
+        # Redirect stdout and stderr to os.devnull
+        sys.stdout = open(os.devnull, "w")
+        sys.stderr = open(os.devnull, "w")
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        # Restore the original stdout and stderr
+        sys.stdout.close()
+        sys.stderr.close()
+        sys.stdout = self._stdout
+        sys.stderr = self._stderr
 
 
 def download_from_gdrive(gdrive_url: str, download_dir: Path) -> None:
