@@ -20,6 +20,10 @@ from intrab.prompts.prompter import (
     PointInterpolationPrompter,
     PointPropagationPrompter,
     Prompter,
+    OnePoints3DVolumePrompter,
+    TwoPoints3DVolumePrompter,
+    FivePoints3DVolumePrompter,
+    TenPoints3DVolumePrompter,
     static_prompt_styles,
 )
 
@@ -171,10 +175,16 @@ def get_wanted_supported_prompters(
 
     elif inferer.dim == 3:
         if "point" in inferer.supported_prompts:
-            if "NPoints3DVolumePrompter" in wanted_prompt_styles:
-                prompters.append(
-                    NPoints3DVolumePrompter(inferer, seed, n_points=pro_conf.threeD_n_click_random_points)
-                )
+            if "OnePoints3DVolumePrompter" in wanted_prompt_styles:
+                prompters.append(OnePoints3DVolumePrompter(inferer, seed))
+            if "TwoPoints3DVolumePrompter" in wanted_prompt_styles:
+                prompters.append(TwoPoints3DVolumePrompter(inferer, seed))
+            if "ThreePoints3DVolumePrompter" in wanted_prompt_styles:
+                prompters.append(ThreePoints3DVolumePrompter(inferer, seed))
+            if "FivePoints3DVolumePrompter" in wanted_prompt_styles:
+                prompters.append(FivePoints3DVolumePrompter(inferer, seed))
+            if "TenPoints3DVolumePrompter" in wanted_prompt_styles:
+                prompters.append(TenPoints3DVolumePrompter(inferer, seed))
         if "box" in inferer.supported_prompts:
             if "Box3DVolumePrompter" in wanted_prompt_styles:
                 prompters.append(Box3DVolumePrompter(inferer, seed))
