@@ -17,7 +17,7 @@ from intrab.utils.SAMMed3D_segment_anything.modeling.sam3D import Sam3D
 from intrab.utils.image import get_crop_pad_params_from_gt_or_prompt
 from intrab.utils.resample import get_current_spacing_from_affine, resample_to_shape, resample_to_spacing
 from intrab.utils.transforms import resample_to_spacing_sparse
-from intrab.dataset_preprocessing.conversion_utils import load_any_to_nib
+from intrab.datasets_preprocessing.conversion_utils import load_any_to_nib
 
 
 def load_sammed3d(checkpoint_path, device="cuda"):

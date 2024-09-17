@@ -31,7 +31,7 @@ from intrab.utils.transforms import (
     orig_to_SAR_dense,
     transform_prompt_to_model_coords,
 )
-from intrab.dataset_preprocessing.conversion_utils import load_any_to_nib
+from intrab.datasets_preprocessing.conversion_utils import load_any_to_nib
 
 # ToDo: Save the Prompt before feeding into the model.
 #   Also add a check to see if another model received the same Prompt.

@@ -12,7 +12,7 @@ from intrab.datasets_preprocessing.conversion_utils import nrrd_to_nib
 from intrab.model.inferer import Inferer
 from intrab.prompts.prompt import PromptStep
 from intrab.utils.SAMMed3D_segment_anything.build_sam import sam_model_registry as registry_sam
-from intrab.dataset_preprocessing.conversion_utils import load_any_to_nib
+from intrab.datasets_preprocessing.conversion_utils import load_any_to_nib
 
 from intrab.utils.transforms import (
     ResizeLongestSide,

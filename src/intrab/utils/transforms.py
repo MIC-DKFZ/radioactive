@@ -13,7 +13,7 @@ from nibabel.orientations import io_orientation, ornt_transform
 from intrab.prompts.prompt import Boxes3D, PromptStep
 from intrab.utils.nnunet.default_resampling import compute_new_shape
 from intrab.utils.resample import get_current_spacing_from_affine
-from intrab.dataset_preprocessing.conversion_utils import load_any_to_nib
+from intrab.datasets_preprocessing.conversion_utils import load_any_to_nib
 
 # The function below is from the original SAM repository
 

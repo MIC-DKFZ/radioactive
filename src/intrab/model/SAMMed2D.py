@@ -15,7 +15,7 @@ from intrab.utils.SAMMed2D_segment_anything import sam_model_registry as registr
 from intrab.prompts.prompt import PromptStep
 from intrab.model.inferer import Inferer
 from intrab.utils.transforms import orig_to_SAR_dense, orig_to_canonical_sparse_coords
-from intrab.dataset_preprocessing.conversion_utils import load_any_to_nib
+from intrab.datasets_preprocessing.conversion_utils import load_any_to_nib
 
 
 def load_sammed2d(checkpoint_path, image_size, device="cuda"):

@@ -11,7 +11,7 @@ from intrab.model.inferer import Inferer
 from intrab.prompts.prompt import PromptStep
 from intrab.utils.MedSAM_segment_anything import sam_model_registry as registry_medsam
 from intrab.utils.transforms import orig_to_SAR_dense, orig_to_canonical_sparse_coords
-from intrab.dataset_preprocessing.conversion_utils import load_any_to_nib
+from intrab.datasets_preprocessing.conversion_utils import load_any_to_nib
 
 
 def load_medsam(checkpoint_path, device="cuda"):
