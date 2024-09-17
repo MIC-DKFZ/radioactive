@@ -13,12 +13,13 @@ from nibabel.orientations import io_orientation, ornt_transform
 from intrab.prompts.prompt import Boxes3D, PromptStep
 from intrab.utils.nnunet.default_resampling import compute_new_shape
 from intrab.utils.resample import get_current_spacing_from_affine
-
+from intrab.dataset_preprocessing.conversion_utils import load_any_to_nib
 
 # The function below is from the original SAM repository
 
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
+
 
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
@@ -100,92 +101,105 @@ class ResizeLongestSide:
         newh = int(newh + 0.5)
         return (newh, neww)
 
+
 def orig_to_SAR_dense(nifti: Path | nib.Nifti1Image) -> tuple[np.ndarray, Callable[[np.ndarray], nib.Nifti1Image]]:
-        if isinstance(nifti, (str, Path)):
-            nifti: nib.Nifti1Image = nib.load(nifti)
-        orientation_old = io_orientation(nifti.affine)
+    if isinstance(nifti, (str, Path)):
+        nifti: nib.Nifti1Image = load_any_to_nib(nifti)
+    orientation_old = io_orientation(nifti.affine)
 
-        if nib.aff2axcodes(nifti.affine) != ("R", "A", "S"):
-            nifti = nib.as_closest_canonical(nifti)
-        orientation_new = io_orientation(nifti.affine)
-        orientation_transform = ornt_transform(orientation_new, orientation_old)
-        data = nifti.get_fdata()
-        data = data.transpose(2, 1, 0)  # Reorient to zyx
+    if nib.aff2axcodes(nifti.affine) != ("R", "A", "S"):
+        nifti = nib.as_closest_canonical(nifti)
+    orientation_new = io_orientation(nifti.affine)
+    orientation_transform = ornt_transform(orientation_new, orientation_old)
+    data = nifti.get_fdata()
+    data = data.transpose(2, 1, 0)  # Reorient to zyx
 
-        def inv_trans(arr: np.ndarray):
-            arr = arr.transpose(2, 1, 0)
-            arr_nib = nib.Nifti1Image(arr, nifti.affine)
-            arr_orig_ori = arr_nib.as_reoriented(orientation_transform)
-            return arr_orig_ori
+    def inv_trans(arr: np.ndarray):
+        arr = arr.transpose(2, 1, 0)
+        arr_nib = nib.Nifti1Image(arr, nifti.affine)
+        arr_orig_ori = arr_nib.as_reoriented(orientation_transform)
+        return arr_orig_ori
 
-        # Return the data in the new format and transformation function
-        return data, inv_trans
+    # Return the data in the new format and transformation function
+    return data, inv_trans
+
 
 def orig_to_canonical_sparse_coords(coords: np.ndarray, orig_affine: np.ndarray, orig_shape: tuple) -> np.ndarray:
     """
-    Transform an nx3 array of coordinates aligned to an image with affine `affine` into canonical orientation.  
+    Transform an nx3 array of coordinates aligned to an image with affine `affine` into canonical orientation.
     """
     coords = coords.copy()
-    was_1d = (coords.ndim == 1)
+    was_1d = coords.ndim == 1
     if was_1d:
         coords = coords[None]
 
     io_orient = io_orientation(orig_affine)
     # Reverse the axes in line with as_closest_canonical
-    axes_reverse = io_orient[:,1].astype(int)
+    axes_reverse = io_orient[:, 1].astype(int)
     for i in range(3):
         if axes_reverse[i] == -1:
             coords[:, i] = orig_shape[i] - coords[:, i] - 1
 
     # Transpose the axes in line with as_closest_canonical
-    axes_transpose = io_orient[:,0].astype(int) 
+    axes_transpose = io_orient[:, 0].astype(int)
     coords = coords[:, axes_transpose]
 
     if was_1d:
         coords = coords[0]
 
     return coords
+
 
 def canonical_to_orig_sparse_coords(coords: np.ndarray, orig_affine: np.ndarray, orig_shape: tuple) -> np.ndarray:
     """
     Transform an nx3 array of coordinates in canonical form to align to an image with affine `afffine`.
-    Note that this is just the two transforms in orig_to_canonical_sparse_coords in reverse order, since the 
+    Note that this is just the two transforms in orig_to_canonical_sparse_coords in reverse order, since the
     transforms are their own inverse (but do not commute)
     original_shape/affine refers to the shape/affine in the original system, not in the canonical system
     """
-    coords = coords.copy()  
-    was_1d = (coords.ndim == 1)
+    coords = coords.copy()
+    was_1d = coords.ndim == 1
     if was_1d:
         coords = coords[None]
-    
+
     io_orient = io_orientation(orig_affine)
 
     # Transpose the axes in line with as_closest_canonical
-    axes_transpose = io_orient[:,0].astype(int) 
+    axes_transpose = io_orient[:, 0].astype(int)
     coords = coords[:, axes_transpose]
 
     # Reverse the axes in line with as_closest_canonical
-    axes_reverse = io_orient[:,1].astype(int)
+    axes_reverse = io_orient[:, 1].astype(int)
     for i in range(3):
         if axes_reverse[i] == -1:
-            coords[:,i] = orig_shape[i] - coords[:, i] - 1
+            coords[:, i] = orig_shape[i] - coords[:, i] - 1
 
     if was_1d:
         coords = coords[0]
     return coords
 
-def resample_to_shape_sparse(coords: np.ndarray, current_shape: tuple[int,int,int], target_shape: tuple[int,int,int], round = False) -> np.ndarray:
+
+def resample_to_shape_sparse(
+    coords: np.ndarray, current_shape: tuple[int, int, int], target_shape: tuple[int, int, int], round=False
+) -> np.ndarray:
     """
     Transform an nx2 or nx3 array of coordinates in line with resampling from an original shape to a target shape.
     Rounding to integer coordinates is supported, but if this transform is composed with others, it may introduce rounding issues.
     """
-    coords = coords*target_shape/current_shape
+    coords = coords * target_shape / current_shape
     if round:
         coords = np.round(coords)
 
     return coords
 
-def resample_to_spacing_sparse(coords:np.ndarray, current_spacing: tuple[float,float,float], target_spacing: tuple[float,float,float], current_shape: tuple[int,int,int], round=False) -> np.ndarray:
+
+def resample_to_spacing_sparse(
+    coords: np.ndarray,
+    current_spacing: tuple[float, float, float],
+    target_spacing: tuple[float, float, float],
+    current_shape: tuple[int, int, int],
+    round=False,
+) -> np.ndarray:
     """
     Transform an nx3 array of coordsinates in line with a resampling from an original spacing to a new spacing.
     Rounding to integer coordinates is supported, but if this transform is composed with others, it may introduce rounding issues.
@@ -196,52 +210,58 @@ def resample_to_spacing_sparse(coords:np.ndarray, current_spacing: tuple[float,f
 
     return coords
 
-    
+
 def _transform_boxes3d_to_model_coords(box: Boxes3D, transform_coords: Callable[[np.ndarray], np.ndarray]) -> Boxes3D:
     """
     Takes a boxes3d prompt in the original coordinate system and transforms it into the model system
     """
     min_vertex, max_vertex = box.bbox
-    vertices_combined = np.array([transform_coords(min_vertex),
-                                transform_coords(max_vertex)])
+    vertices_combined = np.array([transform_coords(min_vertex), transform_coords(max_vertex)])
 
-    min_vertex_transformed = np.max(vertices_combined, axis = 0)
-    max_vertex_transformed = np.min(vertices_combined, axis = 0)
+    min_vertex_transformed = np.max(vertices_combined, axis=0)
+    max_vertex_transformed = np.min(vertices_combined, axis=0)
 
     box_model = Boxes3D(min_vertex_transformed, max_vertex_transformed)
 
     return box_model
 
-def _transform_box_dict_to_model_coords(box_dict: dict[int, np.ndarray], transform_coords: Callable[[np.ndarray], np.ndarray]) -> dict[int, np.ndarray]:
+
+def _transform_box_dict_to_model_coords(
+    box_dict: dict[int, np.ndarray], transform_coords: Callable[[np.ndarray], np.ndarray]
+) -> dict[int, np.ndarray]:
     """
     Note! For now, it's assumed that the image is transformed such that the image is in zyx, so the box dict is formatted as {z: x_min,y_min, x_max, y_max}
     """
-    
+
     box_dict_transformed = {}
     for z, xyxy in box_dict.items():
         min_vertex = np.array((*xyxy[:2], z))
         max_vertex = np.array((*xyxy[2:], z))
 
-        vertices_combined = np.array([transform_coords(min_vertex),
-                                    transform_coords(max_vertex)])
+        vertices_combined = np.array([transform_coords(min_vertex), transform_coords(max_vertex)])
 
-        min_vertex_transformed = np.min(vertices_combined, axis = 0)
-        max_vertex_transformed = np.max(vertices_combined, axis = 0)
+        min_vertex_transformed = np.min(vertices_combined, axis=0)
+        max_vertex_transformed = np.max(vertices_combined, axis=0)
 
         if min_vertex_transformed[2] != max_vertex_transformed[2]:
-            logger.warning('Transformed bounding box does not lie in one slice in the final axis; was it formatted correctly on input?')
+            logger.warning(
+                "Transformed bounding box does not lie in one slice in the final axis; was it formatted correctly on input?"
+            )
 
         x_min, y_min, _ = min_vertex_transformed
         x_max, y_max, z_new = max_vertex_transformed
 
         box_dict_transformed[z_new] = np.array([x_min, y_min, x_max, y_max])
-        
+
     return box_dict_transformed
 
-def _transform_points_prompt_to_model_coords(coords_orig: np.ndarray, labels_orig: np.ndarray, transform_coords: Callable[[np.ndarray], np.ndarray]) -> PromptStep:
+
+def _transform_points_prompt_to_model_coords(
+    coords_orig: np.ndarray, labels_orig: np.ndarray, transform_coords: Callable[[np.ndarray], np.ndarray]
+) -> PromptStep:
     """
     Transform a point prompt in the original coordinate system to the model coordinate system using transform_to_model_coords_sparse
-    """        
+    """
     coords_transformed = []
     for coord_triple in coords_orig:
         coords_transformed.append(transform_coords(coord_triple))
@@ -249,21 +269,25 @@ def _transform_points_prompt_to_model_coords(coords_orig: np.ndarray, labels_ori
     coords_transformed = np.array(coords_transformed)
 
     return coords_transformed, labels_orig
-    
 
-def transform_prompt_to_model_coords(prompt_orig: PromptStep | Boxes3D, transform_coords: Callable[[np.ndarray], np.ndarray]):
+
+def transform_prompt_to_model_coords(
+    prompt_orig: PromptStep | Boxes3D, transform_coords: Callable[[np.ndarray], np.ndarray]
+):
     # Deal with special case: Handle 3D boxes
     if isinstance(prompt_orig, Boxes3D):
         return _transform_boxes3d_to_model_coords(prompt_orig)
-    
-    # Initialise empty promptstep 
+
+    # Initialise empty promptstep
     prompt_model = PromptStep()
 
     # set points if needed
     if prompt_orig.has_points:
-        coords_model, labels_model = _transform_points_prompt_to_model_coords(prompt_orig.coords, prompt_orig.labels, transform_coords)
+        coords_model, labels_model = _transform_points_prompt_to_model_coords(
+            prompt_orig.coords, prompt_orig.labels, transform_coords
+        )
         prompt_model.set_points((coords_model, labels_model))
-    
+
     # set boxes if needed
     if prompt_orig.has_boxes:
         box_dict_model = _transform_box_dict_to_model_coords(prompt_orig.boxes, transform_coords)

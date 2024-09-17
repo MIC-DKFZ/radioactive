@@ -69,6 +69,7 @@ def run_experiments_organ(
 
             # ---------------- Get binary gt in original coordinate system --------------- #
             base_name = os.path.basename(gt_path)
+            base_name = base_name.replace(".nrrd", ".nii.gz") if base_name.endswith(".nrrd") else base_name
             bin_gt_filepath = results_dir.parent / "binarised_gts" / target_name / base_name
             binary_gt_orig_coords = binarize_gt(gt_path, target_label)
             if not bin_gt_filepath.exists():

@@ -1,4 +1,5 @@
 from pathlib import Path
+import nrrd
 import torch
 import numpy as np
 import torch.nn.functional as F
@@ -7,12 +8,18 @@ from argparse import Namespace
 import nibabel as nib
 from loguru import logger
 
+from intrab.datasets_preprocessing.conversion_utils import nrrd_to_nib
 from intrab.model.inferer import Inferer
 from intrab.prompts.prompt import PromptStep
 from intrab.utils.SAMMed3D_segment_anything.build_sam import sam_model_registry as registry_sam
+from intrab.dataset_preprocessing.conversion_utils import load_any_to_nib
 
-
-from intrab.utils.transforms import ResizeLongestSide, orig_to_SAR_dense, orig_to_canonical_sparse_coords, transform_prompt_to_model_coords
+from intrab.utils.transforms import (
+    ResizeLongestSide,
+    orig_to_SAR_dense,
+    orig_to_canonical_sparse_coords,
+    transform_prompt_to_model_coords,
+)
 
 
 def load_sam(checkpoint_path, device="cuda", image_size=1024):
@@ -72,25 +79,22 @@ class SAMInferer(Inferer):
 
         return best_mask
 
-    def set_image(self, img_path: Path):
+    def set_image(self, img_path: Path | str):
+        img_path = Path(img_path)
         if self._image_already_loaded(img_path=img_path):
             return
-        # Load in and reorient to RAS
-        if self.image_embeddings_dict:
-            self.image_embeddings_dict = {}
-        
-        img_nib = nib.load(img_path)
+        img_nib = load_any_to_nib(img_path)
         self.orig_affine = img_nib.affine
         self.orig_shape = img_nib.shape
 
-        self.img, self.inv_trans_dense = self.transform_to_model_coords_dense(img_path, is_seg = False)
+        self.img, self.inv_trans_dense = self.transform_to_model_coords_dense(img_nib, is_seg=False)
         self.loaded_image = img_path
         self.new_shape = self.img.shape
         self.loaded_image = img_path
 
     def transform_to_model_coords_dense(self, nifti: Path | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
         data, inv_trans = orig_to_SAR_dense(nifti)
-        
+
         return data, inv_trans
 
     def transform_to_model_coords_sparse(self, coords: np.ndarray) -> np.ndarray:
@@ -132,7 +136,7 @@ class SAMInferer(Inferer):
         self.slices_processed = slices_processed
         return slices_processed
 
-    def preprocess_prompt(self, prompt, promptstep_in_model_coord_system = False):
+    def preprocess_prompt(self, prompt, promptstep_in_model_coord_system=False):
         """
         Preprocessing steps:
             - Modify in line with the volume cropping
@@ -207,18 +211,21 @@ class SAMInferer(Inferer):
         return segmentation
 
     def predict(
-        self, prompt: PromptStep, return_logits: bool = False, prev_seg=None, promptstep_in_model_coord_system = False,
+        self,
+        prompt: PromptStep,
+        return_logits: bool = False,
+        prev_seg=None,
+        promptstep_in_model_coord_system=False,
     ) -> tuple[nib.Nifti1Image, np.ndarray, np.ndarray]:
         if not isinstance(prompt, PromptStep):
             raise TypeError(f"Prompts must be supplied as an instance of the Prompt class.")
         if prompt.has_boxes and prompt.has_points:
             logger.warning("Both point and box prompts have been supplied; the model has not been trained on this.")
-        
+
         # Transform prompt if needed
         if not promptstep_in_model_coord_system:
             prompt = self.transform_promptstep_to_model_coords(prompt)
 
-            
         slices_to_infer = prompt.get_slices_to_infer()
 
         prompt = deepcopy(prompt)

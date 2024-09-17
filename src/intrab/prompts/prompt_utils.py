@@ -3,7 +3,7 @@ from loguru import logger
 import numpy as np
 from copy import deepcopy
 
-# from skimage.morphology import dilation, ball
+from skimage.morphology import dilation, ball
 from skimage.measure import label
 from scipy.spatial import cKDTree
 from scipy.interpolate import interp1d
@@ -78,6 +78,49 @@ def get_2d_bbox_of_gt_slice(mask):  # Bbox function only used in this function
 
 
 def get_pos_clicks2D_row_major(gt, n_clicks, seed=None):
+    """
+    Receives a groundtruth and a number of clicks (per slice) and generates a dictionary of point coordinates for each slice
+    """
+
+    if seed is not None:
+        np.random.seed(seed)
+    volume_fg = np.where(gt == 1)  # Get foreground indices (formatted as triple of arrays)
+    volume_fg = np.array(volume_fg).T  # Reformat to numpy array of shape n_fg_voxels x 3
+
+    fg_slices = np.unique(
+        volume_fg[:, 0]
+    )  # Obtain superior axis slices which have foreground before reformating indices
+
+    pos_coords = np.empty(shape=(0, 3), dtype=int)
+    warning_zs = []  # track slices without enough foreground/border, if any should exist
+
+    for slice_index in fg_slices:
+        ## Foreground points
+        slice = gt[slice_index, :, :]
+        slice_fg = np.where(slice)
+        slice_fg = np.array(slice_fg).T
+
+        n_fg_pixels = len(slice_fg)
+        if n_fg_pixels >= n_clicks:
+            point_indices = np.random.choice(n_fg_pixels, size=n_clicks, replace=False)
+        else:
+            # In this case, take all foreground pixels and then obtain some duplicate points by sampling with replacement additionally
+            warning_zs.append(f"z = {slice_index}, n foreground = n_fg_pixels")
+            point_indices = np.concatenate(
+                [np.arange(n_fg_pixels), np.random.choice(n_fg_pixels, size=n_clicks - n_fg_pixels, replace=True)]
+            )
+
+        pos_clicks_slice = slice_fg[point_indices]
+        z_col = np.full((n_clicks, 1), slice_index)  # create z column to add
+        pos_clicks_slice = np.hstack([z_col, pos_clicks_slice])
+        pos_coords = np.vstack([pos_coords, pos_clicks_slice])
+
+    pos_coords = pos_coords[:, [2, 1, 0]]  # gt is in row-major zyx, so need to reorder to get points in xyz.
+    point_prompt = PromptStep(point_prompts=(pos_coords, np.array([1] * len(pos_coords))))
+    return point_prompt
+
+
+def get_n_pos_neg_clicks2D_row_major(gt, n_clicks, seed=None):
     """
     Receives a groundtruth and a number of clicks (per slice) and generates a dictionary of point coordinates for each slice
     """
@@ -309,7 +352,7 @@ def get_middle_seed_point(fn_mask, slices_inferred):
     return new_middle_seed_prompt
 
 
-def point_interpolation(gt: np.ndarray, n_slices: int, interpolation: str ="linear") -> PromptStep:
+def point_interpolation(gt: np.ndarray, n_slices: int, interpolation: str = "linear") -> PromptStep:
     """
     Simulates a clinician clicking in the 'center of the main mass of the roi' per slice.
     Between these slices, the points are interpolated using linear or cubic spline interpolation.
@@ -318,7 +361,9 @@ def point_interpolation(gt: np.ndarray, n_slices: int, interpolation: str ="line
     :param n_slices: The number of slices to interpolate points between.
     """
     if n_slices == 1:
-        logger.warning(f'For point interpolation, need multiple points to interpolate between. One point was given, unexpected behaviour may occur.')
+        logger.warning(
+            f"For point interpolation, need multiple points to interpolate between. One point was given, unexpected behaviour may occur."
+        )
     simulated_clicks = get_fg_points_from_cc_centers(gt, n_slices)
     coords = interpolate_points(simulated_clicks, kind=interpolation).astype(int)
     coords = coords[:, [2, 1, 0]]  # Gt is in row-major; need to reorder to xyz
@@ -428,7 +473,7 @@ def propagate_point(
     all_labels = [seed_prompt.labels]
     current_prompt = seed_prompt
     for slice_id in slices_todo:
-        current_seg_nib, _, _ = inferer.predict(current_prompt, promptstep_in_model_coord_system = True)
+        current_seg_nib, _, _ = inferer.predict(current_prompt, promptstep_in_model_coord_system=True)
         current_seg = inferer.transform_to_model_coords_dense(current_seg_nib, is_seg=True)[0]
         coords_xyz = get_fg_points_from_slice(
             current_seg[slice_id], n_clicks=n_clicks, slice_index=slice_id, seed=seed

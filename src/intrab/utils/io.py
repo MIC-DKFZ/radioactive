@@ -2,9 +2,11 @@ import json
 import os
 from pathlib import Path
 from typing import Any, get_args
+import nrrd
 import yaml
 from intrab.model.model_utils import model_registry
 from intrab.utils.paths import get_dataset_path
+from intrab.datasets_preprocessing.conversion_utils import nrrd_to_nib
 from intrab.prompts.prompter import Prompter, static_prompt_styles
 from loguru import logger
 import nibabel as nib
@@ -13,6 +15,7 @@ from nrrd import NRRDHeader, read, write
 import numpy as np
 import tempfile
 from toinstance import InstanceNrrd
+
 
 from intrab.utils.result_data import PromptResult
 
@@ -115,17 +118,21 @@ def read_yaml_config(config_path: str) -> dict:
     return config
 
 
-def get_img_gts(dataset_dir: str) -> list[tuple[str,str]]:
-    images_dir = os.path.join(dataset_dir, "imagesTr")
-    labels_dir = os.path.join(dataset_dir, "labelsTr")
-    imgs_gts = [
-        (
-            os.path.join(images_dir, img_path),
-            os.path.join(labels_dir, img_path.removesuffix("_0000.nii.gz") + ".nii.gz"),
-        )
-        for img_path in os.listdir(images_dir)  # Adjust the extension as needed
-        if os.path.exists(os.path.join(labels_dir, img_path.rstrip("_0000.nii.gz") + ".nii.gz"))
-    ]
+def get_img_gts(dataset_dir: str) -> list[tuple[str, str]]:
+    images_dir = Path(dataset_dir) / "imagesTr"
+    labels_dir = Path(dataset_dir) / "labelsTr"
+    imgs_gts = []
+    for case in labels_dir.iterdir():
+        if case.name.endswith(("nii.gz", ".nrrd")):
+            suffix = "." + ".".join(case.name.split(".")[1:])
+            if suffix in (".nii.gz", ".nrrd"):
+                imgs_gts.append(
+                    (
+                        str(images_dir / (case.name.replace(suffix, "_0000" + suffix))),
+                        str(case),
+                    )
+                )
+
     return list(sorted(imgs_gts, key=lambda x: x[0]))
 
 
@@ -158,12 +165,25 @@ def get_labels_from_dataset_json(dataset_dir: Path) -> dict[str:int]:
     return label_dict
 
 
-def binarize_gt(gt_path: Path, label_of_interest: int) -> nib.Nifti1Image:
+def binarize_gt(gt_path: Path | str, label_of_interest: int) -> nib.Nifti1Image:
     """
     Creates a binary mask from a multi-class groundtruth in the same spacing.
     """
-    gt_nib = nib.load(gt_path)
-    gt = gt_nib.get_fdata()
+    gt: np.ndarray
+    gt_nib: nib.Nifti1Image
+    gt_path = Path(gt_path)
+    if gt_path.name.endswith(".nii.gz"):
+        gt_nib = nib.load(gt_path)
+        gt = gt_nib.get_fdata()
+    elif gt_path.name.endswith(".nrrd"):
+        arr, header = nrrd.read(gt_path)
+        if "innrrd" in header:
+            raise NotImplementedError("Innrrd not considered yet.")
+        gt_nib = nrrd_to_nib(arr, header)
+        gt = gt_nib.get_fdata()
+    else:
+        raise NotImplementedError("Only nii.gz and .nrrd files are supported atm.")
+
     binary_gt = np.where(gt == label_of_interest, 1, 0)
     binary_gt = nib.Nifti1Image(binary_gt.astype(np.uint8), gt_nib.affine)
     return binary_gt

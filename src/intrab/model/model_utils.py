@@ -5,6 +5,11 @@ from loguru import logger
 
 from intrab.prompts.prompt_hparams import PromptConfig
 from intrab.prompts.prompter import (
+    OneFGPointsPer2DSlicePrompter,
+    TwoFGPointsPer2DSlicePrompter,
+    ThreeFGPointsPer2DSlicePrompter,
+    FiveFGPointsPer2DSlicePrompter,
+    TenFGPointsPer2DSlicePrompter,
     Box3DVolumePrompter,
     BoxInterpolationPrompter,
     BoxPer2DSlicePrompter,
@@ -12,7 +17,6 @@ from intrab.prompts.prompter import (
     BoxPropagationPrompter,
     CenterPointPrompter,
     NPoints3DVolumePrompter,
-    NPointsPer2DSlicePrompter,
     PointInterpolationPrompter,
     PointPropagationPrompter,
     Prompter,
@@ -20,10 +24,10 @@ from intrab.prompts.prompter import (
 )
 
 from intrab.prompts.interactive_prompter import (
-    NPointsPer2DSliceInteractivePrompter, 
-    threeDInteractivePrompterSAMMed3D, 
+    NPointsPer2DSliceInteractivePrompter,
+    threeDInteractivePrompterSAMMed3D,
     twoDNPointsUnrealisticInteractivePrompter,
-    interactive_prompt_styles
+    interactive_prompt_styles,
 )
 
 from intrab.utils.paths import get_model_path
@@ -66,18 +70,43 @@ def get_wanted_supported_prompters(
     prompters = []
     if inferer.dim == 2:
         if "point" in inferer.supported_prompts:
-            if "NPointsPer2DSlicePrompter" in wanted_prompt_styles:
+            if "OneFGPointsPer2DSlicePrompter" in wanted_prompt_styles:
                 prompters.append(
-                    NPointsPer2DSlicePrompter(
+                    OneFGPointsPer2DSlicePrompter(
                         inferer,
-                        n_points_per_slice=pro_conf.twoD_n_click_random_points,
+                        seed=seed,
+                    )
+                )
+            if "TwoFGPointsPer2DSlicePrompter" in wanted_prompt_styles:
+                prompters.append(
+                    TwoFGPointsPer2DSlicePrompter(
+                        inferer,
+                        seed=seed,
+                    )
+                )
+            if "ThreeFGPointsPer2DSlicePrompter" in wanted_prompt_styles:
+                prompters.append(
+                    ThreeFGPointsPer2DSlicePrompter(
+                        inferer,
+                        seed=seed,
+                    )
+                )
+            if "FiveFGPointsPer2DSlicePrompter" in wanted_prompt_styles:
+                prompters.append(
+                    FiveFGPointsPer2DSlicePrompter(
+                        inferer,
+                        seed=seed,
+                    )
+                )
+            if "TenFGPointsPer2DSlicePrompter" in wanted_prompt_styles:
+                prompters.append(
+                    TenFGPointsPer2DSlicePrompter(
+                        inferer,
                         seed=seed,
                     )
                 )
             if "CenterPointPrompter" in wanted_prompt_styles:
-                prompters.append(
-                    CenterPointPrompter(inferer, seed)
-                )
+                prompters.append(CenterPointPrompter(inferer, seed))
             if "PointInterpolationPrompter" in wanted_prompt_styles:
                 prompters.append(
                     PointInterpolationPrompter(
@@ -143,19 +172,25 @@ def get_wanted_supported_prompters(
     elif inferer.dim == 3:
         if "point" in inferer.supported_prompts:
             if "NPoints3DVolumePrompter" in wanted_prompt_styles:
-                prompters.append(NPoints3DVolumePrompter(inferer, seed, n_points=pro_conf.threeD_n_click_random_points))
+                prompters.append(
+                    NPoints3DVolumePrompter(inferer, seed, n_points=pro_conf.threeD_n_click_random_points)
+                )
         if "box" in inferer.supported_prompts:
             if "Box3DVolumePrompter" in wanted_prompt_styles:
                 prompters.append(Box3DVolumePrompter(inferer, seed))
         if "point" in inferer.supported_prompts and "mask" in inferer.supported_prompts:
             if "threeDInteractivePrompter" in wanted_prompt_styles:
-                prompters.append(threeDInteractivePrompterSAMMed3D(inferer, 
-                                                           pro_conf.threeD_interactive_n_init_points,
-                                                           seed,
-                                                           pro_conf.interactive_dof_bound,
-                                                           pro_conf.interactive_perf_bound,
-                                                           pro_conf.interactive_max_iter,
-                                                           pro_conf.threeD_patch_size)) 
+                prompters.append(
+                    threeDInteractivePrompterSAMMed3D(
+                        inferer,
+                        pro_conf.threeD_interactive_n_init_points,
+                        seed,
+                        pro_conf.interactive_dof_bound,
+                        pro_conf.interactive_perf_bound,
+                        pro_conf.interactive_max_iter,
+                        pro_conf.threeD_patch_size,
+                    )
+                )
     else:
         raise ValueError(f"Inferer dimension '{inferer.dim}' not supported. Choose from [2, 3]")
 

@@ -8,6 +8,7 @@ from tqdm import tqdm
 from intrab.datasets_preprocessing.utils import suppress_output
 from intrab.utils.paths import get_MITK_path
 import os
+import nibabel as nib
 import numpy as np
 
 
@@ -41,6 +42,28 @@ def nrrd_to_sitk(nrrd_arr, nrrd_header) -> sitk.Image:
         new_img = sitk.GetImageFromArray(image_arr)
         new_img.CopyInformation(image)
     return new_img
+
+
+def load_any_to_nib(image_path: Path | str) -> nib.Nifti1Image:
+    """Loads an image in any format and returns a nibabel image."""
+    image_path = Path(image_path)
+    read_im = sitk.ReadImage(image_path)
+    with TemporaryDirectory() as temp_dir:
+        sitk.WriteImage(read_im, temp_dir + "/temp.nii.gz")
+        image = nib.load(temp_dir + "/temp.nii.gz")
+        image.get_fdata()  # Need to make sure image is in memory before deleting
+    return image
+
+
+def nrrd_to_nib(nrrd_arr, nrrd_header) -> nib.Nifti1Image:
+    """Converts an nrrd array to a nibabel Image."""
+    with TemporaryDirectory() as temp_dir:
+        nrrd.write(temp_dir + "/tmp.nrrd", nrrd_arr, nrrd_header)
+        img = sitk.ReadImage(temp_dir + "/tmp.nrrd")
+        sitk.WriteImage(img, temp_dir + "/tmp.nii")
+        image: nib.Nifti1Image = nib.load(temp_dir + "/tmp.nii")
+        _ = image.get_fdata()  # Need to make sure image is in memory before deleting
+    return image
 
 
 def sitk_to_nrrd(sitk_img: sitk.Image) -> tuple[np.ndarray, dict]:

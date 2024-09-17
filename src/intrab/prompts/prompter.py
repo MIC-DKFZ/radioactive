@@ -17,6 +17,7 @@ from intrab.prompts.prompt_utils import (
     get_fg_points_from_cc_centers,
     get_minimal_boxes_row_major,
     get_pos_clicks2D_row_major,
+    get_n_pos_neg_clicks2D_row_major,
     get_seed_boxes,
     get_seed_point,
     interpolate_points,
@@ -30,7 +31,7 @@ from intrab.utils.transforms import (
     orig_to_SAR_dense,
     transform_prompt_to_model_coords,
 )
-
+from intrab.dataset_preprocessing.conversion_utils import load_any_to_nib
 
 # ToDo: Save the Prompt before feeding into the model.
 #   Also add a check to see if another model received the same Prompt.
@@ -98,7 +99,7 @@ class Prompter:
         """Generate segmentation given prompt-style and model behavior."""
         # If the groundtruth is all zeros, return an empty mask
         if np.all(self.groundtruth_model == 0):
-            img: nib.Nifti1Image = nib.load(image_path)
+            img: nib.Nifti1Image = load_any_to_nib(image_path)
             binary_gt = np.zeros_like(img.get_fdata())
             empty_gt = nib.Nifti1Image(binary_gt.astype(np.uint8), img.affine)
             return PromptResult(predicted_image=empty_gt, logits=None, prompt_step=None, perf=0, n_step=0, dof=0)
@@ -161,6 +162,39 @@ class FiveFGPointsPer2DSlicePrompter(NFGPointsPer2DSlicePrompter):
 
 class TenFGPointsPer2DSlicePrompter(NFGPointsPer2DSlicePrompter):
     n_point_per_slice = 10
+
+
+class AlternatingNPointsPer2DSlicePrompter(Prompter, ABC):
+    n_point_per_slice: int
+
+    def __init__(self, inferer: Inferer, seed: int = 11111):
+        super().__init__(inferer, seed)
+        self.n_points_per_slice = self.n_point_per_slice
+
+    def get_prompt(self) -> PromptStep:
+        """
+        Prompt by creating n randomly chosen foregroudn points per slice
+        """
+        # Maybe name this SlicePrompts  to be less ambiguous
+        prompt_RAS = get_n_pos_neg_clicks2D_row_major(self.groundtruth_SAR, self.n_points_per_slice, self.seed)
+        prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
+        return prompt_orig
+
+
+class Alternating2PointsPer2DSlicePrompter(Prompter):
+    n_points_per_slice: int = 2
+
+
+class Alternating3PointsPer2DSlicePrompter(Prompter):
+    n_points_per_slice: int = 3
+
+
+class Alternating5PointsPer2DSlicePrompter(Prompter):
+    n_points_per_slice: int = 5
+
+
+class Alternating10PointsPer2DSlicePrompter(Prompter):
+    n_points_per_slice: int = 10
 
 
 class CenterPointPrompter(Prompter):
@@ -327,6 +361,10 @@ static_prompt_styles = Literal[
     "FiveFGPointsPer2DSlicePrompter",
     "TenFGPointsPer2DSlicePrompter",
     "CenterPointPrompter",
+    "Alternating2PointsPer2DSlicePrompter",
+    "Alternating3PointsPer2DSlicePrompter",
+    "Alternating5PointsPer2DSlicePrompter",
+    "Alternating10PointsPer2DSlicePrompter",
     # -------------------- 2D Point Interpolation and propagation ------------------- #
     "PointInterpolationPrompter",
     "PointPropagationPrompter",

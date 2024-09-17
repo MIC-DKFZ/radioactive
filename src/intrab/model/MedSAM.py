@@ -11,6 +11,7 @@ from intrab.model.inferer import Inferer
 from intrab.prompts.prompt import PromptStep
 from intrab.utils.MedSAM_segment_anything import sam_model_registry as registry_medsam
 from intrab.utils.transforms import orig_to_SAR_dense, orig_to_canonical_sparse_coords
+from intrab.dataset_preprocessing.conversion_utils import load_any_to_nib
 
 
 def load_medsam(checkpoint_path, device="cuda"):
@@ -37,17 +38,17 @@ class MedSAMInferer(Inferer):
     def set_image(self, img_path: str | Path) -> None:
         if self._image_already_loaded(img_path=img_path):
             return
-        img_nib = nib.load(img_path)
+        img_nib = load_any_to_nib(img_path)
         self.orig_affine = img_nib.affine
         self.orig_shape = img_nib.shape
-        
+
         self.img, self.inv_trans_dense = self.transform_to_model_coords_dense(img_nib, is_seg=False)
         self.new_shape = self.img.shape
         self.loaded_image = img_path
 
     def transform_to_model_coords_dense(self, nifti: Path | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
         data, inv_trans = orig_to_SAR_dense(nifti)
-        
+
         return data, inv_trans
 
     def transform_to_model_coords_sparse(self, coords: np.ndarray) -> np.ndarray:
@@ -132,7 +133,9 @@ class MedSAMInferer(Inferer):
 
         return segmentation
 
-    def predict(self, prompt: PromptStep, prev_seg=None, promptstep_in_model_coord_system: bool = False) -> tuple[nib.Nifti1Image, np.ndarray, np.ndarray]:
+    def predict(
+        self, prompt: PromptStep, prev_seg=None, promptstep_in_model_coord_system: bool = False
+    ) -> tuple[nib.Nifti1Image, np.ndarray, np.ndarray]:
         if not (isinstance(prompt, PromptStep)):
             raise TypeError(f"Prompts must be supplied as an instance of the Prompt class.")
         if prompt.has_points:
