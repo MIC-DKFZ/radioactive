@@ -1,5 +1,6 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import tempfile
 import SimpleITK as sitk
 from loguru import logger
 import nrrd
@@ -10,6 +11,27 @@ from intrab.utils.paths import get_MITK_path
 import os
 import nibabel as nib
 import numpy as np
+
+
+class TemporaryFileHandler:
+    def __init__(self):
+        self.temp_file = tempfile.NamedTemporaryFile(suffix=".nii.gz", delete=False)
+        self.file_name = self.temp_file.name
+        print(f"Temporary file created: {self.file_name}")
+
+    def write(self, data):
+        self.temp_file.write(data)
+        self.temp_file.flush()  # Ensure data is written
+
+    def read(self):
+        with open(self.file_name, "rb") as file:
+            return file.read()
+
+    def __del__(self):
+        # Called when the object is destroyed (no more references)
+        self.temp_file.close()
+        os.remove(self.file_name)
+        print(f"Temporary file deleted: {self.file_name}")
 
 
 def maybe_download_mitk():
@@ -51,8 +73,13 @@ def load_any_to_nib(image_path: Path | str) -> nib.Nifti1Image:
     with TemporaryDirectory() as temp_dir:
         sitk.WriteImage(read_im, temp_dir + "/temp.nii.gz")
         image = nib.load(temp_dir + "/temp.nii.gz")
-        _ = image.get_fdata()  # Need to make sure image is in memory before deleting
-        _ = image.affine
+        # Need to make sure image is in memory before deleting
+        data_in_memory = np.asanyarray(image.dataobj)
+        # Extract the header (it's already in memory)
+        header_in_memory = image.header.copy()
+        # Create a new Nifti1Image fully in memory
+        image = nib.Nifti1Image(data_in_memory, affine=image.affine, header=header_in_memory)
+
     return image
 
 
