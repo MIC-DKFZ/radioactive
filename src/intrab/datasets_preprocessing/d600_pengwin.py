@@ -16,6 +16,10 @@ from tempfile import TemporaryDirectory
 from toinstance import InstanceNrrd
 
 
+# ToDo: The fractured pieces should probably be predicted as instances instead of semantic classes.
+#
+
+
 def load_filenames(load_dir, extension=None, return_path=False, return_extension=False):
     filepaths = []
     if isinstance(extension, str):
