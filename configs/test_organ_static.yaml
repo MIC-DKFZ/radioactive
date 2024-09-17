@@ -26,7 +26,11 @@ prompting:
     - "BoxPer2dSliceFrom3DBoxPrompter"
     - "BoxInterpolationPrompter"
     - "BoxPropagationPrompter"
-    - "NPoints3DVolumePrompter"
+    - "OnePoints3DVolumePrompter"
+    - "TwoPoints3DVolumePrompter"
+    - "ThreePoints3DVolumePrompter"
+    - "FivePoints3DVolumePrompter"
+    - "TenPoints3DVolumePrompter"
     - "Box3DVolumePrompter"
   # ToDo: Add the hyperparameters for the prompters in here to have them properly defined and not depend on the defaults.
 
