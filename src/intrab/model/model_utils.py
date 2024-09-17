@@ -6,6 +6,7 @@ from loguru import logger
 from intrab.prompts.prompt_hparams import PromptConfig
 from intrab.prompts.prompter import (
     OneFGPointsPer2DSlicePrompter,
+    ThreePoints3DVolumePrompter,
     TwoFGPointsPer2DSlicePrompter,
     ThreeFGPointsPer2DSlicePrompter,
     FiveFGPointsPer2DSlicePrompter,
