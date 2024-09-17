@@ -345,6 +345,26 @@ class NPoints3DVolumePrompter(Prompter, ABC):
         return prompt_orig
 
 
+class OnePoints3DVolumePrompter(Prompter, ABC):
+    n_points: int = 1
+
+
+class TwoPoints3DVolumePrompter(Prompter, ABC):
+    n_points: int = 2
+
+
+class ThreePoints3DVolumePrompter(Prompter, ABC):
+    n_points: int = 3
+
+
+class FivePoints3DVolumePrompter(Prompter, ABC):
+    n_points: int = 5
+
+
+class TenPoints3DVolumePrompter(Prompter, ABC):
+    n_points: int = 10
+
+
 class Box3DVolumePrompter(Prompter):
 
     def get_prompt(self) -> tuple[nib.Nifti1Image, dict[int, np.ndarray]]:
