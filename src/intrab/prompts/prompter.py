@@ -345,23 +345,23 @@ class NPoints3DVolumePrompter(Prompter, ABC):
         return prompt_orig
 
 
-class OnePoints3DVolumePrompter(Prompter, ABC):
+class OnePoints3DVolumePrompter(Prompter):
     n_points: int = 1
 
 
-class TwoPoints3DVolumePrompter(Prompter, ABC):
+class TwoPoints3DVolumePrompter(Prompter):
     n_points: int = 2
 
 
-class ThreePoints3DVolumePrompter(Prompter, ABC):
+class ThreePoints3DVolumePrompter(Prompter):
     n_points: int = 3
 
 
-class FivePoints3DVolumePrompter(Prompter, ABC):
+class FivePoints3DVolumePrompter(Prompter):
     n_points: int = 5
 
 
-class TenPoints3DVolumePrompter(Prompter, ABC):
+class TenPoints3DVolumePrompter(Prompter):
     n_points: int = 10
 
 
