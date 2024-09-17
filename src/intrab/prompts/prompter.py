@@ -395,6 +395,10 @@ static_prompt_styles = Literal[
     "BoxInterpolationPrompter",
     "BoxPropagationPrompter",
     # ------------------------- 3D Volume Prompters ------------------------- #
-    "NPoints3DVolumePrompter",
+    "OnePoints3DVolumePrompter",
+    "TwoPoints3DVolumePrompter",
+    "ThreePoints3DVolumePrompter",
+    "FivePoints3DVolumePrompter",
+    "TenPoints3DVolumePrompter",
     "Box3DVolumePrompter",
 ]
