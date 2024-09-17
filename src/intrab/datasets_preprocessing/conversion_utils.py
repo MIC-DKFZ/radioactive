@@ -51,7 +51,8 @@ def load_any_to_nib(image_path: Path | str) -> nib.Nifti1Image:
     with TemporaryDirectory() as temp_dir:
         sitk.WriteImage(read_im, temp_dir + "/temp.nii.gz")
         image = nib.load(temp_dir + "/temp.nii.gz")
-        image.get_fdata()  # Need to make sure image is in memory before deleting
+        _ = image.get_fdata()  # Need to make sure image is in memory before deleting
+        _ = image.affine
     return image
 
 
