@@ -65,7 +65,6 @@ def verify_dataset(ds_dir: Path, ds_type: str):
 
 
 if __name__ == "__main__":
-
     data_path = get_dataset_path()
     for ds_name, ds_type in dataset_type.items():
         verify_dataset(data_path / ds_name, ds_type)
