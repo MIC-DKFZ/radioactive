@@ -3,7 +3,7 @@ from loguru import logger
 import numpy as np
 from copy import deepcopy
 
-from skimage.morphology import dilation, ball
+from skimage.morphology import dilation, ball, disk
 from skimage.measure import label
 from scipy.spatial import cKDTree
 from scipy.interpolate import interp1d
@@ -125,10 +125,18 @@ def get_n_pos_neg_clicks2D_row_major(gt, n_clicks, seed=None):
     Receives a groundtruth and a number of clicks (per slice) and generates a dictionary of point coordinates for each slice
     """
 
+    n_clicks_fgs_wanted = n_clicks // 2 + n_clicks % 2
+    n_clicks_bgs_wanted = n_clicks // 2
+
     if seed is not None:
         np.random.seed(seed)
     volume_fg = np.where(gt == 1)  # Get foreground indices (formatted as triple of arrays)
     volume_fg = np.array(volume_fg).T  # Reformat to numpy array of shape n_fg_voxels x 3
+
+    # Dilate the groundtruth by 2 pixels within the slice and ignore z-axis
+    gt_dilated = dilation(gt, selem=disk(2)[None, ...])
+    gt_dilated_x2 = dilation(gt_dilated, selem=disk(3)[None, ...])
+    volume_bg = gt_dilated_x2 - gt_dilated
 
     fg_slices = np.unique(
         volume_fg[:, 0]
@@ -144,22 +152,31 @@ def get_n_pos_neg_clicks2D_row_major(gt, n_clicks, seed=None):
         slice_fg = np.array(slice_fg).T
 
         n_fg_pixels = len(slice_fg)
-        if n_fg_pixels >= n_clicks:
-            point_indices = np.random.choice(n_fg_pixels, size=n_clicks, replace=False)
-        else:
-            # In this case, take all foreground pixels and then obtain some duplicate points by sampling with replacement additionally
-            warning_zs.append(f"z = {slice_index}, n foreground = n_fg_pixels")
-            point_indices = np.concatenate(
-                [np.arange(n_fg_pixels), np.random.choice(n_fg_pixels, size=n_clicks - n_fg_pixels, replace=True)]
-            )
+        n_clicks_fg_actual = min(n_clicks_fgs_wanted, n_fg_pixels)
+        fg_point_indices = np.random.choice(n_fg_pixels, size=n_clicks_fg_actual, replace=False)
 
-        pos_clicks_slice = slice_fg[point_indices]
-        z_col = np.full((n_clicks, 1), slice_index)  # create z column to add
-        pos_clicks_slice = np.hstack([z_col, pos_clicks_slice])
+        slice_bg = np.where(volume_bg[slice_index, :, :])
+        slice_bg = np.array(slice_bg).T
+        n_bg_pixels = len(slice_bg)
+        n_clicks_bg_actual = min(n_clicks_bgs_wanted, n_bg_pixels)
+        bg_point_indices = np.random.choice(n_bg_pixels, size=n_clicks_bg_actual, replace=False)
+
+        pos_clicks_slice = slice_fg[fg_point_indices]
+        z_col_fg = np.full((n_clicks_fg_actual, 1), slice_index)  # create z column to add
+        pos_clicks_slice = np.hstack([z_col_fg, pos_clicks_slice])
         pos_coords = np.vstack([pos_coords, pos_clicks_slice])
 
+        neg_clicks_slice = slice_bg[bg_point_indices]
+        z_col_bg = np.full((n_clicks_bg_actual, 1), slice_index)  # create z column to add
+        neg_clicks_slice = np.hstack([z_col_bg, neg_clicks_slice])
+        neg_coords = np.vstack([neg_coords, neg_clicks_slice])
+
     pos_coords = pos_coords[:, [2, 1, 0]]  # gt is in row-major zyx, so need to reorder to get points in xyz.
-    point_prompt = PromptStep(point_prompts=(pos_coords, np.array([1] * len(pos_coords))))
+    neg_coords = neg_coords[:, [2, 1, 0]]  # gt is in row-major zyx, so need to reorder to get points in xyz.
+    click_types = np.concatenate([np.ones(pos_coords), np.zeros(neg_coords)], axis=0)
+    coords = np.concatenate([pos_coords, neg_coords], axis=0)
+    point_prompts = (coords, click_types)
+    point_prompt = PromptStep(point_prompts=point_prompts)
     return point_prompt
 
 
