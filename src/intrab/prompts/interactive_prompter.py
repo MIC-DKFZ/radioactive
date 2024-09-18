@@ -5,7 +5,7 @@ import numpy as np
 from click import prompt
 from intrab.model.SAMMed3D import SAMMed3DInferer
 from intrab.model.inferer import Inferer
-from intrab.prompts.prompt import PromptStep, merge_prompt_steps
+from intrab.prompts.prompt import PromptStep, merge_sparse_prompt_steps
 from intrab.prompts.prompt_3d import (
     get_pos_clicks3D,
     isolate_patch_around_point,
@@ -36,11 +36,14 @@ class InteractivePrompter(Prompter):
         self,
         inferer: Inferer,
         seed: int = 11121,
-        dof_bound: int | None = 60,
-        perf_bound: float | None = 0.85,
-        max_iter: int | None = 10,
+        dof_bound: int | None = None,
+        perf_bound: float | None = None,
+        max_iter: int | None = None,
     ):
         super().__init__(inferer, seed)
+
+        self.promptstep_in_model_coord_system = True # Expect promptsteps to generally be supplied in model coord system for interactive prompters.
+
         self.dof_bound: int | None = dof_bound
         self.perf_bound: float | None = perf_bound
         self.max_iter: int | None = max_iter
@@ -91,7 +94,7 @@ class InteractivePrompter(Prompter):
 
         all_prompt_results: list[PromptResult] = []
         prompt_step: PromptStep = self.get_initial_prompt_step()
-        pred, logits, _ = self.inferer.predict(prompt_step)
+        pred, logits, _ = self.inferer.predict(prompt_step, promptstep_in_model_coord_system=self.promptstep_in_model_coord_system)
 
         perf = self.get_performance(pred)
         all_prompt_results.append(
@@ -104,9 +107,11 @@ class InteractivePrompter(Prompter):
             prompt_step = self.get_next_prompt_step(pred, logits, [ap.prompt_step for ap in all_prompt_results])
             # Option to never forget previous prompts but feed all of them again in one huge joint prompt.
             if self.always_pass_prev_prompts:
-                prompt_step = merge_prompt_steps([prompt_step, all_prompt_results[-1].prompt_step])
+                merged_prompt_step = merge_sparse_prompt_steps([prompt_step, all_prompt_results[-1].prompt_step]) # Merge sparse prompts
+                merged_prompt_step.set_masks(prompt_step.masks) # Take dense prompts from current promptstep
+                prompt_step = merged_prompt_step
 
-            pred, logits, _ = self.inferer.predict(prompt_step, prev_seg=pred)
+            pred, logits, _ = self.inferer.predict(prompt_step, prev_seg=pred, promptstep_in_model_coord_system=self.promptstep_in_model_coord_system)
             dof += prompt_step.get_dof()
             perf = self.get_performance(pred)
             all_prompt_results.append(
@@ -125,9 +130,9 @@ class threeDInteractivePrompterSAMMed3D(InteractivePrompter):
         inferer: SAMMed3DInferer,
         n_points: int,
         seed: int = 11121,
-        dof_bound: int | None = 60,
-        perf_bound: float | None = 0.85,
-        max_iter: int | None = 10,
+        dof_bound: int | None = None,
+        perf_bound: float | None = None,
+        max_iter: int | None = None,
         isolate_around_initial_point_size: int = None,
     ):
         super().__init__(inferer, seed, dof_bound, perf_bound, max_iter)
@@ -136,7 +141,10 @@ class threeDInteractivePrompterSAMMed3D(InteractivePrompter):
         self.isolate_around_initial_point_size = isolate_around_initial_point_size
 
     def get_initial_prompt_step(self) -> PromptStep:
-        return get_pos_clicks3D(self.groundtruth_model, n_clicks=self.n_points, seed=self.seed)
+        prompt_RAS = get_pos_clicks2D_row_major(self.groundtruth_SAR, self.n_points_per_slice, self.seed)
+        prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
+        prompt_model = self.inferer.transform_promptstep_to_model_coords(prompt_orig)
+        return prompt_model
 
     def process_gt_to_compare(self, gt, initial_prompt_step, isolate_around_initial_point_size):
         return isolate_patch_around_point(gt, initial_prompt_step, isolate_around_initial_point_size)
@@ -184,7 +192,7 @@ class threeDInteractivePrompterSAMMed3D(InteractivePrompter):
             prompt_step = self.get_next_prompt_step(pred, logits, [ap.prompt_step for ap in all_prompt_results])
             # Option to never forget previous prompts but feed all of them again in one huge joint prompt.
             if self.always_pass_prev_prompts:
-                prompt_step = merge_prompt_steps([prompt_step, all_prompt_results[-1].prompt_step])
+                prompt_step = merge_sparse_prompt_steps([prompt_step, all_prompt_results[-1].prompt_step])
 
             pred, logits, _ = self.inferer.predict(prompt_step, crop_pad_params)
             dof += prompt_step.get_dof()
@@ -204,15 +212,15 @@ class threeDInteractivePrompterSAMMed3D(InteractivePrompter):
         return
 
 
-class twoDNPointsUnrealisticInteractivePrompter(InteractivePrompter):
+class twoD1PointUnrealisticInteractivePrompterNoPrevPointPassed(InteractivePrompter):
     def __init__(
         self,
         inferer: Inferer,
         seed: int = 11121,
-        dof_bound: int | None = 60,
-        perf_bound: float | None = 0.85,
-        max_iter: int | None = 10,
-        n_init_points_per_slice: int = 5,
+        dof_bound: int | None = None,
+        perf_bound: float | None = None,
+        max_iter: int | None = None,
+        n_init_points_per_slice: int = 1,
     ):
 
         super().__init__(inferer, seed, dof_bound, perf_bound, max_iter)
@@ -241,10 +249,24 @@ class twoDNPointsUnrealisticInteractivePrompter(InteractivePrompter):
             slice_prompt_step = obtain_misclassified_point_prompt_2d(slice_seg, slice_gt, slice_idx, self.seed)
             all_slice_prompt_steps.append(slice_prompt_step)
 
-        new_prompt_step = merge_prompt_steps(all_slice_prompt_steps)
+        new_prompt_step = merge_sparse_prompt_steps(all_slice_prompt_steps)
         new_prompt_step.set_masks(low_res_logits)
 
         return new_prompt_step
+
+class twoD1PointUnrealisticInteractivePrompterPrevPointPassed(twoD1PointUnrealisticInteractivePrompterNoPrevPointPassed):
+    def __init__(
+        self,
+        inferer: Inferer,
+        seed: int = 11121,
+        dof_bound: int | None = None,
+        perf_bound: float | None = None,
+        max_iter: int | None = None,
+        n_init_points_per_slice: int = 1,
+    ):
+
+        super().__init__(inferer, seed, dof_bound, perf_bound, max_iter, n_init_points_per_slice)
+        self.always_pass_prev_prompts = True 
 
 
 # ToDo: Check prompts generated are of decent 'quality'
@@ -253,9 +275,9 @@ class twoDInteractivePrompter(InteractivePrompter):
         self,
         inferer: Inferer,
         seed: int = 11121,
-        dof_bound: int | None = 60,
-        perf_bound: float | None = 0.85,
-        max_iter: int | None = 10,
+        dof_bound: int | None = None,
+        perf_bound: float | None = None,
+        max_iter: int | None = None,
         contour_distance=2,
         disk_size_range=(0, 0),
         scribble_length=0.6,
@@ -407,9 +429,9 @@ class NPointsPer2DSliceInteractivePrompter(twoDInteractivePrompter):
         self,
         inferer: Inferer,
         seed: int = 11121,
-        dof_bound: int | None = 60,
-        perf_bound: float | None = 0.85,
-        max_iter: int | None = 10,
+        dof_bound: int | None = None,
+        perf_bound: float | None = None,
+        max_iter: int | None = None,
         n_init_points_per_slice: int = 5,
     ):
         super().__init__(inferer, seed, dof_bound, perf_bound, max_iter)
@@ -426,5 +448,6 @@ class NPointsPer2DSliceInteractivePrompter(twoDInteractivePrompter):
 interactive_prompt_styles = Literal[
     "NPointsPer2DSliceInteractivePrompter",
     "threeDInteractivePrompterSAMMed3D",
-    "twoDNPointsUnrealisticInteractivePrompter",
+    "twoD1PointUnrealisticInteractivePrompterNoPrevPointPassed",
+    "twoD1PointUnrealisticInteractivePrompterPrevPointPassed",
 ]

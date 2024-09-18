@@ -7,7 +7,7 @@ import nibabel as nib
 import torch
 
 from intrab.model.inferer import Inferer
-from intrab.prompts.prompt import PromptStep, merge_prompt_steps
+from intrab.prompts.prompt import PromptStep, merge_sparse_prompt_steps
 from intrab.prompts.prompt_3d import get_pos_clicks3D, get_bbox3d
 from intrab.prompts.prompt_utils import (
     box_interpolation,

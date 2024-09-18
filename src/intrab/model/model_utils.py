@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Literal, Type
+from typing import Literal, Type, Union
 
 from loguru import logger
 
@@ -31,8 +31,9 @@ from intrab.prompts.prompter import (
 from intrab.prompts.interactive_prompter import (
     NPointsPer2DSliceInteractivePrompter,
     threeDInteractivePrompterSAMMed3D,
-    twoDNPointsUnrealisticInteractivePrompter,
+    twoD1PointUnrealisticInteractivePrompterNoPrevPointPassed,
     interactive_prompt_styles,
+    twoD1PointUnrealisticInteractivePrompterPrevPointPassed,
 )
 
 from intrab.utils.paths import get_model_path
@@ -69,7 +70,7 @@ checkpoint_registry: dict[model_registry, Path] = {
 def get_wanted_supported_prompters(
     inferer: Inferer,
     pro_conf: PromptConfig,
-    wanted_prompt_styles: list[static_prompt_styles],
+    wanted_prompt_styles: Union[list[static_prompt_styles], list[interactive_prompt_styles]],
     seed: int,
 ) -> list[Prompter]:
     prompters = []
@@ -162,9 +163,20 @@ def get_wanted_supported_prompters(
                         n_init_points_per_slice=pro_conf.twoD_interactive_n_points_per_slice,
                     )
                 )
-            if "twoDNPointsUnrealisticInteractivePrompter" in wanted_prompt_styles:
+            if "twoD1PointUnrealisticInteractivePrompterNoPrevPointPassed" in wanted_prompt_styles:
                 prompters.append(
-                    twoDNPointsUnrealisticInteractivePrompter(
+                    twoD1PointUnrealisticInteractivePrompterNoPrevPointPassed(
+                        inferer,
+                        seed,
+                        dof_bound=pro_conf.interactive_dof_bound,
+                        perf_bound=pro_conf.interactive_perf_bound,
+                        max_iter=pro_conf.interactive_max_iter,
+                        n_init_points_per_slice=pro_conf.twoD_interactive_n_points_per_slice,
+                    )
+                )
+            if "twoD1PointUnrealisticInteractivePrompterPrevPointPassed" in wanted_prompt_styles:
+                prompters.append(
+                        twoD1PointUnrealisticInteractivePrompterPrevPointPassed(
                         inferer,
                         seed,
                         dof_bound=pro_conf.interactive_dof_bound,

@@ -16,7 +16,8 @@ prompting:
   prompt_styles:
     - "NPointsPer2DSliceInteractivePrompter"
     - "threeDInteractivePrompterSAMMed3D"
-    - "twoDNPointsUnrealisticInteractivePrompter"
+    - twoD1PointUnrealisticInteractivePrompterNoPrevPointPassed
+    - twoD1PointUnrealisticInteractivePrompterPrevPointPassed
 
 # List of dataset that will be compared in the next run of the benchmark.
 datasets:

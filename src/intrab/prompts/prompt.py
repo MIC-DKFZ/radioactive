@@ -176,21 +176,20 @@ def _merge_point_prompts(coords1: np.ndarray | None, labels1: np.ndarray | None,
     return coords, labels
 
 
-def _merge_two_promptsteps(prompt1: PromptStep, prompt2: PromptStep) -> PromptStep:
+def _merge_two_sparse_promptsteps(prompt1: PromptStep, prompt2: PromptStep) -> PromptStep:
     """
     Merges two promptsteps. Requires that if prompt 1 and prompt 2 have box prompts for the same slice, then the box prompts must be the same
     """
 
     coords, labels = _merge_point_prompts(prompt1.coords, prompt1.labels, prompt2.coords, prompt2.labels)   
     boxes = _merge_dict_prompts(prompt1.boxes, prompt2.boxes)
-    masks = _merge_dict_prompts(prompt1.masks, prompt2.masks)
 
-    merged_prompt = PromptStep(point_prompts=(coords, labels), box_prompts=boxes, mask_prompts=masks)
+    merged_prompt = PromptStep(point_prompts=(coords, labels), box_prompts=boxes)
 
     return merged_prompt
 
 
-def merge_prompt_steps(prompt_steps: list[PromptStep]) -> PromptStep:
+def merge_sparse_prompt_steps(prompt_steps: list[PromptStep]) -> PromptStep:
     """
     Merge a list of prompt steps into one single prompt step
     """
@@ -201,6 +200,6 @@ def merge_prompt_steps(prompt_steps: list[PromptStep]) -> PromptStep:
 
     for ps in prompt_steps[1:]:
         assert isinstance(ps, PromptStep), f'Expected elements of prompt_steps to be of type PromptStep, got {type(prompt_steps[0])}'
-        merged_prompt_step = _merge_two_promptsteps(merged_prompt_step, ps)
+        merged_prompt_step = _merge_two_sparse_promptsteps(merged_prompt_step, ps)
 
     return merged_prompt_step
