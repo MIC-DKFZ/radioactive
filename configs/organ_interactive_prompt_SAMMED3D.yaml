@@ -9,8 +9,6 @@ models:
   # - "sammed3d_turbo"
   # - "segvol"
 
-debug: True
-
 prompting:
   type: "interactive"
   prompt_styles:
@@ -22,9 +20,6 @@ prompting:
 # List of dataset that will be compared in the next run of the benchmark.
 datasets:
   - identifier: 209  # HanSeg MR Organs
-    type: "organ"
-    excluded_classes: [0]
-  - identifier: 600  # Pengwin CT Bones
     type: "organ"
     excluded_classes: [0]
   - identifier: 651  # SegRap CT Organs at Risk

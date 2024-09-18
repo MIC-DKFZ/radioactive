@@ -9,7 +9,6 @@ models:
   # - "sammed3d_turbo"
   # - "segvol"
 
-debug: True
 
 prompting:
   type: "interactive"

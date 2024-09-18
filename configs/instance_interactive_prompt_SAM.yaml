@@ -2,14 +2,12 @@
 seeds:
   - 11121
 models:
-  # - "sam"
+  - "sam"
   # - "sammed2d"
-  - "medsam"
+  # - "medsam"
   # - "sammed3d"
   # - "sammed3d_turbo"
   # - "segvol"
-
-debug: True
 
 prompting:
   type: "interactive"
