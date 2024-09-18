@@ -133,7 +133,7 @@ def run_experiments_lesions(
     results_overwrite: bool = False,
     debug: bool = False,
 ):
-    targets: dict = {k.replace("/", "_"): v for k, v in label_dict.items() if k != "background"}
+    targets: dict = {k.replace("/", "_"): v for k, v in label_dict.items() if k.lower() != "background"}
     assert len(targets) == 1, "Lesion experiments only support two classes -- background and lesions"
     prompters: list[Prompter] = get_wanted_supported_prompters(inferer, pro_conf, wanted_prompt_styles, seed)
 
