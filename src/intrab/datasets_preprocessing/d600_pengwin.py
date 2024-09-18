@@ -168,10 +168,10 @@ def preprocess(raw_data_path: Path):
                 img = sitk.ReadImage(str(Path(tempdir) / "temp.nii.gz"))
                 # ------------- We just make instances numerically growing from 1 ------------ #
                 img_array = sitk.GetArrayFromImage(img)
-                for cnt, cls in enumerate(np.unique(img_array)):
-                    if cls == 0:
+                for cnt, inst_id in enumerate(np.unique(img_array)):
+                    if inst_id == 0:
                         continue
-                    img_array[img_array == cls] = cnt
+                    img_array[img_array == inst_id] = cnt
                 # ------------------------------- Copy old info ------------------------------ #
                 new_img = sitk.GetImageFromArray(img_array)
                 new_img.CopyInformation(img)
@@ -185,7 +185,7 @@ def preprocess(raw_data_path: Path):
         json.dump(
             {
                 "channel_names": {"0": "CT"},
-                "labels": {"background": 0, "sacrum": 1, "left hipbone": 2, "right hipbone": 3},
+                "labels": {"background": 0, "bone_fragement": 1},
                 "numTraining": 100,
                 "file_ending": ".nii.gz",
                 "name": "Pengwin_challenge_2024",
