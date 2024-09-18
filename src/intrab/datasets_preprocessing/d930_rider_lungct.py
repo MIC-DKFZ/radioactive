@@ -56,6 +56,7 @@ def preprocess(raw_download_dir: Path):
                 "numTraining": len(list(all_dicoms)),
                 "file_ending": ".nrrd",
                 "name": "d911 LNQ instance lesions",
+                "dataset_type": "instance",
             },
             f,
         )
