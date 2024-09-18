@@ -165,11 +165,7 @@ class TenFGPointsPer2DSlicePrompter(NFGPointsPer2DSlicePrompter):
 
 
 class AlternatingNPointsPer2DSlicePrompter(Prompter, ABC):
-    n_point_per_slice: int
-
-    def __init__(self, inferer: Inferer, seed: int = 11111):
-        super().__init__(inferer, seed)
-        self.n_points_per_slice = self.n_point_per_slice
+    n_points_per_slice: int
 
     def get_prompt(self) -> PromptStep:
         """

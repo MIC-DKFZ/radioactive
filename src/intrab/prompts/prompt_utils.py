@@ -134,8 +134,8 @@ def get_n_pos_neg_clicks2D_row_major(gt, n_clicks, seed=None):
     volume_fg = np.array(volume_fg).T  # Reformat to numpy array of shape n_fg_voxels x 3
 
     # Dilate the groundtruth by 2 pixels within the slice and ignore z-axis
-    gt_dilated = dilation(gt, selem=disk(2)[None, ...])
-    gt_dilated_x2 = dilation(gt_dilated, selem=disk(3)[None, ...])
+    gt_dilated = dilation(gt, footprint=disk(2)[None, ...])
+    gt_dilated_x2 = dilation(gt_dilated, footprint=disk(3)[None, ...])
     volume_bg = gt_dilated_x2 - gt_dilated
 
     fg_slices = np.unique(
@@ -143,28 +143,29 @@ def get_n_pos_neg_clicks2D_row_major(gt, n_clicks, seed=None):
     )  # Obtain superior axis slices which have foreground before reformating indices
 
     pos_coords = np.empty(shape=(0, 3), dtype=int)
-    warning_zs = []  # track slices without enough foreground/border, if any should exist
+    neg_coords = np.empty(shape=(0, 3), dtype=int)
 
     for slice_index in fg_slices:
-        ## Foreground points
-        slice = gt[slice_index, :, :]
-        slice_fg = np.where(slice)
+        # ----------------------------- Foreground points ---------------------------- #
+        slice_fg = np.where(gt[slice_index, :, :])
         slice_fg = np.array(slice_fg).T
 
         n_fg_pixels = len(slice_fg)
         n_clicks_fg_actual = min(n_clicks_fgs_wanted, n_fg_pixels)
         fg_point_indices = np.random.choice(n_fg_pixels, size=n_clicks_fg_actual, replace=False)
 
-        slice_bg = np.where(volume_bg[slice_index, :, :])
-        slice_bg = np.array(slice_bg).T
-        n_bg_pixels = len(slice_bg)
-        n_clicks_bg_actual = min(n_clicks_bgs_wanted, n_bg_pixels)
-        bg_point_indices = np.random.choice(n_bg_pixels, size=n_clicks_bg_actual, replace=False)
-
         pos_clicks_slice = slice_fg[fg_point_indices]
         z_col_fg = np.full((n_clicks_fg_actual, 1), slice_index)  # create z column to add
         pos_clicks_slice = np.hstack([z_col_fg, pos_clicks_slice])
         pos_coords = np.vstack([pos_coords, pos_clicks_slice])
+
+        # ----------------------------- Background points ---------------------------- #
+        slice_bg = np.where(volume_bg[slice_index, :, :])
+        slice_bg = np.array(slice_bg).T
+
+        n_bg_pixels = len(slice_bg)
+        n_clicks_bg_actual = min(n_clicks_bgs_wanted, n_bg_pixels)
+        bg_point_indices = np.random.choice(n_bg_pixels, size=n_clicks_bg_actual, replace=False)
 
         neg_clicks_slice = slice_bg[bg_point_indices]
         z_col_bg = np.full((n_clicks_bg_actual, 1), slice_index)  # create z column to add
@@ -173,7 +174,7 @@ def get_n_pos_neg_clicks2D_row_major(gt, n_clicks, seed=None):
 
     pos_coords = pos_coords[:, [2, 1, 0]]  # gt is in row-major zyx, so need to reorder to get points in xyz.
     neg_coords = neg_coords[:, [2, 1, 0]]  # gt is in row-major zyx, so need to reorder to get points in xyz.
-    click_types = np.concatenate([np.ones(pos_coords), np.zeros(neg_coords)], axis=0)
+    click_types = np.concatenate([np.ones(pos_coords.shape[0]), np.zeros(neg_coords.shape[0])], axis=0)
     coords = np.concatenate([pos_coords, neg_coords], axis=0)
     point_prompts = (coords, click_types)
     point_prompt = PromptStep(point_prompts=point_prompts)
