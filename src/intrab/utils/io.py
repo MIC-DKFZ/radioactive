@@ -52,7 +52,7 @@ def verify_dataset_exists(dataset_id: int) -> None:
 
 def sanity_check_dataset_config(dataset_conf: dict) -> None:
     """
-    Assert that every configuration has an identifier and a type of either organ or lesion.
+    Assert that every configuration has an identifier and a type of either organ or instance.
     Else raise an AssertionError.
     """
     assert len(dataset_conf) > 0, "No datasets provided in the config file. Please provide at least one dataset."
@@ -60,15 +60,15 @@ def sanity_check_dataset_config(dataset_conf: dict) -> None:
         assert "identifier" in dataset.keys(), f"Dataset identifier is missing: {dataset}."
         assert dataset["type"] in [
             "organ",
-            "lesion",
-        ], f"Dataset {dataset['identifier']} type has to be either organ dataset or lesion dataset."
+            "instance",
+        ], f"Dataset {dataset['identifier']} type has to be either 'organ' dataset or 'instance' dataset."
         verify_dataset_exists(dataset["identifier"])
     return
 
 
 def sanity_check_model_config(models_conf) -> None:
     """
-    Assert that every configuration has an identifier and a type of either organ or lesion.
+    Assert that every configuration has an identifier and a type of either organ or instance.
     Else raise an AssertionError.
     """
     assert len(models_conf) > 0, "No models provided in the config file. Please provide at least one model."
@@ -235,7 +235,7 @@ def save_nib_instance_gt_as_nrrd(nib_gt: nib.Nifti1Image, out_path: Path):
     innrrd.to_file(out_path)
 
 
-def save_static_lesion_results(
+def save_static_instance_results(
     prompt_results: list[PromptResult] | list[list[PromptResult]],
     pred_out: Path,
     instance_filename: str,
@@ -247,17 +247,17 @@ def save_static_lesion_results(
     innrrd_im.to_file(instance_pd_path)
 
 
-def save_interactive_lesion_results(
+def save_interactive_instance_results(
     all_prompt_results: list[list[PromptResult]], pred_out: Path, instance_filename: str
 ):
     """
-    Save the interactive lesion results.
-    Each lesion has it's own interactive results. The outer list count goes through the lesions and the inner list goes through the iterations.
+    Save the interactive instance results.
+    Each instance has it's own interactive results. The outer list count goes through the instances and the inner list goes through the iterations.
     """
 
-    # Outer list holds the lesions, inner list holds the iterations.
+    # Outer list holds the instances, inner list holds the iterations.
     n_iterations = len(all_prompt_results[0])
 
     for n_iters in range(n_iterations):
         same_iter_prompt_results = [apr[n_iters] for apr in all_prompt_results]
-        save_static_lesion_results(same_iter_prompt_results, pred_out / f"iter_{n_iters}", instance_filename)
+        save_static_instance_results(same_iter_prompt_results, pred_out / f"iter_{n_iters}", instance_filename)

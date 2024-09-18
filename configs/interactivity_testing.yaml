@@ -2,16 +2,16 @@
 seeds:
   - 11121
 models:
-  - "sammed3d"
+  - "sammed2d"
 
 # - "sammed3d"
 # - "sammed3d_turbo"
 # - "segvol"
 
 prompting:
-  type: "static"
+  type: "interactive"
   prompt_styles:
-    - "NPoints3DVolumePrompter"
+    - "NPointsPer2DSliceInteractive"
   # ToDo: Add the hyperparameters for the prompters in here to have them properly defined and not depend on the defaults.
 
 # List of dataset that will be compared in the next run of the benchmark.

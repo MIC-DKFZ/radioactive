@@ -5,6 +5,10 @@ from loguru import logger
 
 from intrab.prompts.prompt_hparams import PromptConfig
 from intrab.prompts.prompter import (
+    Alternating10PointsPer2DSlicePrompter,
+    Alternating2PointsPer2DSlicePrompter,
+    Alternating3PointsPer2DSlicePrompter,
+    Alternating5PointsPer2DSlicePrompter,
     OneFGPointsPer2DSlicePrompter,
     ThreePoints3DVolumePrompter,
     TwoFGPointsPer2DSlicePrompter,
@@ -127,6 +131,34 @@ def get_wanted_supported_prompters(
                         inferer,
                         n_seed_points_point_propagation=pro_conf.twoD_n_seed_points_point_propagation,
                         n_points_propagation=pro_conf.twoD_n_points_propagation,
+                        seed=seed,
+                    )
+                )
+            if "Alternating2PointsPer2DSlicePrompter" in wanted_prompt_styles:
+                prompters.append(
+                    Alternating2PointsPer2DSlicePrompter(
+                        inferer,
+                        seed=seed,
+                    )
+                )
+            if "Alternating3PointsPer2DSlicePrompter" in wanted_prompt_styles:
+                prompters.append(
+                    Alternating3PointsPer2DSlicePrompter(
+                        inferer,
+                        seed=seed,
+                    )
+                )
+            if "Alternating5PointsPer2DSlicePrompter" in wanted_prompt_styles:
+                prompters.append(
+                    Alternating5PointsPer2DSlicePrompter(
+                        inferer,
+                        seed=seed,
+                    )
+                )
+            if "Alternating10PointsPer2DSlicePrompter" in wanted_prompt_styles:
+                prompters.append(
+                    Alternating10PointsPer2DSlicePrompter(
+                        inferer,
                         seed=seed,
                     )
                 )

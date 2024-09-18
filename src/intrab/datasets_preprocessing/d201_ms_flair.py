@@ -103,7 +103,7 @@ def preprocess(raw_download_path: Path):
         json.dump(
             {
                 "channel_names": {"0": "FLAIR MRI"},
-                "labels": {"background": 0, "lesion": 1},
+                "labels": {"background": 0, "MS lesion": 1},
                 "numTraining": len(list(cases)),
                 "file_ending": ".nrrd",
                 "name": "D201 MS FLAIR",

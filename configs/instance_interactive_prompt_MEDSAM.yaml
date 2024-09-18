@@ -9,42 +9,34 @@ models:
   # - "sammed3d_turbo"
   # - "segvol"
 
-debug: True
-
 prompting:
-  type: "static"
+  type: "interactive"
   prompt_styles:
-    - "NPointsPer2DSlicePrompter"
-    - "PointInterpolationPrompter"
-    - "PointPropagationPrompter"
-    - "BoxPer2DSlicePrompter"
-    - "BoxPer2dSliceFrom3DBoxPrompter"
-    - "BoxInterpolationPrompter"
-    - "BoxPropagationPrompter"
-    - "NPoints3DVolumePrompter"
-    - "Box3DVolumePrompter"
-  # ToDo: Add the hyperparameters for the prompters in here to have them properly defined and not depend on the defaults.
+    - NPointsPer2DSliceInteractivePrompter
+    - threeDInteractivePrompterSAMMed3D
+    - twoD1PointUnrealisticInteractivePrompterNoPrevPointPassed
+    - twoD1PointUnrealisticInteractivePrompterPrevPointPassed
 
 # List of dataset that will be compared in the next run of the benchmark.
 datasets:
-  - identifier: 201  # FLAIR MS Lesions
-    type: "lesion"
+  - identifier: 201  # FLAIR MS instances
+    type: "instance"
     excluded_classes: [0]
   - identifier: 501  # HNTS-MRG MR Primary Tumors
-    type: "lesion"
+    type: "instance"
     excluded_classes: [0]
   - identifier: 911  # LNQ Metastatic Lymph Nodes
-    type: "lesion"
+    type: "instance"
     excluded_classes: [0]
   - identifier: 912  # CT Colorectal Liver Metastases
-    type: "lesion"
+    type: "instance"
     excluded_classes: [0]
   - identifier: 913  # Adrenal ACC Kidney
-    type: "lesion"
+    type: "instance"
     excluded_classes: [0]
-  - identifier: 921  # HCC TACE Liver Lesions
-    type: "lesion"
+  - identifier: 921  # HCC TACE Liver instances
+    type: "instance"
     excluded_classes: [0]
   - identifier: 930  # RIDER Lung CT
-    type: "lesion"
+    type: "instance"
     excluded_classes: [0]
