@@ -39,11 +39,12 @@ if __name__ == "__main__":
         twoD_n_slice_box_interpolation=5,
         twoD_n_seed_points_point_propagation=5,
         twoD_n_points_propagation=5,
-        interactive_dof_bound=60,
-        interactive_perf_bound=0.9,
-        interactive_max_iter=10,
-        twoD_interactive_n_points_per_slice=5,
-        threeD_interactive_n_init_points=5,
+        # interactive_dof_bound=60,
+        # interactive_perf_bound=0.9,
+        # interactive_max_iter=10,
+        interactive_max_iter=5,
+        twoD_interactive_n_points_per_slice=1,
+        threeD_interactive_n_init_points=1,
         threeD_patch_size=(128, 128, 128),  # This argument is only for SAMMed3D - should be different for segvol
     )
 

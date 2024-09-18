@@ -41,7 +41,7 @@ def verify_dataset_exists(dataset_id: int) -> None:
     """
     dataset_path = get_dataset_path()
     found_matching_datasets = get_matching_datasets(dataset_path, dataset_id)
-    assert len(found_matching_datasets) > 0, f"No datasets found in '{dataset_path}'."
+    assert len(found_matching_datasets) > 0, f"No dataset with ID {dataset_id} found in '{dataset_path}'."
     assert len(found_matching_datasets) == 1, f"Multiple datasets found in {dataset_path}."
     assert found_matching_datasets[0].is_dir(), f"Dataset {dataset_id} is not a directory."
     assert (
