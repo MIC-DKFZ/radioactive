@@ -178,7 +178,7 @@ def preprocess(raw_data_path: Path):
                 # ------------------------------- Save to disk ------------------------------- #
                 sitk.WriteImage(new_img, target_label)
 
-            vol.save(str(target_label_dir / im.name.replace(".mha", ".nii.gz")))
+            # vol.save(str(target_label_dir / im.name.replace(".mha", ".nii.gz")))
 
     # ------------------------------- Dataset Json ------------------------------- #
     with open(get_dataset_path() / "Dataset600_pengwin" / "dataset.json", "w") as f:
