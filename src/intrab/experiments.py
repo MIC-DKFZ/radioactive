@@ -22,9 +22,9 @@ import shutil
 from intrab.utils.io import (
     binarize_gt,
     create_instance_gt,
-    save_interactive_lesion_results,
+    save_interactive_instance_results,
     save_nib_instance_gt_as_nrrd,
-    save_static_lesion_results,
+    save_static_instance_results,
     verify_results_dir_exist,
 )
 from intrab.utils.io import verify_results_dir_exist
@@ -121,7 +121,7 @@ def run_experiments_organ(
                     )
 
 
-def run_experiments_lesions(
+def run_experiments_instances(
     inferer: Inferer,
     imgs_gts: list[tuple[str, str]],
     results_dir: Path,
@@ -134,7 +134,7 @@ def run_experiments_lesions(
     debug: bool = False,
 ):
     targets: dict = {k.replace("/", "_"): v for k, v in label_dict.items() if k.lower() != "background"}
-    assert len(targets) == 1, "Lesion experiments only support two classes -- background and lesions"
+    assert len(targets) == 1, "Instance experiments only support two classes -- background and the instance class"
     prompters: list[Prompter] = get_wanted_supported_prompters(inferer, pro_conf, wanted_prompt_styles, seed)
 
     if debug:
@@ -158,7 +158,7 @@ def run_experiments_lesions(
         instance_gt_path = gt_output_path / instance_filename
 
         # ---------------- Get binary gt in original coordinate system --------------- #
-        instance_nib, lesion_ids = create_instance_gt(gt_path)
+        instance_nib, instance_ids = create_instance_gt(gt_path)
         if not instance_gt_path.exists():
             save_nib_instance_gt_as_nrrd(instance_nib, instance_gt_path)
 
@@ -188,8 +188,8 @@ def run_experiments_lesions(
                     continue
 
             all_prompt_result: list[PromptResult] | list[list[PromptResult]] = []
-            for lesion_id in lesion_ids:
-                binary_gt_orig_coords = binarize_gt(gt_path, lesion_id)
+            for instance_id in instance_ids:
+                binary_gt_orig_coords = binarize_gt(gt_path, instance_id)
                 prompter.set_groundtruth(binary_gt_orig_coords)
 
                 if prompter.is_static:
@@ -203,9 +203,9 @@ def run_experiments_lesions(
                     all_prompt_result.append(prompter.predict_image(image_path=img_path))
                 # -------------------- Save static or interactive results -------------------- #
             if prompter.is_static:
-                save_static_lesion_results(all_prompt_result, prompt_pred_path, instance_filename)
+                save_static_instance_results(all_prompt_result, prompt_pred_path, instance_filename)
             else:
-                save_interactive_lesion_results(all_prompt_result, prompt_pred_path, instance_filename)
+                save_interactive_instance_results(all_prompt_result, prompt_pred_path, instance_filename)
 
     # # We always run the semantic eval on the created folders directly.
     for prompter in prompters:

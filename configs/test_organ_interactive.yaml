@@ -22,5 +22,5 @@ prompting:
 # List of dataset that will be compared in the next run of the benchmark.
 datasets:
   - identifier: 350
-    type: "organ"  # Choose from 'organ' or 'lesion'; When lesion we average over all lesions, otherwise across organs.
+    type: "organ"  # Choose from 'organ' or 'instance'; When instance we average over all instances, otherwise across organs.
     excluded_classes: [0] # List of classes to exclude from the dataset -- 0 is generally background
