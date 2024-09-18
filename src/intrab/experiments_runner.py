@@ -56,8 +56,9 @@ if __name__ == "__main__":
             dataset_root: Path = get_dataset_path_by_id(dataset["identifier"])
             logger.info(f"Dataset loaded from {dataset_root}")
             dataset_name: str = dataset_root.name
+            excluded_class_ids: list = dataset['excluded_classes']
             # ToDo: Add the excluded class ids here.
-            label_dict: dict[str, int] = get_labels_from_dataset_json(dataset_root)
+            label_dict: dict[str, int] = get_labels_from_dataset_json(dataset_root, excluded_class_ids)
             imgs_gts: list[tuple[str, str]] = get_img_gts(dataset_root)
             logger.info(f"Found {len(imgs_gts)} image-groundtruth pairs")
             for model_name in config["models"]:

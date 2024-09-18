@@ -152,9 +152,9 @@ def verify_results_dir_exist(targets, results_dir, prompters: list[Prompter]) ->
     ]
 
 
-def get_labels_from_dataset_json(dataset_dir: Path) -> dict[str:int]:
+def get_labels_from_dataset_json(dataset_dir: Path, excluded_class_ids: list) -> dict[str:int]:
     """
-    Reads the dataset_json and returns a label dict of {class_name: class_id}
+    Reads the dataset_json and returns a label dict of {class_name: class_id}, excluding class_ids listed in excluded_class_ids
     :param dataset_dir: Path to the dataset directory
     :return: label_dict: A dictionary of {class_name: class_id}
     """
@@ -162,6 +162,7 @@ def get_labels_from_dataset_json(dataset_dir: Path) -> dict[str:int]:
     with open(dataset_dir / "dataset.json", "r") as f:
         dataset_info = json.load(f)
     label_dict = dataset_info["labels"]
+    label_dict = {k:v for k,v in label_dict.items() if v not in excluded_class_ids}
     return label_dict
 
 
