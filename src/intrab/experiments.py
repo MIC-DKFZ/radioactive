@@ -46,7 +46,7 @@ def run_experiments_organ(
     results_overwrite: bool = False,
     debug: bool = False,
 ):
-    targets: dict = {k.replace("/", "_"): v for k, v in label_dict.items() if k != "background"}
+    targets: dict = {k.replace("/", "_"): v for k, v in label_dict.items()} 
     prompters: list[Prompter] = get_wanted_supported_prompters(inferer, pro_conf, wanted_prompt_styles, seed)
     verify_results_dir_exist(targets=targets, results_dir=results_dir, prompters=prompters)
 
@@ -119,6 +119,19 @@ def run_experiments_organ(
                         classes_of_interest=(1,),
                         output_name=target_name,
                     )
+            else:
+                for i in range(prompter.num_iterations):
+                    pred_path = results_dir / prompter.name / target_name / f"iter_{i}"
+                    if pred_path.exists():
+                        with logger.catch(level="WARNING"):
+                            semantic_evaluation(
+                                semantic_gt_path=results_dir.parent / "binarised_gts" / target_name,
+                                semantic_pd_path=pred_path,
+                                output_path=results_dir / prompter.name,
+                                classes_of_interest=(1,),
+                                output_name=target_name,
+                            )
+
 
 
 def run_experiments_lesions(
