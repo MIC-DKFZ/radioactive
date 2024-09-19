@@ -43,6 +43,7 @@ if __name__ == "__main__":
         # interactive_perf_bound=0.9,
         # interactive_max_iter=10,
         interactive_max_iter=5,
+        twoD_interactive_n_cc = 1,
         twoD_interactive_n_points_per_slice=1,
         threeD_interactive_n_init_points=1,
         threeD_patch_size=(128, 128, 128),  # This argument is only for SAMMed3D - should be different for segvol

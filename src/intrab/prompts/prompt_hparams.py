@@ -12,6 +12,7 @@ class PromptConfig:
     interactive_dof_bound: int = None
     interactive_perf_bound: float = None
     interactive_max_iter: int = None
+    twoD_interactive_n_cc: int = 1
     twoD_interactive_n_points_per_slice: int = 1
     threeD_interactive_n_init_points: int = 1
     threeD_patch_size: tuple[int, int, int] = None

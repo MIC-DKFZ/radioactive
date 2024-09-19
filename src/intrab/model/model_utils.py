@@ -190,6 +190,7 @@ def get_wanted_supported_prompters(
                     NPointsPer2DSliceInteractivePrompterNoPrevPoint(
                         inferer,
                         seed,
+                        n_ccs_positive_interaction=pro_conf.twoD_interactive_n_cc,
                         dof_bound=pro_conf.interactive_dof_bound,
                         perf_bound=pro_conf.interactive_perf_bound,
                         max_iter=pro_conf.interactive_max_iter,
@@ -201,6 +202,7 @@ def get_wanted_supported_prompters(
                     NPointsPer2DSliceInteractivePrompterWithPrevPoint(
                         inferer,
                         seed,
+                        n_ccs_positive_interaction=pro_conf.twoD_interactive_n_cc,
                         dof_bound=pro_conf.interactive_dof_bound,
                         perf_bound=pro_conf.interactive_perf_bound,
                         max_iter=pro_conf.interactive_max_iter,
