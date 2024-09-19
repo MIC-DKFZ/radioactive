@@ -14,6 +14,8 @@ prompting:
   prompt_styles:
     - NPointsPer2DSliceInteractivePrompterNoPrevPoint
     - NPointsPer2DSliceInteractivePrompterWithPrevPrompt
+    - PointInterpolationInteractivePrompterNoPrevPoint
+    - PointInterpolationInteractivePrompterWithPrevPoint
     - threeDInteractivePrompterSAMMed3D
     - twoD1PointUnrealisticInteractivePrompterNoPrevPoint
     - twoD1PointUnrealisticInteractivePrompterWithPrevPoint

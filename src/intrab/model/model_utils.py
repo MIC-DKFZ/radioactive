@@ -35,6 +35,8 @@ from intrab.prompts.prompter import (
 from intrab.prompts.interactive_prompter import (
     NPointsPer2DSliceInteractivePrompterNoPrevPoint,
     NPointsPer2DSliceInteractivePrompterWithPrevPoint,
+    PointInterpolationInteractivePrompterNoPrevPoint,
+    PointInterpolationInteractivePrompterWithPrevPoint,
     threeDInteractivePrompterSAMMed3D,
     twoD1PointUnrealisticInteractivePrompterNoPrevPoint,
     interactive_prompt_styles,
@@ -207,6 +209,30 @@ def get_wanted_supported_prompters(
                         perf_bound=pro_conf.interactive_perf_bound,
                         max_iter=pro_conf.interactive_max_iter,
                         n_init_points_per_slice=pro_conf.twoD_interactive_n_points_per_slice,
+                    )
+                )
+            if "PointInterpolationInteractivePrompterNoPrevPoint" in wanted_prompt_styles:
+                prompters.append(
+                    PointInterpolationInteractivePrompterNoPrevPoint(
+                        inferer,
+                        seed,
+                        pro_conf.twoD_interactive_n_cc,
+                        pro_conf.interactive_dof_bound,
+                        pro_conf.interactive_perf_bound,
+                        pro_conf.interactive_max_iter,
+                        pro_conf.twoD_n_seed_points_point_propagation,
+                    )
+                )
+            if "PointInterpolationInteractivePrompterWithPrevPoint" in wanted_prompt_styles:
+                prompters.append(
+                    PointInterpolationInteractivePrompterWithPrevPoint(
+                        inferer,
+                        seed,
+                        pro_conf.twoD_interactive_n_cc,
+                        pro_conf.interactive_dof_bound,
+                        pro_conf.interactive_perf_bound,
+                        pro_conf.interactive_max_iter,
+                        pro_conf.twoD_n_seed_points_point_propagation,
                     )
                 )
             if "twoD1PointUnrealisticInteractivePrompterNoPrevPoint" in wanted_prompt_styles:

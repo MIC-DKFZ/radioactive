@@ -19,6 +19,7 @@ from intrab.prompts.prompt_utils import (
     get_fg_points_from_cc_centers,
     interpolate_points,
     get_middle_seed_point,
+    point_interpolation,
 )
 from intrab.prompts.prompter import Prompter
 from intrab.utils.image import get_crop_pad_params_from_gt_or_prompt
@@ -294,7 +295,6 @@ class twoDInteractivePrompter(InteractivePrompter):
         self.disk_size_range = disk_size_range
         self.scribble_length = scribble_length
 
-        self.slices_inferred = None
 
     @staticmethod
     def get_generate_negative_prompts_flag(fn_mask: np.ndarray, fp_mask: np.ndarray) -> bool:
@@ -481,16 +481,13 @@ class NPointsPer2DSliceInteractivePrompterNoPrevPoint(twoDInteractivePrompter):
     ):
         super().__init__(inferer, seed, n_ccs_positive_interaction, dof_bound, perf_bound, max_iter)
         self.n_init_points_per_slice = n_init_points_per_slice
-        self.slices_inferred = None
 
     def get_initial_prompt_step(self) -> PromptStep:
-        initial_prompt_step = get_pos_clicks2D_row_major(
-            self.groundtruth_model, self.n_init_points_per_slice, self.seed
-        )
+        prompt_RAS = get_pos_clicks2D_row_major(self.groundtruth_SAR, self.n_points_per_slice, self.seed)
+        prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
+        prompt_model = self.inferer.transform_promptstep_to_model_coords(prompt_orig)
 
-        self.slices_inferred = initial_prompt_step.get_slices_to_infer()
-
-        return initial_prompt_step
+        return prompt_model
 
 class NPointsPer2DSliceInteractivePrompterWithPrevPoint(NPointsPer2DSliceInteractivePrompterNoPrevPoint):
     def __init__(
@@ -507,9 +504,53 @@ class NPointsPer2DSliceInteractivePrompterWithPrevPoint(NPointsPer2DSliceInterac
         super().__init__(inferer, seed, n_ccs_positive_interaction, dof_bound, perf_bound, max_iter, n_init_points_per_slice)
         self.always_pass_prev_prompts = True
 
+class PointInterpolationInteractivePrompterNoPrevPoint(twoDInteractivePrompter):
+    def __init__(
+        self,
+        inferer: Inferer,
+        seed: int = 11121,
+        n_ccs_positive_interaction: int = 1,
+        dof_bound: int | None = None,
+        perf_bound: float | None = None,
+        max_iter: int | None = None,
+        n_slice_point_interpolation: int = 5,
+    ):
+        super().__init__(inferer, seed, n_ccs_positive_interaction, dof_bound, perf_bound, max_iter)
+        self.n_slice_point_interpolation = n_slice_point_interpolation
+
+    def get_initial_prompt_step(self) -> PromptStep:
+        """
+        Simulates the user clicking in the connected component's center of mass `n_slice_point_interpolation` times.
+        Slices are selected equidistantly between min and max slices with foreground (if not contiguous defaults to closest neighbors).
+        Then the points are interpolated between the slices centers and prompted to the model.
+
+        :return: The PromptStep from the interpolation of the points.
+        """
+        max_possible_clicks = min(self.n_slice_point_interpolation, len(self.get_slices_to_infer()))
+        prompt_RAS = point_interpolation(gt=self.groundtruth_SAR, n_slices=max_possible_clicks)
+        prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
+        prompt_model = self.inferer.transform_promptstep_to_model_coords(prompt_orig)
+        return prompt_model
+
+class PointInterpolationInteractivePrompterWithPrevPoint(PointInterpolationInteractivePrompterNoPrevPoint):
+    def __init__(
+        self,
+        inferer: Inferer,
+        seed: int = 11121,
+        n_ccs_positive_interaction: int = 1,
+        dof_bound: int | None = None,
+        perf_bound: float | None = None,
+        max_iter: int | None = None,
+        n_slice_point_interpolation: int = 5,
+    ):
+        super().__init__(inferer, seed, n_ccs_positive_interaction, dof_bound, perf_bound, max_iter, n_slice_point_interpolation)
+        self.always_pass_prev_prompts = True
+
 interactive_prompt_styles = Literal[
     "NPointsPer2DSliceInteractivePrompterNoPrevPoint",
     "NPointsPer2DSliceInteractivePrompterWithPrevPrompt",
+    "PointInterpolationInteractivePrompterNoPrevPoint",
+    "PointInterpolationInteractivePrompterWithPrevPoint",
     "threeDInteractivePrompterSAMMed3D",
     "twoD1PointUnrealisticInteractivePrompterNoPrevPoint",
     "twoD1PointUnrealisticInteractivePrompterWithPrevPoint",
