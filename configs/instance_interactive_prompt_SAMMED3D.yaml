@@ -13,10 +13,12 @@ models:
 prompting:
   type: "interactive"
   prompt_styles:
-    - NPointsPer2DSliceInteractivePrompterNoPrevPoint
-    - NPointsPer2DSliceInteractivePrompterWithPrevPrompt
+    - OnePointPer2DSliceInteractivePrompterNoPrevPoint
+    - OnePointPer2DSliceInteractivePrompterWithPrevPrompt
     - PointInterpolationInteractivePrompterNoPrevPoint
     - PointInterpolationInteractivePrompterWithPrevPoint
+    - PointPropagationInteractivePrompterNoPrevPoint
+    - PointPropagationInteractivePrompterWithPrevPoint
     - threeDInteractivePrompterSAMMed3D
     - twoD1PointUnrealisticInteractivePrompterNoPrevPoint
     - twoD1PointUnrealisticInteractivePrompterWithPrevPoint

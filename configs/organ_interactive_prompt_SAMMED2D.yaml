@@ -12,13 +12,15 @@ models:
 prompting:
   type: "interactive"
   prompt_styles:
-    - NPointsPer2DSliceInteractivePrompterNoPrevPoint
-    - NPointsPer2DSliceInteractivePrompterWithPrevPrompt
+    - OnePointPer2DSliceInteractivePrompterNoPrevPoint
+    - OnePointPer2DSliceInteractivePrompterWithPrevPrompt
     - PointInterpolationInteractivePrompterNoPrevPoint
     - PointInterpolationInteractivePrompterWithPrevPoint
-    - threeDInteractivePrompterSAMMed3D
-    - twoD1PointUnrealisticInteractivePrompterNoPrevPoint
-    - twoD1PointUnrealisticInteractivePrompterWithPrevPoint
+    - PointPropagationInteractivePrompterNoPrevPoint
+    - PointPropagationInteractivePrompterWithPrevPoint
+    # - threeDInteractivePrompterSAMMed3D
+    # - twoD1PointUnrealisticInteractivePrompterNoPrevPoint
+    # - twoD1PointUnrealisticInteractivePrompterWithPrevPoint
 
 # List of dataset that will be compared in the next run of the benchmark.
 datasets:
