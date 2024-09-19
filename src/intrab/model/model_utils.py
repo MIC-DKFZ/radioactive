@@ -33,10 +33,12 @@ from intrab.prompts.prompter import (
 )
 
 from intrab.prompts.interactive_prompter import (
-    NPointsPer2DSliceInteractivePrompterNoPrevPoint,
-    NPointsPer2DSliceInteractivePrompterWithPrevPoint,
+    OnePointPer2DSliceInteractivePrompterNoPrevPoint,
+    OnePointPer2DSliceInteractivePrompterWithPrevPoint,
     PointInterpolationInteractivePrompterNoPrevPoint,
     PointInterpolationInteractivePrompterWithPrevPoint,
+    PointPropagationInteractivePrompterNoPrevPoint,
+    PointPropagationInteractivePrompterWithPrevPoint,
     threeDInteractivePrompterSAMMed3D,
     twoD1PointUnrealisticInteractivePrompterNoPrevPoint,
     interactive_prompt_styles,
@@ -187,9 +189,9 @@ def get_wanted_supported_prompters(
                 prompters.append(BoxPropagationPrompter(inferer, seed))
 
         if "point" in inferer.supported_prompts and "mask" in inferer.supported_prompts:
-            if "NPointsPer2DSliceInteractivePrompterNoPrevPoint" in wanted_prompt_styles:
+            if "OnePointPer2DSliceInteractivePrompterNoPrevPoint" in wanted_prompt_styles:
                 prompters.append(
-                    NPointsPer2DSliceInteractivePrompterNoPrevPoint(
+                    OnePointPer2DSliceInteractivePrompterNoPrevPoint(
                         inferer,
                         seed,
                         n_ccs_positive_interaction=pro_conf.twoD_interactive_n_cc,
@@ -199,9 +201,9 @@ def get_wanted_supported_prompters(
                         n_init_points_per_slice=pro_conf.twoD_interactive_n_points_per_slice,
                     )
                 )
-            if "NPointsPer2DSliceInteractivePrompterWithPrevPoint" in wanted_prompt_styles:
+            if "OnePointPer2DSliceInteractivePrompterWithPrevPoint" in wanted_prompt_styles:
                 prompters.append(
-                    NPointsPer2DSliceInteractivePrompterWithPrevPoint(
+                    OnePointPer2DSliceInteractivePrompterWithPrevPoint(
                         inferer,
                         seed,
                         n_ccs_positive_interaction=pro_conf.twoD_interactive_n_cc,
@@ -220,7 +222,7 @@ def get_wanted_supported_prompters(
                         pro_conf.interactive_dof_bound,
                         pro_conf.interactive_perf_bound,
                         pro_conf.interactive_max_iter,
-                        pro_conf.twoD_n_seed_points_point_propagation,
+                        pro_conf.twoD_n_slice_point_interpolation,
                     )
                 )
             if "PointInterpolationInteractivePrompterWithPrevPoint" in wanted_prompt_styles:
@@ -232,7 +234,32 @@ def get_wanted_supported_prompters(
                         pro_conf.interactive_dof_bound,
                         pro_conf.interactive_perf_bound,
                         pro_conf.interactive_max_iter,
+                        pro_conf.twoD_n_slice_point_interpolation,
+                    )
+                )
+            if "PointPropagationInteractivePrompterNoPrevPoint" in wanted_prompt_styles:
+                prompters.append(
+                    PointPropagationInteractivePrompterNoPrevPoint(
+                        inferer,
+                        seed,
+                        pro_conf.twoD_interactive_n_cc,
+                        pro_conf.interactive_dof_bound,
+                        pro_conf.interactive_perf_bound,
+                        pro_conf.interactive_max_iter,
                         pro_conf.twoD_n_seed_points_point_propagation,
+                        pro_conf.twoD_n_points_propagation,
+                    )
+                )
+            if "PointPropagationInteractivePrompterWithPrevPoint" in wanted_prompt_styles:
+                prompters.append(
+                    PointPropagationInteractivePrompterWithPrevPoint(
+                        inferer,
+                        seed,
+                        pro_conf.twoD_interactive_n_cc,
+                        pro_conf.interactive_dof_bound,
+                        pro_conf.interactive_perf_bound,
+                        pro_conf.twoD_n_seed_points_point_propagation,
+                        pro_conf.twoD_n_points_propagation,
                     )
                 )
             if "twoD1PointUnrealisticInteractivePrompterNoPrevPoint" in wanted_prompt_styles:
