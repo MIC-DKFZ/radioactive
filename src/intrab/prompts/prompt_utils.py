@@ -277,12 +277,41 @@ def get_nearest_fg_point(point, binary_mask):
     return tuple(nearest_fg_point)
 
 
-def get_largest_CC(segmentation):
+# def get_largest_CC_old(segmentation):
+#     labels = label(segmentation)
+#     assert labels.max() != 0  # assume at least 1 CC
+#     largestCC = labels == np.argmax(np.bincount(labels.flat)[1:]) + 1
+#     return largestCC.astype(int)
+
+def get_n_largest_CCs(segmentation: np.ndarray, n=1):
     labels = label(segmentation)
     assert labels.max() != 0  # assume at least 1 CC
-    largestCC = labels == np.argmax(np.bincount(labels.flat)[1:]) + 1
-    return largestCC.astype(int)
 
+    component_sizes = np.bincount(labels.flat)[1:]  # Ignore background (index 0)
+
+    # Get the indices of the n largest components
+    largest_components_indices = np.argsort(component_sizes)[-n:] + 1  # Add 1 to match the labels (because of background)
+
+    # Create a list of binary masks for the n largest connected components
+    largest_CCs = [(labels == i).astype(int) for i in largest_components_indices]
+
+    return largest_CCs
+
+
+
+# def get_fg_point_from_cc_center_old(gt_slice: np.ndarray) -> np.ndarray:
+#     """
+#     Extract the nearest foreground point from the center of mass of the largest connected component.
+
+#     :param gt_slice: A 2D binary mask.
+#     :return: The nearest foreground point index [x, y].  <-- To be verified
+#     """
+#     largest_cc = get_largest_CC_old(gt_slice)
+#     fg_indices = np.where(largest_cc)
+#     fg_mean_indices = np.mean(fg_indices, axis=1).round().astype(int)
+#     # ToDo: verify x,y are not flipped.
+#     nearest_fg_point = get_nearest_fg_point(fg_mean_indices, largest_cc)
+#     return nearest_fg_point
 
 def get_fg_point_from_cc_center(gt_slice: np.ndarray) -> np.ndarray:
     """
@@ -291,7 +320,7 @@ def get_fg_point_from_cc_center(gt_slice: np.ndarray) -> np.ndarray:
     :param gt_slice: A 2D binary mask.
     :return: The nearest foreground point index [x, y].  <-- To be verified
     """
-    largest_cc = get_largest_CC(gt_slice)
+    largest_cc = get_n_largest_CCs(gt_slice)[0]
     fg_indices = np.where(largest_cc)
     fg_mean_indices = np.mean(fg_indices, axis=1).round().astype(int)
     # ToDo: verify x,y are not flipped.
@@ -311,7 +340,7 @@ def get_fg_points_from_cc_centers(gt, n):
 
     corrected_points = np.empty([n, 3], dtype=int)
     for i, z in enumerate(selected_slices):  # selected_slices:
-        largest_cc = get_largest_CC(gt[z])
+        largest_cc = get_n_largest_CCs(gt[z])[0]
         bbox_min, bbox_max = get_2d_bbox_of_gt_slice(largest_cc)
 
         slice_fg_center = np.vstack([bbox_min, bbox_max]).mean(axis=0).round()

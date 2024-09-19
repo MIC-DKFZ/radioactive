@@ -13,6 +13,8 @@ from intrab.prompts.prompt_3d import (
     obtain_misclassified_point_prompt_3d,
 )
 from intrab.prompts.prompt_utils import (
+    get_fg_point_from_cc_center,
+    get_n_largest_CCs,
     get_pos_clicks2D_row_major,
     get_fg_points_from_cc_centers,
     interpolate_points,
@@ -26,6 +28,7 @@ import nibabel as nib
 from loguru import logger
 from rich.prompt import Prompt
 from triton.language.extra.cuda import num_threads
+from scipy.ndimage import center_of_mass
 
 
 class InteractivePrompter(Prompter):
@@ -212,7 +215,7 @@ class threeDInteractivePrompterSAMMed3D(InteractivePrompter):
         return
 
 
-class twoD1PointUnrealisticInteractivePrompterNoPrevPointPassed(InteractivePrompter):
+class twoD1PointUnrealisticInteractivePrompterNoPrevPoint(InteractivePrompter):
     def __init__(
         self,
         inferer: Inferer,
@@ -254,7 +257,7 @@ class twoD1PointUnrealisticInteractivePrompterNoPrevPointPassed(InteractivePromp
 
         return new_prompt_step
 
-class twoD1PointUnrealisticInteractivePrompterPrevPointPassed(twoD1PointUnrealisticInteractivePrompterNoPrevPointPassed):
+class twoD1PointUnrealisticInteractivePrompterWithPrevPoint(twoD1PointUnrealisticInteractivePrompterNoPrevPoint):
     def __init__(
         self,
         inferer: Inferer,
@@ -275,6 +278,7 @@ class twoDInteractivePrompter(InteractivePrompter):
         self,
         inferer: Inferer,
         seed: int = 11121,
+        n_ccs_positive_interaction: int = 1,
         dof_bound: int | None = None,
         perf_bound: float | None = None,
         max_iter: int | None = None,
@@ -283,13 +287,14 @@ class twoDInteractivePrompter(InteractivePrompter):
         scribble_length=0.6,
     ):
         super().__init__(inferer, seed, dof_bound, perf_bound, max_iter)
-        # Scribble generating parameters
+        # Positive scribble generating parameters
+        self.n_ccs_positive_interaction = n_ccs_positive_interaction
+        # Negative scribble generating parameters
         self.contour_distance = contour_distance
         self.disk_size_range = disk_size_range
         self.scribble_length = scribble_length
 
-        self.bottom_seed_prompt = None  # Store these to avoid repeated computation
-        self.top_seed_prompt = None
+        self.slices_inferred = None
 
     @staticmethod
     def get_generate_negative_prompts_flag(fn_mask: np.ndarray, fp_mask: np.ndarray) -> bool:
@@ -311,22 +316,56 @@ class twoDInteractivePrompter(InteractivePrompter):
         generate_negative_prompts_flag = np.random.binomial(1, generate_negative_prompts_prob)
         return bool(generate_negative_prompts_flag)
 
+    # def generate_positive_promptstep_old(
+    #     self,
+    #     pred: np.ndarray,
+    #     fn_mask: np.ndarray,
+    #     slices_inferred: set,
+    # ) -> PromptStep:
+
+    #     bottom_seed_prompt, _, top_seed_prompt = get_fg_points_from_cc_centers(self.groundtruth_model, 3)
+
+    #     # Try to find fn coord in the middle 40% axially of the volume
+    #     new_middle_seed_prompt = get_middle_seed_point(fn_mask, slices_inferred)
+
+    #     # Interpolate linearly from botom_seed-prompt to top_seed_prompt through the new middle prompt to get new positive prompts
+    #     new_seed_prompt = np.vstack([bottom_seed_prompt, new_middle_seed_prompt, top_seed_prompt])
+    #     new_coords = interpolate_points(new_seed_prompt, kind="linear").astype(int)
+        
+    #     # Subset to those points not yet segmented
+    #     unsegmented_mask = pred[*new_coords.T] != 1
+    #     new_coords = new_coords[unsegmented_mask]
+
+    #     # Align back to RAS format and return
+    #     new_coords = new_coords[:, [2, 1, 0]]  # zyx -> xyz
+    #     new_positive_promptstep = PromptStep(point_prompts=(new_coords, [1] * len(new_coords)))
+    #     return new_positive_promptstep
+
     def generate_positive_promptstep(
         self,
         fn_mask: np.ndarray,
-        slices_inferred: set,
+        n_ccs:int = 1
     ) -> PromptStep:
 
-        bottom_seed_prompt, _, top_seed_prompt = get_fg_points_from_cc_centers(self.groundtruth_model, 3)
+        largest_CCs = get_n_largest_CCs(fn_mask, n_ccs)
 
-        # Try to find fn coord in the middle 40% axially of the volume
-        new_middle_seed_prompt = get_middle_seed_point(fn_mask, slices_inferred)
+        centroids = []
+        for cc in largest_CCs: # Loop through largest CCs, adding components as you go
+            slices_to_consider = np.where(np.any(cc, axis = (1,2)))[0]
+            
+            for z in slices_to_consider:
+                CC_slice = cc[z]
+                centroid = get_fg_point_from_cc_center(CC_slice)
+                centroid = [z, centroid[0], centroid[1]]
+                centroids.append(centroid)
 
-        # Interpolate linearly from botom_seed-prompt to top_seed_prompt through the new middle prompt to get new positive prompts
-        new_seed_prompt = np.vstack([bottom_seed_prompt, new_middle_seed_prompt, top_seed_prompt])
-        new_coords = interpolate_points(new_seed_prompt, kind="linear").astype(int)
-        new_coords = new_coords[:, [2, 1, 0]]  # zyx -> xyz
-        new_positive_promptstep = PromptStep(point_prompts=(new_coords, [1] * len(new_coords)))
+        centroids = np.array(centroids)
+
+        # No need to subset to voxels not yet segmented since these are drawn from false negatives
+
+        # Align back to RAS format and return
+        centroids = centroids[:, [2, 1, 0]]  # zyx -> xyz
+        new_positive_promptstep = PromptStep(point_prompts=(centroids, [1] * len(centroids)))
         return new_positive_promptstep
 
     def _get_max_fp_sagittal_slice_idx(self, fp_mask):
@@ -409,45 +448,69 @@ class twoDInteractivePrompter(InteractivePrompter):
         if generate_negative_prompts_flag:
             prompt_step = self.generate_negative_promptstep(self.groundtruth_model, pred, fp_mask)
             if prompt_step is None:
+                logger.debug('generate negative prompts failed')
                 prompt_gen_failed = True
 
-        if not generate_negative_prompts_flag or prompt_gen_failed:
-            slices_inferred = self.prompt_step_all.get_slices_to_infer()  # Get which slices have been inferred on
-            prompt_step = self.generate_positive_promptstep(fn_mask, slices_inferred)
+        if not generate_negative_prompts_flag or prompt_gen_failed: # Get which slices have been inferred on
+            prompt_step = self.generate_positive_promptstep(fn_mask, self.n_ccs_positive_interaction)
+
+        ####
+        # Debug:
+        aligned_coords = prompt_step.coords[:, [2,1,0]] # back to zyx
+        true_labels = self.groundtruth_model[*aligned_coords.T]
+        prompt_type = 'positive' if not generate_negative_prompts_flag or prompt_gen_failed else 'negative'
+        logger.debug(f'{prompt_type} prompts created. # of corrective prompts: {len(true_labels)}, # of mistakes {np.sum(true_labels!=prompt_step.labels)}')
+        ####
+
 
         prompt_step.set_masks(low_res_logits)
 
         return prompt_step
 
-    def clear_states(self) -> None:
-        self.top_seed_prompt = None
-        self.bottom_seed_prompt = None
-
-
-class NPointsPer2DSliceInteractivePrompter(twoDInteractivePrompter):
+class NPointsPer2DSliceInteractivePrompterNoPrevPoint(twoDInteractivePrompter):
     def __init__(
         self,
         inferer: Inferer,
         seed: int = 11121,
+        n_ccs_positive_interaction: int = 1,
         dof_bound: int | None = None,
         perf_bound: float | None = None,
         max_iter: int | None = None,
-        n_init_points_per_slice: int = 5,
+        n_init_points_per_slice: int = 1,
+
     ):
-        super().__init__(inferer, seed, dof_bound, perf_bound, max_iter)
+        super().__init__(inferer, seed, n_ccs_positive_interaction, dof_bound, perf_bound, max_iter)
         self.n_init_points_per_slice = n_init_points_per_slice
+        self.slices_inferred = None
 
     def get_initial_prompt_step(self) -> PromptStep:
         initial_prompt_step = get_pos_clicks2D_row_major(
             self.groundtruth_model, self.n_init_points_per_slice, self.seed
         )
 
+        self.slices_inferred = initial_prompt_step.get_slices_to_infer()
+
         return initial_prompt_step
 
+class NPointsPer2DSliceInteractivePrompterWithPrevPoint(NPointsPer2DSliceInteractivePrompterNoPrevPoint):
+    def __init__(
+        self,
+        inferer: Inferer,
+        seed: int = 11121,
+        n_ccs_positive_interaction: int = 1,
+        dof_bound: int | None = None,
+        perf_bound: float | None = None,
+        max_iter: int | None = None,
+        n_init_points_per_slice: int = 1,
+
+    ):
+        super().__init__(inferer, seed, n_ccs_positive_interaction, dof_bound, perf_bound, max_iter, n_init_points_per_slice)
+        self.always_pass_prev_prompts = True
 
 interactive_prompt_styles = Literal[
-    "NPointsPer2DSliceInteractivePrompter",
+    "NPointsPer2DSliceInteractivePrompterNoPrevPoint",
+    "NPointsPer2DSliceInteractivePrompterWithPrevPrompt",
     "threeDInteractivePrompterSAMMed3D",
-    "twoD1PointUnrealisticInteractivePrompterNoPrevPointPassed",
-    "twoD1PointUnrealisticInteractivePrompterPrevPointPassed",
+    "twoD1PointUnrealisticInteractivePrompterNoPrevPoint",
+    "twoD1PointUnrealisticInteractivePrompterWithPrevPoint",
 ]

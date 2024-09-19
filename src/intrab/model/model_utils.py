@@ -33,11 +33,12 @@ from intrab.prompts.prompter import (
 )
 
 from intrab.prompts.interactive_prompter import (
-    NPointsPer2DSliceInteractivePrompter,
+    NPointsPer2DSliceInteractivePrompterNoPrevPoint,
+    NPointsPer2DSliceInteractivePrompterWithPrevPoint,
     threeDInteractivePrompterSAMMed3D,
-    twoD1PointUnrealisticInteractivePrompterNoPrevPointPassed,
+    twoD1PointUnrealisticInteractivePrompterNoPrevPoint,
     interactive_prompt_styles,
-    twoD1PointUnrealisticInteractivePrompterPrevPointPassed,
+    twoD1PointUnrealisticInteractivePrompterWithPrevPoint,
 )
 
 from intrab.utils.paths import get_model_path
@@ -184,9 +185,9 @@ def get_wanted_supported_prompters(
                 prompters.append(BoxPropagationPrompter(inferer, seed))
 
         if "point" in inferer.supported_prompts and "mask" in inferer.supported_prompts:
-            if "NPointsPer2DSliceInteractive" in wanted_prompt_styles:
+            if "NPointsPer2DSliceInteractivePrompterNoPrevPoint" in wanted_prompt_styles:
                 prompters.append(
-                    NPointsPer2DSliceInteractivePrompter(
+                    NPointsPer2DSliceInteractivePrompterNoPrevPoint(
                         inferer,
                         seed,
                         dof_bound=pro_conf.interactive_dof_bound,
@@ -195,9 +196,9 @@ def get_wanted_supported_prompters(
                         n_init_points_per_slice=pro_conf.twoD_interactive_n_points_per_slice,
                     )
                 )
-            if "twoD1PointUnrealisticInteractivePrompterNoPrevPointPassed" in wanted_prompt_styles:
+            if "NPointsPer2DSliceInteractivePrompterWithPrevPoint" in wanted_prompt_styles:
                 prompters.append(
-                    twoD1PointUnrealisticInteractivePrompterNoPrevPointPassed(
+                    NPointsPer2DSliceInteractivePrompterWithPrevPoint(
                         inferer,
                         seed,
                         dof_bound=pro_conf.interactive_dof_bound,
@@ -206,9 +207,20 @@ def get_wanted_supported_prompters(
                         n_init_points_per_slice=pro_conf.twoD_interactive_n_points_per_slice,
                     )
                 )
-            if "twoD1PointUnrealisticInteractivePrompterPrevPointPassed" in wanted_prompt_styles:
+            if "twoD1PointUnrealisticInteractivePrompterNoPrevPoint" in wanted_prompt_styles:
                 prompters.append(
-                        twoD1PointUnrealisticInteractivePrompterPrevPointPassed(
+                    twoD1PointUnrealisticInteractivePrompterNoPrevPoint(
+                        inferer,
+                        seed,
+                        dof_bound=pro_conf.interactive_dof_bound,
+                        perf_bound=pro_conf.interactive_perf_bound,
+                        max_iter=pro_conf.interactive_max_iter,
+                        n_init_points_per_slice=pro_conf.twoD_interactive_n_points_per_slice,
+                    )
+                )
+            if "twoD1PointUnrealisticInteractivePrompterPrevPoint" in wanted_prompt_styles:
+                prompters.append(
+                        twoD1PointUnrealisticInteractivePrompterWithPrevPoint(
                         inferer,
                         seed,
                         dof_bound=pro_conf.interactive_dof_bound,
