@@ -44,6 +44,7 @@ dependencies = [
     'SimpleITK-SimpleElastix',
     'natsort',
     'pandas',
+    'idc-index'
 ]
 
 readme = "README.md"

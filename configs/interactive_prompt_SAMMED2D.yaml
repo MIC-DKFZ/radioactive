@@ -3,9 +3,9 @@ seeds:
   - 11121
 models:
   # - "sam"
-  # - "sammed2d"
+  - "sammed2d"
   # - "medsam"
-  - "sammed3d"
+  # - "sammed3d"
   # - "sammed3d_turbo"
   # - "segvol"
 
@@ -13,8 +13,8 @@ models:
 prompting:
   type: "interactive"
   prompt_styles:
-    - OnePointPer2DSliceInteractivePrompterNoPrevPoint
     - OnePointPer2DSliceInteractivePrompterWithPrevPrompt
+    - OnePointPer2DSliceInteractivePrompterNoPrevPoint
     - PointInterpolationInteractivePrompterNoPrevPoint
     - PointInterpolationInteractivePrompterWithPrevPoint
     - PointPropagationInteractivePrompterNoPrevPoint
@@ -46,3 +46,12 @@ datasets:
   - identifier: 930  # RIDER Lung CT
     type: "instance"
     excluded_classes: [0]
+  - identifier: 209  # HanSeg MR Organs
+    type: "organ"
+    excluded_classes: [0]
+  - identifier: 651  # SegRap CT Organs at Risk
+    type: "organ"
+    excluded_classes: [0]
+  - identifier: 920  # HCC Tace CT Liver segmentation
+    type: "organ"  # Choose from 'organ' or 'instance'; When instance we average over all instances, otherwise across organs.
+    excluded_classes: [0] # List of classes to exclude from the dataset -- 0 is generally background
