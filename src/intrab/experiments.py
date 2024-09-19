@@ -127,7 +127,7 @@ def run_experiments_organ(
                             semantic_evaluation(
                                 semantic_gt_path=results_dir.parent / "binarised_gts" / target_name,
                                 semantic_pd_path=pred_path,
-                                output_path=results_dir / prompter.name,
+                                output_path=results_dir / prompter.name / f"iter_{i}_eval",
                                 classes_of_interest=(1,),
                                 output_name=target_name,
                             )
