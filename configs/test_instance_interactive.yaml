@@ -14,10 +14,11 @@ debug: True
 prompting:
   type: "interactive"
   prompt_styles:
-    - "NPointsPer2DSliceInteractivePrompter"
-    - "threeDInteractivePrompterSAMMed3D"
-    - twoD1PointUnrealisticInteractivePrompterNoPrevPointPassed
-    - twoD1PointUnrealisticInteractivePrompterPrevPointPassed
+    - NPointsPer2DSliceInteractivePrompterNoPrevPoint
+    - NPointsPer2DSliceInteractivePrompterWithPrevPrompt
+    - threeDInteractivePrompterSAMMed3D
+    - twoD1PointUnrealisticInteractivePrompterNoPrevPoint
+    - twoD1PointUnrealisticInteractivePrompterWithPrevPoint
 
 # List of dataset that will be compared in the next run of the benchmark.
 datasets:

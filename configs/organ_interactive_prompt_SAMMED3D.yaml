@@ -12,10 +12,11 @@ models:
 prompting:
   type: "interactive"
   prompt_styles:
-    - NPointsPer2DSliceInteractivePrompter
+    - NPointsPer2DSliceInteractivePrompterNoPrevPoint
+    - NPointsPer2DSliceInteractivePrompterWithPrevPrompt
     - threeDInteractivePrompterSAMMed3D
-    - twoD1PointUnrealisticInteractivePrompterNoPrevPointPassed
-    - twoD1PointUnrealisticInteractivePrompterPrevPointPassed
+    - twoD1PointUnrealisticInteractivePrompterNoPrevPoint
+    - twoD1PointUnrealisticInteractivePrompterWithPrevPoint
   # ToDo: Add the hyperparameters for the prompters in here to have them properly defined and not depend on the defaults.
 
 # List of dataset that will be compared in the next run of the benchmark.
