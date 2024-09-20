@@ -407,10 +407,10 @@ def point_interpolation(gt: np.ndarray, n_slices: int, interpolation: str = "lin
     :param gt: The ground truth volume.
     :param n_slices: The number of slices to interpolate points between.
     """
-    if n_slices == 1:
-        logger.warning(
-            f"For point interpolation, need multiple points to interpolate between. One point was given, unexpected behaviour may occur."
-        )
+    # if n_slices == 1:
+    #     logger.warning(
+    #         f"For point interpolation, need multiple points to interpolate between. One point was given, unexpected behaviour may occur."
+    #     ) # This tends to arise when lesions are provided as targets with one one z slice to infer on. In this case, a center prompt is given, which is appropriate.
     simulated_clicks = get_fg_points_from_cc_centers(gt, n_slices)
     coords = interpolate_points(simulated_clicks, kind=interpolation).astype(int)
     coords = coords[:, [2, 1, 0]]  # Gt is in row-major; need to reorder to xyz

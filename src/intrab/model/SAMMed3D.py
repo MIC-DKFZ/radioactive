@@ -270,10 +270,6 @@ class SAMMed3DInferer(Inferer):
         if not promptstep_in_model_coord_system:
             prompt = self.transform_promptstep_to_model_coords(prompt)
 
-        prompt.coords = prompt.coords[
-            :, ::-1
-        ]  # Points are in xyz, but must be in zyx to align to image in row-major format.
-
         if crop_pad_params is None:
             crop_pad_params = get_crop_pad_params_from_gt_or_prompt(self.img, prompt, cheat, gt)
 
