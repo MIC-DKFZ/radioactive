@@ -173,17 +173,8 @@ def binarize_gt(gt_path: Path | str, label_of_interest: int) -> nib.Nifti1Image:
     gt: np.ndarray
     gt_nib: nib.Nifti1Image
     gt_path = Path(gt_path)
-    if gt_path.name.endswith(".nii.gz"):
-        gt_nib = nib.load(gt_path)
-        gt = gt_nib.get_fdata()
-    elif gt_path.name.endswith(".nrrd"):
-        arr, header = nrrd.read(gt_path)
-        if "innrrd" in header:
-            raise NotImplementedError("Innrrd not considered yet.")
-        gt_nib = nrrd_to_nib(arr, header)
-        gt = gt_nib.get_fdata()
-    else:
-        raise NotImplementedError("Only nii.gz and .nrrd files are supported atm.")
+    gt_nib = load_any_to_nib(gt_path)
+    gt = gt_nib.get_fdata().astype(np.int16)
 
     binary_gt = np.where(gt == label_of_interest, 1, 0)
     binary_gt = nib.Nifti1Image(binary_gt.astype(np.uint8), gt_nib.affine)
