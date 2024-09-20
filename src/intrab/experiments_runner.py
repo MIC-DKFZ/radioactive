@@ -1,4 +1,6 @@
+import os
 from pathlib import Path
+import sys
 
 import torch
 
@@ -43,13 +45,18 @@ if __name__ == "__main__":
         # interactive_perf_bound=0.9,
         # interactive_max_iter=10,
         interactive_max_iter=5,
-        twoD_interactive_n_cc = 1,
+        twoD_interactive_n_cc=1,
         twoD_interactive_n_points_per_slice=1,
         threeD_interactive_n_init_points=1,
         threeD_patch_size=(128, 128, 128),  # This argument is only for SAMMed3D - should be different for segvol
     )
 
     # Potentially move the seeds inside to not create new models each seed, but save that time.
+    if "LSB_JOBID" in os.environ:
+        # ignore all debug and info messages when running on the cluster
+        logger.remove()
+        logger.add(sys.stdout, level="WARNING")
+
     wanted_prompt_styles = config["prompting"]["prompt_styles"]
     for seed in config["seeds"]:
         model_name: model_registry
@@ -58,7 +65,7 @@ if __name__ == "__main__":
             dataset_root: Path = get_dataset_path_by_id(dataset["identifier"])
             logger.info(f"Dataset loaded from {dataset_root}")
             dataset_name: str = dataset_root.name
-            excluded_class_ids: list = dataset['excluded_classes']
+            excluded_class_ids: list = dataset["excluded_classes"]
             # ToDo: Add the excluded class ids here.
             label_dict: dict[str, int] = get_labels_from_dataset_json(dataset_root, excluded_class_ids)
             imgs_gts: list[tuple[str, str]] = get_img_gts(dataset_root)
