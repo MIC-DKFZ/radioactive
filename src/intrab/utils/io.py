@@ -6,7 +6,7 @@ import nrrd
 import yaml
 from intrab.model.model_utils import model_registry
 from intrab.utils.paths import get_dataset_path
-from intrab.datasets_preprocessing.conversion_utils import nrrd_to_nib
+from intrab.datasets_preprocessing.conversion_utils import load_any_to_nib, nrrd_to_nib
 from intrab.prompts.prompter import Prompter, static_prompt_styles
 from loguru import logger
 import nibabel as nib
@@ -189,9 +189,8 @@ def binarize_gt(gt_path: Path | str, label_of_interest: int) -> nib.Nifti1Image:
     binary_gt = nib.Nifti1Image(binary_gt.astype(np.uint8), gt_nib.affine)
     return binary_gt
 
-
 def create_instance_gt(gt_path: Path) -> tuple[nib.Nifti1Image, list[int]]:
-    gt_nib: nib.Nifti1Image = nib.load(gt_path)
+    gt_nib: nib.Nifti1Image = load_any_to_nib(gt_path)
     gt = gt_nib.get_fdata().astype(np.int16)
     instances = set(np.unique(gt))
     instances = list(instances - {0})
