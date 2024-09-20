@@ -289,13 +289,13 @@ def get_wanted_supported_prompters(
         if "point" in inferer.supported_prompts:
             if "OnePoints3DVolumePrompter" in wanted_prompt_styles:
                 prompters.append(OnePoints3DVolumePrompter(inferer, seed))
-            if "TwoPoints3DVolumePrompter" in wanted_prompt_styles:
+            if "TwoPoints3DVolumePrompter" in wanted_prompt_styles and not isinstance(inferer, SAMMed3DInferer): 
                 prompters.append(TwoPoints3DVolumePrompter(inferer, seed))
-            if "ThreePoints3DVolumePrompter" in wanted_prompt_styles:
+            if "ThreePoints3DVolumePrompter" in wanted_prompt_styles and not isinstance(inferer, SAMMed3DInferer): 
                 prompters.append(ThreePoints3DVolumePrompter(inferer, seed))
-            if "FivePoints3DVolumePrompter" in wanted_prompt_styles:
+            if "FivePoints3DVolumePrompter" in wanted_prompt_styles and not isinstance(inferer, SAMMed3DInferer): 
                 prompters.append(FivePoints3DVolumePrompter(inferer, seed))
-            if "TenPoints3DVolumePrompter" in wanted_prompt_styles:
+            if "TenPoints3DVolumePrompter" in wanted_prompt_styles and not isinstance(inferer, SAMMed3DInferer): 
                 prompters.append(TenPoints3DVolumePrompter(inferer, seed))
         if "box" in inferer.supported_prompts:
             if "Box3DVolumePrompter" in wanted_prompt_styles:
