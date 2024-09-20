@@ -162,7 +162,7 @@ def get_labels_from_dataset_json(dataset_dir: Path, excluded_class_ids: list) ->
     with open(dataset_dir / "dataset.json", "r") as f:
         dataset_info = json.load(f)
     label_dict = dataset_info["labels"]
-    label_dict = {k:v for k,v in label_dict.items() if v not in excluded_class_ids}
+    label_dict = {k: v for k, v in label_dict.items() if v not in excluded_class_ids}
     return label_dict
 
 
@@ -173,12 +173,14 @@ def binarize_gt(gt_path: Path | str, label_of_interest: int) -> nib.Nifti1Image:
     gt: np.ndarray
     gt_nib: nib.Nifti1Image
     gt_path = Path(gt_path)
+
     gt_nib = load_any_to_nib(gt_path)
-    gt = gt_nib.get_fdata().astype(np.int16)
+    gt = gt_nib.get_fdata()
 
     binary_gt = np.where(gt == label_of_interest, 1, 0)
     binary_gt = nib.Nifti1Image(binary_gt.astype(np.uint8), gt_nib.affine)
     return binary_gt
+
 
 def create_instance_gt(gt_path: Path) -> tuple[nib.Nifti1Image, list[int]]:
     gt_nib: nib.Nifti1Image = load_any_to_nib(gt_path)
