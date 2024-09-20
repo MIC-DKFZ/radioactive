@@ -52,7 +52,7 @@ if __name__ == "__main__":
     )
 
     # Potentially move the seeds inside to not create new models each seed, but save that time.
-    if "LSB_JOBID" in os.environ:
+    if "LSF_JOBID" in os.environ:
         # ignore all debug and info messages when running on the cluster
         logger.remove()
         logger.add(sys.stdout, level="WARNING")
