@@ -39,7 +39,7 @@ from intrab.prompts.interactive_prompter import (
     PointInterpolationInteractivePrompterWithPrevPoint,
     PointPropagationInteractivePrompterNoPrevPoint,
     PointPropagationInteractivePrompterWithPrevPoint,
-    threeDInteractivePrompterSAMMed3D,
+    threeDCroppedInteractivePrompterNoPrevPoint,
     twoD1PointUnrealisticInteractivePrompterNoPrevPoint,
     interactive_prompt_styles,
     twoD1PointUnrealisticInteractivePrompterWithPrevPoint,
@@ -303,7 +303,7 @@ def get_wanted_supported_prompters(
         if "point" in inferer.supported_prompts and "mask" in inferer.supported_prompts:
             if "threeDInteractivePrompter" in wanted_prompt_styles:
                 prompters.append(
-                    threeDInteractivePrompterSAMMed3D(
+                    threeDCroppedInteractivePrompterNoPrevPoint(
                         inferer,
                         pro_conf.threeD_interactive_n_init_points,
                         seed,

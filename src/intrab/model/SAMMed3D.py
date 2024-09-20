@@ -243,7 +243,7 @@ class SAMMed3DInferer(Inferer):
             ]  # batch and channel dimensions remain the same, spatial dimensions are quartered
             low_res_logits = torch.zeros([1, 1] + low_res_spatial_shape).to(
                 self.device
-            )  # [1,1] is batch and channel dimensions\
+            )  # [1,1] are batch and channel dimensions
 
         return low_res_logits
 
@@ -310,4 +310,4 @@ class SAMMed3DInferer(Inferer):
         segmentation_model_arr = segmentation
         segmentation_orig_nib = self.inv_trans_dense(segmentation)
 
-        return segmentation_orig_nib, low_res_logits.detach().cpu().squeeze(), segmentation_model_arr
+        return segmentation_orig_nib, low_res_logits.detach().cpu().squeeze().numpy(), segmentation_model_arr

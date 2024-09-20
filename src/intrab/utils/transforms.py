@@ -258,7 +258,7 @@ def _transform_box_dict_to_model_coords(
 
 def _transform_points_prompt_to_model_coords(
     coords_orig: np.ndarray, labels_orig: np.ndarray, transform_coords: Callable[[np.ndarray], np.ndarray]
-) -> PromptStep:
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Transform a point prompt in the original coordinate system to the model coordinate system using transform_to_model_coords_sparse
     """
@@ -286,7 +286,7 @@ def transform_prompt_to_model_coords(
         coords_model, labels_model = _transform_points_prompt_to_model_coords(
             prompt_orig.coords, prompt_orig.labels, transform_coords
         )
-        prompt_model.set_points((coords_model, labels_model))
+        prompt_model.set_points((coords_model.astype(int), labels_model))
 
     # set boxes if needed
     if prompt_orig.has_boxes:

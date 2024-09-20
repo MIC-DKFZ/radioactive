@@ -42,7 +42,7 @@ def get_pos_clicks3D(gt, n_clicks, seed=None):
 
     point_indices = np.random.choice(n_fg_voxels, size=n_clicks, replace=False)
     pos_coords = volume_fg[point_indices]
-    pos_coords = pos_coords[:, ::-1]  # Assume gt is in row major zyx, need to reverse order
+    pos_coords = pos_coords[:, ::-1].astype(int)  # Assume gt is in row major zyx, need to reverse order
     pos_coords = PromptStep(point_prompts=(pos_coords, [1] * len(pos_coords)))
     return pos_coords
 
@@ -98,14 +98,18 @@ def get_bbox3d(mask_volume: np.ndarray, delta=0):
 
 
 def isolate_patch_around_point(
-    img_or_gt: np.ndarray, seed_point: PromptStep, patch_dim: tuple[int, int, int]
+    img: np.ndarray, seed_point: PromptStep, patch_dim: tuple[int, int, int]
 ) -> np.ndarray:
-    """Sets all values outside a patch_dim[0]xpatch_dim[1]xpatch_dim[2] patch around a seed point to 0"""
-    img_or_gt_isolated = np.zeros_like(img_or_gt)
+    """
+    Sets all values outside a patch_dim[0]xpatch_dim[1]xpatch_dim[2] patch around a seed point to 0. 
+    Assumes that point coords are aligned with img coords - no transposition takes place
+    """
+    patch_dim = np.array(patch_dim)
+    img_or_gt_isolated = np.zeros(img.shape)
     seed_coords = seed_point.coords[0]
-    low = np.maximum(seed_coords - patch_dim, 0)
-    high = np.minimum(seed_coords + 64, img_or_gt.shape)
-    img_or_gt_isolated[low[0] : high[0], low[1] : high[1], low[2] : high[2]] = img_or_gt_isolated[
+    low = np.maximum(seed_coords - patch_dim//2, 0).astype(int)
+    high = np.minimum(seed_coords + patch_dim//2, img.shape).astype(int)
+    img_or_gt_isolated[low[0] : high[0], low[1] : high[1], low[2] : high[2]] = img[
         low[0] : high[0], low[1] : high[1], low[2] : high[2]
     ]
 
@@ -114,7 +118,7 @@ def isolate_patch_around_point(
 
 def obtain_misclassified_point_prompt_3d(pred: np.ndarray, gt: np.ndarray, seed: int = None):
     """
-    Obtain a point prompt from the misclassified entries in pred, as compared to gt.
+    Obtain a point prompt from the misclassified entries in pred, as compared to gt. Assumes image coords and prompt coords are aligned.
     """
     assert pred.shape == gt.shape, "Prediction and gt shapes must match"
 
@@ -126,7 +130,7 @@ def obtain_misclassified_point_prompt_3d(pred: np.ndarray, gt: np.ndarray, seed:
     sampled_ind = np.random.randint(len(misclassifieds))
     sampled_coords = misclassifieds[sampled_ind]
     sampled_labels = gt[*sampled_coords][None]
-    sampled_coords = sampled_coords[None][:, ::-1]  # zyx -> xyz, and make into 2d array
+    sampled_coords = sampled_coords[None] # Make into 2d array
 
     # Format into PromptStep and return
 

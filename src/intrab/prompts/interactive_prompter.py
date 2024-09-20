@@ -130,12 +130,12 @@ class InteractivePrompter(Prompter):
         return all_prompt_results
 
 
-class threeDInteractivePrompterSAMMed3D(InteractivePrompter):
+class threeDCroppedInteractivePrompterNoPrevPoint(InteractivePrompter):
     def __init__(
         self,
-        inferer: SAMMed3DInferer,
-        n_points: int,
+        inferer: Inferer,
         seed: int = 11121,
+        n_points: int = 1,
         dof_bound: int | None = None,
         perf_bound: float | None = None,
         max_iter: int | None = None,
@@ -147,27 +147,25 @@ class threeDInteractivePrompterSAMMed3D(InteractivePrompter):
         self.isolate_around_initial_point_size = isolate_around_initial_point_size
 
     def get_initial_prompt_step(self) -> PromptStep:
-        prompt_RAS = get_pos_clicks2D_row_major(self.groundtruth_SAR, self.n_points_per_slice, self.seed)
+        prompt_RAS = get_pos_clicks3D(self.groundtruth_SAR, n_clicks=self.n_points, seed=self.seed)
         prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
         prompt_model = self.inferer.transform_promptstep_to_model_coords(prompt_orig)
         return prompt_model
 
-    def process_gt_to_compare(self, gt, initial_prompt_step, isolate_around_initial_point_size):
-        return isolate_patch_around_point(gt, initial_prompt_step, isolate_around_initial_point_size)
+    def process_seg_to_compare(self, seg:np.ndarray, initial_prompt_step:PromptStep, isolate_around_initial_point_size:tuple[int,int,int]):
+        return isolate_patch_around_point(seg, initial_prompt_step, isolate_around_initial_point_size).astype(int)
 
     def get_next_prompt_step(
-        self, pred: np.ndarray, low_res_logits: np.ndarray, all_prompts: list[PromptStep]
+        self, pred_model: np.ndarray, low_res_logits: np.ndarray, all_prompts: list[PromptStep]
     ) -> PromptStep:
-        pred, _ = self.inferer.transform_to_model_coords_dense(
-            pred, is_seg=True
-        )  # Transform to the coordinate system in which inference will occur
-
-        if self.gt_to_compare is None:
-            self.gt_to_compare = self.process_gt_to_compare(
+        if self.gt_to_compare is None: # obtain cropped (or, rather, isolated) gt
+            self.gt_to_compare = self.process_seg_to_compare(
                 self.groundtruth_model, all_prompts[0], self.isolate_around_initial_point_size
             )
 
-        new_prompt = obtain_misclassified_point_prompt_3d(pred, self.gt_to_compare, self.seed)
+        pred_to_compare = self.process_seg_to_compare(pred_model, all_prompts[0], self.isolate_around_initial_point_size) # Both the pred to compare and the gt to compare must match outside the isolated region
+
+        new_prompt = obtain_misclassified_point_prompt_3d(pred_to_compare, self.gt_to_compare, self.seed)
         new_prompt.set_masks(low_res_logits)
 
         return new_prompt
@@ -185,7 +183,7 @@ class threeDInteractivePrompterSAMMed3D(InteractivePrompter):
         all_prompt_results: list[PromptResult] = []
         prompt_step: PromptStep = self.get_initial_prompt_step()
         crop_pad_params = get_crop_pad_params_from_gt_or_prompt(self.inferer.img, prompt_step)
-        pred, logits, _ = self.inferer.predict(prompt_step, crop_pad_params)
+        pred, logits, pred_model = self.inferer.predict(prompt_step, crop_pad_params, promptstep_in_model_coord_system=self.promptstep_in_model_coord_system)
 
         perf = self.get_performance(pred)
         all_prompt_results.append(
@@ -195,12 +193,13 @@ class threeDInteractivePrompterSAMMed3D(InteractivePrompter):
         )
 
         while not self.stopping_criteria_met(dof, perf, num_iter):
-            prompt_step = self.get_next_prompt_step(pred, logits, [ap.prompt_step for ap in all_prompt_results])
+            all_prompt_steps = [ap.prompt_step for ap in all_prompt_results]
+            prompt_step = self.get_next_prompt_step(pred_model, logits, all_prompt_steps)
             # Option to never forget previous prompts but feed all of them again in one huge joint prompt.
             if self.always_pass_prev_prompts:
                 prompt_step = merge_sparse_prompt_steps([prompt_step, all_prompt_results[-1].prompt_step])
 
-            pred, logits, _ = self.inferer.predict(prompt_step, crop_pad_params)
+            pred, logits, pred_model = self.inferer.predict(prompt_step, crop_pad_params, promptstep_in_model_coord_system=self.promptstep_in_model_coord_system)
             dof += prompt_step.get_dof()
             perf = self.get_performance(pred)
             all_prompt_results.append(
@@ -212,11 +211,24 @@ class threeDInteractivePrompterSAMMed3D(InteractivePrompter):
 
         return all_prompt_results
 
-    def clear_states(self):
-        self.isolated_gt = None
-        self.inferer.clear_embeddings()
-        return
+    # def clear_states(self): # Deprecated
+    #     self.isolated_gt = None
+    #     self.inferer.clear_embeddings()
+    #     return
 
+class threeDCroppedInteractivePrompterWithPrevPoint(threeDCroppedInteractivePrompterNoPrevPoint):
+    def __init__(
+        self,
+        inferer: Inferer,
+        seed: int = 11121,
+        n_points: int = 1,
+        dof_bound: int | None = None,
+        perf_bound: float | None = None,
+        max_iter: int | None = None,
+        isolate_around_initial_point_size: int = None,
+    ):
+        super().__init__(inferer, seed, n_points, dof_bound, perf_bound, max_iter, isolate_around_initial_point_size)
+        self.always_pass_prev_prompts = True
 
 class twoD1PointUnrealisticInteractivePrompterNoPrevPoint(InteractivePrompter):
     def __init__(
