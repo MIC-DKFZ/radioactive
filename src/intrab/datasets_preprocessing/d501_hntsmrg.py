@@ -40,12 +40,14 @@ def preprocess(raw_dataset_path: Path):
     lbl_paths = list(data_path.rglob("preRT/*preRT_mask.nii.gz"))
 
     for img in tqdm(img_paths, desc="Copying images"):
-        target_img_name = target_path / "imagesTr" / (Path(img).name.replace(".nii.gz", "_0000.nii.gz"))
+        target_img_name = (
+            target_path / "imagesTr" / (Path(img).name.replace(".nii.gz", "_0000.nii.gz").replace("_T2", ""))
+        )
         if not target_img_name.exists():
             shutil.copy(img, target_img_name)
 
     for lbl in tqdm(lbl_paths, desc="Copying labels"):
-        target_lbl_name = target_path / "labelsTr" / (Path(lbl).name)
+        target_lbl_name = target_path / "labelsTr" / (Path(lbl).name.replace("_mask", ""))
         if not target_lbl_name.exists():
             with TemporaryDirectory() as tempdir:
                 img = sitk.ReadImage(lbl)
@@ -60,7 +62,7 @@ def preprocess(raw_dataset_path: Path):
     with open(get_dataset_path() / "Dataset501_hntsmrg_pre_primarytumor" / "dataset.json", "w") as f:
         json.dump(
             {
-                "channel_names": {"0": "T1 MRI"},
+                "channel_names": {"0": "T2 MRI"},
                 "labels": {"background": 0, "Primary Tumor": 1},
                 "numTraining": 150,
                 "file_ending": ".nii.gz",
