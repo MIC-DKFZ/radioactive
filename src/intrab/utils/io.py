@@ -166,22 +166,6 @@ def get_labels_from_dataset_json(dataset_dir: Path, excluded_class_ids: list) ->
     return label_dict
 
 
-def binarize_gt(gt_path: Path | str, label_of_interest: int) -> nib.Nifti1Image:
-    """
-    Creates a binary mask from a multi-class groundtruth in the same spacing.
-    """
-    gt: np.ndarray
-    gt_nib: nib.Nifti1Image
-    gt_path = Path(gt_path)
-
-    gt_nib = load_any_to_nib(gt_path)
-    gt = gt_nib.get_fdata()
-
-    binary_gt = np.where(gt == label_of_interest, 1, 0)
-    binary_gt = nib.Nifti1Image(binary_gt.astype(np.uint8), gt_nib.affine)
-    return binary_gt
-
-
 def create_instance_gt(gt_path: Path) -> tuple[nib.Nifti1Image, list[int]]:
     gt_nib: nib.Nifti1Image = load_any_to_nib(gt_path)
     gt = gt_nib.get_fdata().astype(np.int16)
@@ -253,3 +237,32 @@ def save_interactive_instance_results(
     for n_iters in range(n_iterations):
         same_iter_prompt_results = [apr[n_iters] for apr in all_prompt_results]
         save_static_instance_results(same_iter_prompt_results, pred_out / f"iter_{n_iters}", instance_filename)
+
+
+def binarize_gt(gt_path: Path | str, label_of_interest: int) -> nib.Nifti1Image:
+    """
+    Creates a binary mask from a multi-class groundtruth in the same spacing.
+    """
+    gt: np.ndarray
+    gt_nib: nib.Nifti1Image
+    gt_path = Path(gt_path)
+    if gt_path.name.endswith(".nii.gz"):
+        gt_nib = nib.load(gt_path)
+        gt = gt_nib.get_fdata()
+        binary_gt = np.where(gt == label_of_interest, 1, 0)
+        nib_img = nib.Nifti1Image(binary_gt.astype(np.uint8), gt_nib.affine)
+    elif gt_path.name.endswith(".nrrd"):
+        gt, header = read(gt_path)
+        # Check if the input is 4D -- in.nrrd and load accordingly
+        if len(gt.shape) == 4:
+            binary_gt = np.sum(np.where(gt == label_of_interest, 1, 0), axis=0)
+            clean_header = InstanceNrrd.clean_header(header)
+            nib_img = nrrd_to_nib(binary_gt.astype(np.uint8), clean_header)
+        else:
+            binary_gt = np.where(gt == label_of_interest, 1, 0)
+            nib_img = nrrd_to_nib(binary_gt.astype(np.uint8), header)
+    else:
+        raise NotImplementedError(f"Unexpected file format {gt_path.name}. Only .nii.gz and .nrrd are supported.")
+
+    binary_gt = nib_img
+    return binary_gt
