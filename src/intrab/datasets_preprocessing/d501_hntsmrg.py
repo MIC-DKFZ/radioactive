@@ -2,6 +2,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import numpy as np
 from toinstance import InstanceNrrd
 import glob
 
@@ -39,24 +40,40 @@ def preprocess(raw_dataset_path: Path):
     img_paths = list(data_path.rglob("preRT/*preRT_T2.nii.gz"))
     lbl_paths = list(data_path.rglob("preRT/*preRT_mask.nii.gz"))
 
-    for img in tqdm(img_paths, desc="Copying images"):
+    # SOME IMAGES DON'T HAVE LABELS, BUT SINCE WE DO INSTANCE STUFF WE IGNORE THEM
+    #   This is currently not optimal but we don't support empty cases.
+
+    images = {}
+    for img in tqdm(img_paths, desc="Indexing images"):
+        case_id = Path(img).name.replace(".nii.gz", "").replace("_T2", "")
         target_img_name = (
             target_path / "imagesTr" / (Path(img).name.replace(".nii.gz", "_0000.nii.gz").replace("_T2", ""))
         )
-        if not target_img_name.exists():
-            shutil.copy(img, target_img_name)
+        images[case_id] = {"target_path": target_img_name, "img_path": img}
 
-    for lbl in tqdm(lbl_paths, desc="Copying labels"):
-        target_lbl_name = target_path / "labelsTr" / (Path(lbl).name.replace("_mask", ""))
-        if not target_lbl_name.exists():
-            with TemporaryDirectory() as tempdir:
-                img = sitk.ReadImage(lbl)
-                img_array = sitk.GetArrayFromImage(img)
-                # Remove the second label
-                img_array[img_array == 2] = 0
-                new_img = sitk.GetImageFromArray(img_array)
-                new_img.CopyInformation(img)
-                sitk.WriteImage(new_img, target_lbl_name)
+    labels = {}
+    for lbl in tqdm(lbl_paths, desc="Indexing labels"):
+        case_id = Path(lbl).name.replace("_mask", "").replace(".nii.gz", "")
+        target_lbl_name = target_path / "labelsTr" / (case_id + ".nii.gz")
+
+        img = sitk.ReadImage(lbl)
+        img_array = sitk.GetArrayFromImage(img)
+        # Remove the second label
+        img_array[img_array == 2] = 0
+        if np.any(img_array):
+            labels[case_id] = {"target_path": target_lbl_name, "lbl_path": lbl}
+
+    for case_id, label in tqdm(labels.items(), desc="Creating instances of non-zero images"):
+        # Read the label, remove the second label and save it
+        img = sitk.ReadImage(label["lbl_path"])
+        img_array = sitk.GetArrayFromImage(img)
+        img_array = img_array.astype(np.uint8)
+        img_array[img_array == 2] = 0  # Only has lbl 1 and 2, remove 2 to only have 1 left
+        new_img = sitk.GetImageFromArray(img_array)
+        new_img.CopyInformation(img)
+        sitk.WriteImage(new_img, label["target_path"])
+        # Get the associated image and save that too.
+        img = shutil.copy(images[case_id]["img_path"], images[case_id]["target_path"])
 
     # ------------------------------- Dataset Json ------------------------------- #
     with open(get_dataset_path() / "Dataset501_hntsmrg_pre_primarytumor" / "dataset.json", "w") as f:
@@ -64,7 +81,7 @@ def preprocess(raw_dataset_path: Path):
             {
                 "channel_names": {"0": "T2 MRI"},
                 "labels": {"background": 0, "Primary Tumor": 1},
-                "numTraining": 150,
+                "numTraining": len(labels),
                 "file_ending": ".nii.gz",
                 "name": "HNTS-MRG 24 Challenge - Primary Tumor instances",
                 "reference": "https://hntsmrg24.grand-challenge.org/dataset/",
