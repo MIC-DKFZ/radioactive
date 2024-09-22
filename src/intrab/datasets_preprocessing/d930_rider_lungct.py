@@ -26,7 +26,9 @@ def preprocess(raw_download_dir: Path):
     all_dicoms = {key: all_dicoms[key] for key in sorted(all_dicoms)}
     cnt_dicom_map = {}
 
-    for cnt, (study_name, dicom_data) in tqdm(enumerate(all_dicoms.items()), desc="Converting LNQ DICOMs to NRRD"):
+    for cnt, (study_name, dicom_data) in tqdm(
+        enumerate(all_dicoms.items()), total=len(all_dicoms), desc="Converting RIDER DICOMs to NRRD"
+    ):
         ct_path = dicom_data["CT"][0]["filepath"]  # We only have one CT and one SEG in LNQ
         seg_path = dicom_data["SEG"][0]["filepath"]
         ct: tuple[np.ndarray, dict] = dicom_to_nrrd(ct_path)
@@ -34,8 +36,18 @@ def preprocess(raw_download_dir: Path):
         # nrrd.write(str(labels_dir / f"original_seg_rider_lung_{cnt:04d}.nrrd"), seg[0], seg[1])
 
         # If the shape is 4D the first dimension are predictions and the second are the GT
-        if seg[0].shape == 4:
+
+        # temporary save the CT as the header is not the same as the SEG
+
+        if len(seg[0].shape) == 5:
+            print("Wait")
+        elif len(seg[0].shape) == 4:
+            # If the shape is 4D the first dimension are predictions and the second are the GT
+            # So we overwrite the final_seg content.
             seg = (seg[0][1], ct[1])
+        else:
+            print("Unexpected")
+
         seg = (seg[0], ct[1])  # Copy the header from the CT to the SEG
 
         innrrd = InstanceNrrd.from_semantic_map(
