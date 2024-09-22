@@ -173,33 +173,39 @@ def preprocess(raw_download_dir: Path):
     output_dir = get_dataset_path() / "Dataset651_segrap"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    CLS_MAP_TO_VALUE = {k: cnt for cnt, k in enumerate(SEGRAP_SUBSETS.keys())}
+    CLS_MAP_TO_VALUE = {k: cnt + 1 for cnt, k in enumerate(SEGRAP_SUBSETS.keys())}
 
     # ------------------------------- Conversion ------------------------------- #
     output_image_dir = output_dir / "imagesTr"
     output_image_dir.mkdir(parents=True, exist_ok=True)
     output_label_dir = output_dir / "labelsTr"
     output_label_dir.mkdir(parents=True, exist_ok=True)
+
+    for case_dir in tqdm(list(cases_images_dir.iterdir()), desc="Creating Image Labels"):
+        if case_dir.is_dir():
+            img_path = case_dir / "image.nii.gz"
+            if not img_path.exists():
+                continue
+            read_img = sitk.ReadImage(img_path)
+            img_arr, img_header = sitk_to_nrrd(read_img)
+            nrrd.write(str(output_image_dir / f"{case_dir.name}_0000.nrrd"), img_arr, img_header)
+
     for case_dir in tqdm(list(cases_labels_dir.iterdir()), desc="Creating Image Labels"):
         joint_labels: dict[str, np.ndarray] = {}
         for organ in case_dir.iterdir():
-            joint_labels[organ.name] = sitk.ReadImage(str(organ))
+            joint_labels[organ.name.replace(".nii.gz", "")] = sitk.ReadImage(str(organ))
 
         res_labels: dict[int, sitk.Image] = {
             CLS_MAP_TO_VALUE[organ_name]: img for organ_name, img in joint_labels.items()
         }
 
-        header = sitk_to_nrrd(res_labels.values()[0])
-        instance_dict = {cnt: sitk.GetArrayFromImage(img) for cnt, img in res_labels.items()}
+        _, header = sitk_to_nrrd(list(res_labels.values())[0])
+        instance_dict = {cnt: [sitk.GetArrayFromImage(img)] for cnt, img in res_labels.items()}
+        # ToDo: SegRap saves 45 label maps for each case. The compression is quite slow, so
+        #   It may make sense to minimize the group footprint by merging non-overlapping regions.
         innrrd = InstanceNrrd.from_binary_instance_maps(instance_dict, header, maps_mutually_exclusive=False)
-        innrrd.to_file(output_label_dir / f"{case_dir.name}.nrrd")
+        innrrd.to_file(output_label_dir / f"{case_dir.name}.in.nrrd")
 
-    for case_dir in tqdm(list(cases_images_dir.iterdir()), desc="Creating Image Labels"):
-        if case_dir.is_dir():
-            img_path = case_dir / "image.nii.gz"
-            read_img = sitk.ReadImage(img_path)
-            img_arr, img_header = sitk_to_nrrd(read_img)
-            nrrd.write(output_image_dir / f"{case_dir.name}_0000.nrrd", img_arr, img_header)
     # ------------------------------- DATASET JSON ------------------------------- #
     with open(output_dir / "dataset.json", "w") as f:
         json.dump(
