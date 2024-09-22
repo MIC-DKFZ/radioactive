@@ -90,7 +90,8 @@ def nrrd_to_nib(nrrd_arr, nrrd_header) -> nib.Nifti1Image:
         img = sitk.ReadImage(temp_dir + "/tmp.nrrd")
         sitk.WriteImage(img, temp_dir + "/tmp.nii")
         image: nib.Nifti1Image = nib.load(temp_dir + "/tmp.nii")
-        _ = image.get_fdata()  # Need to make sure image is in memory before deleting
+        # Need to make sure image is in memory before deleting
+        image = nib.Nifti1Image(image.get_fdata(), affine=image.affine, header=image.header)
     return image
 
 
