@@ -129,164 +129,6 @@ class InteractivePrompter(Prompter):
 
         return all_prompt_results
 
-
-class threeDCroppedInteractivePrompterNoPrevPoint(InteractivePrompter):
-    def __init__(
-        self,
-        inferer: Inferer,
-        seed: int = 11121,
-        n_points: int = 1,
-        dof_bound: int | None = None,
-        perf_bound: float | None = None,
-        max_iter: int | None = None,
-        isolate_around_initial_point_size: int = None,
-    ):
-        super().__init__(inferer, seed, dof_bound, perf_bound, max_iter)
-        self.n_points = n_points
-        self.gt_to_compare = None
-        self.isolate_around_initial_point_size = isolate_around_initial_point_size
-
-    def get_initial_prompt_step(self) -> PromptStep:
-        prompt_RAS = get_pos_clicks3D(self.groundtruth_SAR, n_clicks=self.n_points, seed=self.seed)
-        prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
-        prompt_model = self.inferer.transform_promptstep_to_model_coords(prompt_orig)
-        return prompt_model
-
-    def process_seg_to_compare(self, seg:np.ndarray, initial_prompt_step:PromptStep, isolate_around_initial_point_size:tuple[int,int,int]):
-        return isolate_patch_around_point(seg, initial_prompt_step, isolate_around_initial_point_size).astype(int)
-
-    def get_next_prompt_step(
-        self, pred_model: np.ndarray, low_res_logits: np.ndarray, all_prompts: list[PromptStep]
-    ) -> PromptStep:
-        if self.gt_to_compare is None: # obtain cropped (or, rather, isolated) gt
-            self.gt_to_compare = self.process_seg_to_compare(
-                self.groundtruth_model, all_prompts[0], self.isolate_around_initial_point_size
-            )
-
-        pred_to_compare = self.process_seg_to_compare(pred_model, all_prompts[0], self.isolate_around_initial_point_size) # Both the pred to compare and the gt to compare must match outside the isolated region
-
-        new_prompt = obtain_misclassified_point_prompt_3d(pred_to_compare, self.gt_to_compare, self.seed)
-        new_prompt.set_masks(low_res_logits)
-
-        return new_prompt
-
-    def predict_image(
-        self, image_path: Path
-    ) -> list[PromptResult]:  # Same as in InteractivePrompter, except need to keep track of crop_pad_params.
-        """Predicts the image for multiple steps until the stopping criteria is met."""
-
-        self.inferer.set_image(image_path)
-        dof: int = 0
-        num_iter: int = 0
-        perf: float = 0
-
-        all_prompt_results: list[PromptResult] = []
-        prompt_step: PromptStep = self.get_initial_prompt_step()
-        crop_pad_params = get_crop_pad_params_from_gt_or_prompt(self.inferer.img, prompt_step)
-        pred, logits, pred_model = self.inferer.predict(prompt_step, crop_pad_params, promptstep_in_model_coord_system=self.promptstep_in_model_coord_system)
-
-        perf = self.get_performance(pred)
-        all_prompt_results.append(
-            PromptResult(
-                predicted_image=pred, logits=logits, perf=perf, dof=dof, n_step=num_iter, prompt_step=prompt_step
-            )
-        )
-
-        while not self.stopping_criteria_met(dof, perf, num_iter):
-            all_prompt_steps = [ap.prompt_step for ap in all_prompt_results]
-            prompt_step = self.get_next_prompt_step(pred_model, logits, all_prompt_steps)
-            # Option to never forget previous prompts but feed all of them again in one huge joint prompt.
-            if self.always_pass_prev_prompts:
-                prompt_step = merge_sparse_prompt_steps([prompt_step, all_prompt_results[-1].prompt_step])
-
-            pred, logits, pred_model = self.inferer.predict(prompt_step, crop_pad_params, promptstep_in_model_coord_system=self.promptstep_in_model_coord_system)
-            dof += prompt_step.get_dof()
-            perf = self.get_performance(pred)
-            all_prompt_results.append(
-                PromptResult(
-                    predicted_image=pred, logits=logits, prompt_step=prompt_step, perf=perf, n_step=num_iter, dof=dof
-                )
-            )
-            num_iter += 1
-
-        return all_prompt_results
-
-    # def clear_states(self): # Deprecated
-    #     self.isolated_gt = None
-    #     self.inferer.clear_embeddings()
-    #     return
-
-class threeDCroppedInteractivePrompterWithPrevPoint(threeDCroppedInteractivePrompterNoPrevPoint):
-    def __init__(
-        self,
-        inferer: Inferer,
-        seed: int = 11121,
-        n_points: int = 1,
-        dof_bound: int | None = None,
-        perf_bound: float | None = None,
-        max_iter: int | None = None,
-        isolate_around_initial_point_size: int = None,
-    ):
-        super().__init__(inferer, seed, n_points, dof_bound, perf_bound, max_iter, isolate_around_initial_point_size)
-        self.always_pass_prev_prompts = True
-
-class twoD1PointUnrealisticInteractivePrompterNoPrevPoint(InteractivePrompter):
-    def __init__(
-        self,
-        inferer: Inferer,
-        seed: int = 11121,
-        dof_bound: int | None = None,
-        perf_bound: float | None = None,
-        max_iter: int | None = None,
-        n_init_points_per_slice: int = 1,
-    ):
-
-        super().__init__(inferer, seed, dof_bound, perf_bound, max_iter)
-        self.n_init_points_per_slice = n_init_points_per_slice
-
-    def get_initial_prompt_step(self) -> PromptStep:
-        return super().get_initial_prompt_step()
-
-    def get_initial_prompt_step(self) -> PromptStep:
-        initial_prompt_step = get_pos_clicks2D_row_major(
-            self.groundtruth_model, self.n_init_points_per_slice, self.seed
-        )
-
-        return initial_prompt_step
-
-    def get_next_prompt_step(
-        self, pred: np.ndarray, low_res_logits: np.ndarray, all_prompts: list[PromptStep]
-    ) -> PromptStep:
-        pred, _ = self.inferer.transform_to_model_coords_dense(pred, is_seg=True)
-        slices_inferred = all_prompts[0].get_slices_to_infer()
-        all_slice_prompt_steps = []
-
-        for slice_idx in slices_inferred:
-            slice_seg = pred[slice_idx]
-            slice_gt = self.groundtruth_model[slice_idx]
-            slice_prompt_step = obtain_misclassified_point_prompt_2d(slice_seg, slice_gt, slice_idx, self.seed)
-            all_slice_prompt_steps.append(slice_prompt_step)
-
-        new_prompt_step = merge_sparse_prompt_steps(all_slice_prompt_steps)
-        new_prompt_step.set_masks(low_res_logits)
-
-        return new_prompt_step
-
-class twoD1PointUnrealisticInteractivePrompterWithPrevPoint(twoD1PointUnrealisticInteractivePrompterNoPrevPoint):
-    def __init__(
-        self,
-        inferer: Inferer,
-        seed: int = 11121,
-        dof_bound: int | None = None,
-        perf_bound: float | None = None,
-        max_iter: int | None = None,
-        n_init_points_per_slice: int = 1,
-    ):
-
-        super().__init__(inferer, seed, dof_bound, perf_bound, max_iter, n_init_points_per_slice)
-        self.always_pass_prev_prompts = True 
-
-
 # ToDo: Check prompts generated are of decent 'quality'
 class twoDInteractivePrompter(InteractivePrompter):
     def __init__(
@@ -312,17 +154,7 @@ class twoDInteractivePrompter(InteractivePrompter):
 
     @staticmethod
     def get_generate_negative_prompts_flag(fn_mask: np.ndarray, fp_mask: np.ndarray) -> bool:
-        # Old method: See if a lot of the foreground has been segmented. Also, this is fora  generate positive prompts flag, not a generate negaitve prompts flag
-        # fn_count = np.sum(fn_mask)
-
-        # fg_count = np.sum(self.groundtruth)
-
-        # generate_positive_prompts_prob = (
-        #     fn_count / fg_count
-        # )  # Generate positive prompts when much of the forget_generate_negative_prompts_flageground isn't segmented
-        # generate_positive_prompts_flag = np.random.binomial(1, generate_positive_prompts_prob)
-
-        # New method: just find if there are more fn or fp
+        # Find if there are more fn or fp
         fn_count = np.sum(fn_mask)
         fp_count = np.sum(fp_mask)
 
@@ -481,6 +313,228 @@ class twoDInteractivePrompter(InteractivePrompter):
 
         return prompt_step
 
+
+class threeDCroppedInteractivePrompterNoPrevPoint(InteractivePrompter):
+    def __init__(
+        self,
+        inferer: Inferer,
+        seed: int = 11121,
+        n_points: int = 1,
+        dof_bound: int | None = None,
+        perf_bound: float | None = None,
+        max_iter: int | None = None,
+        isolate_around_initial_point_size: int = None,
+    ):
+        super().__init__(inferer, seed, dof_bound, perf_bound, max_iter)
+        self.n_points = n_points
+        self.isolate_around_initial_point_size = isolate_around_initial_point_size
+
+    def get_initial_prompt_step(self) -> PromptStep:
+        prompt_RAS = get_pos_clicks3D(self.groundtruth_SAR, n_clicks=self.n_points, seed=self.seed)
+        prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
+        prompt_model = self.inferer.transform_promptstep_to_model_coords(prompt_orig)
+        return prompt_model
+
+    def process_seg_to_compare(self, seg:np.ndarray, initial_prompt_step:PromptStep, isolate_around_initial_point_size:tuple[int,int,int]):
+        return isolate_patch_around_point(seg, initial_prompt_step, isolate_around_initial_point_size).astype(int)
+
+    def get_next_prompt_step(
+        self, pred_model: np.ndarray, low_res_logits: np.ndarray, all_prompts: list[PromptStep]
+    ) -> PromptStep:
+        gt_to_compare = self.process_seg_to_compare( # obtain cropped (or, rather, isolated) gt (repeated calculation)
+            self.groundtruth_model, all_prompts[0], self.isolate_around_initial_point_size
+        )
+
+        pred_to_compare = self.process_seg_to_compare(pred_model, all_prompts[0], self.isolate_around_initial_point_size) # Both the pred to compare and the gt to compare must match outside the isolated region
+
+        new_prompt = obtain_misclassified_point_prompt_3d(pred_to_compare, gt_to_compare, self.seed)
+        new_prompt.set_masks(low_res_logits)
+
+        return new_prompt
+
+    def predict_image(
+        self, image_path: Path
+    ) -> list[PromptResult]:  # Same as in InteractivePrompter, except need to keep track of crop_pad_params.
+        """Predicts the image for multiple steps until the stopping criteria is met."""
+
+        self.inferer.set_image(image_path)
+        dof: int = 0
+        num_iter: int = 0
+        perf: float = 0
+
+        all_prompt_results: list[PromptResult] = []
+        prompt_step: PromptStep = self.get_initial_prompt_step()
+        crop_pad_params = get_crop_pad_params_from_gt_or_prompt(self.inferer.img, prompt_step)
+        pred, logits, pred_model = self.inferer.predict(prompt_step, crop_pad_params, promptstep_in_model_coord_system=self.promptstep_in_model_coord_system)
+
+        perf = self.get_performance(pred)
+        all_prompt_results.append(
+            PromptResult(
+                predicted_image=pred, logits=logits, perf=perf, dof=dof, n_step=num_iter, prompt_step=prompt_step
+            )
+        )
+
+        while not self.stopping_criteria_met(dof, perf, num_iter):
+            all_prompt_steps = [ap.prompt_step for ap in all_prompt_results]
+            prompt_step = self.get_next_prompt_step(pred_model, logits, all_prompt_steps)
+            # Option to never forget previous prompts but feed all of them again in one huge joint prompt.
+            if self.always_pass_prev_prompts:
+                prompt_step = merge_sparse_prompt_steps([prompt_step, all_prompt_results[-1].prompt_step])
+
+            pred, logits, pred_model = self.inferer.predict(prompt_step, crop_pad_params, promptstep_in_model_coord_system=self.promptstep_in_model_coord_system)
+            dof += prompt_step.get_dof()
+            perf = self.get_performance(pred)
+            all_prompt_results.append(
+                PromptResult(
+                    predicted_image=pred, logits=logits, prompt_step=prompt_step, perf=perf, n_step=num_iter, dof=dof
+                )
+            )
+            num_iter += 1
+
+        return all_prompt_results
+
+
+class threeDCroppedFromCenterInteractivePrompterNoPrevPoint(threeDCroppedInteractivePrompterNoPrevPoint):
+    """
+    Same as threeDCroppedInteractivePrompterNoPrevPoint except that instead of the initial point being a random fg point, it's a center point as determined by the point interpolation method.
+    """
+    def __init__(
+        self,
+        inferer: Inferer,
+        seed: int = 11121,
+        n_points: int = 1,
+        dof_bound: int | None = None,
+        perf_bound: float | None = None,
+        max_iter: int | None = None,
+        isolate_around_initial_point_size: int = None,
+    ):
+        super().__init__(inferer, seed, n_points, dof_bound, perf_bound, max_iter, isolate_around_initial_point_size)
+
+    def get_initial_prompt_step(self) -> PromptStep:
+        max_possible_clicks = min(3, len(self.get_slices_to_infer()))
+        if max_possible_clicks >=3: # Intended case. Edge cases are when there are at most 2 fg clicks.
+            _, middle_coords, _ = get_fg_points_from_cc_centers(self.groundtruth_SAR, max_possible_clicks)
+        else:
+            all_coords = get_fg_points_from_cc_centers(self.groundtruth_SAR, max_possible_clicks)
+            middle_coords = all_coords[0] # If 1 fg slice, take it's center If 2 fg slices; take the center of the lower one
+
+        middle_coords = middle_coords[:,::-1] # Dealign from image, ie zyx -> xyz
+        prompt_RAS = PromptStep(point_prompts=(middle_coords, np.array([1])))
+        prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
+        prompt_model = self.inferer.transform_promptstep_to_model_coords(prompt_orig)
+        return prompt_model
+
+
+class threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint(
+    threeDCroppedFromCenterInteractivePrompterNoPrevPoint,
+    twoDInteractivePrompter
+    ):
+    def __init__(
+        self,
+        inferer: Inferer,
+        seed: int = 11121,
+        n_points: int = 1,
+        dof_bound: int | None = None,
+        perf_bound: float | None = None,
+        max_iter: int | None = None,
+        isolate_around_initial_point_size: int = None,
+        num_corrective_prompts: int = 1,
+        n_ccs_positive_interaction: int = 1
+    ):
+        threeDCroppedFromCenterInteractivePrompterNoPrevPoint().__init__(inferer, seed, n_points, dof_bound, perf_bound, max_iter, isolate_around_initial_point_size)
+        self.num_corrective_prompts = num_corrective_prompts
+        self.n_ccs_positive_interaction = n_ccs_positive_interaction
+
+    def get_next_prompt_step(
+        self, pred_model: np.ndarray, low_res_logits: np.ndarray, all_prompts: list[PromptStep]
+    ):
+        # Ensure that gt and pred can only differ inside a self.isolate_around_initial_point_size crop centered
+        # around the initial prompt
+
+        gt_to_compare = self.process_seg_to_compare( # obtain cropped (or, rather, isolated) gt (repeated calculation)
+            self.groundtruth_model, all_prompts[0], self.isolate_around_initial_point_size
+        )
+
+        pred_to_compare = self.process_seg_to_compare(pred_model, all_prompts[0], self.isolate_around_initial_point_size)
+
+        ## Now use 2d algorithm logic to generate the negative/positive prompts
+        fn_mask = (pred_to_compare == 0) & (gt_to_compare == 1)
+        fp_mask = (pred_to_compare == 1) & (gt_to_compare == 0)
+
+        generate_negative_prompts_flag = self.get_generate_negative_prompts_flag(fn_mask, fp_mask)
+
+        prompt_gen_failed = False
+        if generate_negative_prompts_flag:
+            prompt_step = self.generate_negative_promptstep(gt_to_compare, pred_to_compare, fp_mask)
+            if prompt_step is None:
+                # logger.debug('generate negative prompts failed')
+                prompt_gen_failed = True
+
+        if not generate_negative_prompts_flag or prompt_gen_failed: # Get which slices have been inferred on
+            prompt_step = self.generate_positive_promptstep(fn_mask, self.n_ccs_positive_interaction)
+
+        # 3d models don't need as many points as 2d; subset to the desired number.
+        coords, labels = prompt_step.coords, prompt_step.labels
+        num_corrective_prompts = min(self.num_corrective_prompts, len(coords))
+        sample_inds = np.random.choice(range(len(coords)), num_corrective_prompts, replace = False)
+        coords = coords[sample_inds]
+        labels = labels[sample_inds]
+        prompt_step = PromptStep(point_prompts = (coords, labels))
+
+        # ####
+        # # Debug:
+        # aligned_coords = prompt_step.coords[:, [2,1,0]] # back to zyx
+        # true_labels = self.groundtruth_model[*aligned_coords.T]
+        # prompt_type = 'positive' if not generate_negative_prompts_flag or prompt_gen_failed else 'negative'
+        # logger.debug(f'{prompt_type} prompts created. # of corrective prompts: {len(true_labels)}, # of mistakes {np.sum(true_labels!=prompt_step.labels)}')
+        # ####
+
+        prompt_step.set_masks(low_res_logits)
+
+
+class twoD1PointUnrealisticInteractivePrompterNoPrevPoint(InteractivePrompter):
+    def __init__(
+        self,
+        inferer: Inferer,
+        seed: int = 11121,
+        dof_bound: int | None = None,
+        perf_bound: float | None = None,
+        max_iter: int | None = None,
+        n_init_points_per_slice: int = 1,
+    ):
+
+        super().__init__(inferer, seed, dof_bound, perf_bound, max_iter)
+        self.n_init_points_per_slice = n_init_points_per_slice
+
+    def get_initial_prompt_step(self) -> PromptStep:
+        return super().get_initial_prompt_step()
+
+    def get_initial_prompt_step(self) -> PromptStep:
+        initial_prompt_step = get_pos_clicks2D_row_major(
+            self.groundtruth_model, self.n_init_points_per_slice, self.seed
+        )
+
+        return initial_prompt_step
+
+    def get_next_prompt_step(
+        self, pred: np.ndarray, low_res_logits: np.ndarray, all_prompts: list[PromptStep]
+    ) -> PromptStep:
+        pred, _ = self.inferer.transform_to_model_coords_dense(pred, is_seg=True)
+        slices_inferred = all_prompts[0].get_slices_to_infer()
+        all_slice_prompt_steps = []
+
+        for slice_idx in slices_inferred:
+            slice_seg = pred[slice_idx]
+            slice_gt = self.groundtruth_model[slice_idx]
+            slice_prompt_step = obtain_misclassified_point_prompt_2d(slice_seg, slice_gt, slice_idx, self.seed)
+            all_slice_prompt_steps.append(slice_prompt_step)
+
+        new_prompt_step = merge_sparse_prompt_steps(all_slice_prompt_steps)
+        new_prompt_step.set_masks(low_res_logits)
+
+        return new_prompt_step
+
+
 class OnePointPer2DSliceInteractivePrompterNoPrevPoint(twoDInteractivePrompter):
     def __init__(
         self,
@@ -503,20 +557,6 @@ class OnePointPer2DSliceInteractivePrompterNoPrevPoint(twoDInteractivePrompter):
 
         return prompt_model
 
-class OnePointPer2DSliceInteractivePrompterWithPrevPoint(OnePointPer2DSliceInteractivePrompterNoPrevPoint):
-    def __init__(
-        self,
-        inferer: Inferer,
-        seed: int = 11121,
-        n_ccs_positive_interaction: int = 1,
-        dof_bound: int | None = None,
-        perf_bound: float | None = None,
-        max_iter: int | None = None,
-        n_init_points_per_slice: int = 1,
-
-    ):
-        super().__init__(inferer, seed, n_ccs_positive_interaction, dof_bound, perf_bound, max_iter, n_init_points_per_slice)
-        self.always_pass_prev_prompts = True
 
 class PointInterpolationInteractivePrompterNoPrevPoint(twoDInteractivePrompter):
     def __init__(
@@ -546,19 +586,6 @@ class PointInterpolationInteractivePrompterNoPrevPoint(twoDInteractivePrompter):
         prompt_model = self.inferer.transform_promptstep_to_model_coords(prompt_orig)
         return prompt_model
 
-class PointInterpolationInteractivePrompterWithPrevPoint(PointInterpolationInteractivePrompterNoPrevPoint):
-    def __init__(
-        self,
-        inferer: Inferer,
-        seed: int = 11121,
-        n_ccs_positive_interaction: int = 1,
-        dof_bound: int | None = None,
-        perf_bound: float | None = None,
-        max_iter: int | None = None,
-        n_slice_point_interpolation: int = 5,
-    ):
-        super().__init__(inferer, seed, n_ccs_positive_interaction, dof_bound, perf_bound, max_iter, n_slice_point_interpolation)
-        self.always_pass_prev_prompts = True
 
 class PointPropagationInteractivePrompterNoPrevPoint(twoDInteractivePrompter):
     def __init__(
@@ -599,6 +626,116 @@ class PointPropagationInteractivePrompterNoPrevPoint(twoDInteractivePrompter):
         )
         return all_point_prompts
 
+
+# ----------------------------------------
+# Same prompters, but passing previous points
+class threeDCroppedInteractivePrompterWithPrevPoint(threeDCroppedInteractivePrompterNoPrevPoint):
+    def __init__(
+        self,
+        inferer: Inferer,
+        seed: int = 11121,
+        n_points: int = 1,
+        dof_bound: int | None = None,
+        perf_bound: float | None = None,
+        max_iter: int | None = None,
+        isolate_around_initial_point_size: int = None,
+    ):
+        super().__init__(inferer, seed, n_points, dof_bound, perf_bound, max_iter, isolate_around_initial_point_size)
+        self.always_pass_prev_prompts = True
+
+
+class threeDCroppedFromCenterInteractivePrompterWithPrevPoint(threeDCroppedFromCenterInteractivePrompterNoPrevPoint):
+    """
+    Same as threeDCroppedInteractivePrompterNoPrevPoint except that instead of the initial point being a random fg point, it's a center point as determined by the point interpolation method.
+    """
+    def __init__(
+        self,
+        inferer: Inferer,
+        seed: int = 11121,
+        n_points: int = 1,
+        dof_bound: int | None = None,
+        perf_bound: float | None = None,
+        max_iter: int | None = None,
+        isolate_around_initial_point_size: int = None,
+    ):
+        super().__init__(inferer, seed, n_points, dof_bound, perf_bound, max_iter, isolate_around_initial_point_size)
+        self.always_pass_prev_prompts = True
+
+
+class threeDCroppedFromCenterAnd2dAlgoInteractivePrompterWithPrevPoint(
+    threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint
+    ):
+    def __init__(
+        self,
+        inferer: Inferer,
+        seed: int = 11121,
+        n_points: int = 1,
+        dof_bound: int | None = None,
+        perf_bound: float | None = None,
+        max_iter: int | None = None,
+        isolate_around_initial_point_size: int = None,
+        num_corrective_prompts: int = 1,
+        n_ccs_positive_interaction: int = 1
+    ):
+        super().__init__(inferer, 
+                        seed, 
+                        n_points, 
+                        dof_bound, 
+                        perf_bound, 
+                        max_iter, 
+                        isolate_around_initial_point_size,
+                        num_corrective_prompts,
+                        n_ccs_positive_interaction)
+        
+        self.always_pass_prev_prompts = True
+
+
+class twoD1PointUnrealisticInteractivePrompterWithPrevPoint(twoD1PointUnrealisticInteractivePrompterNoPrevPoint):
+    def __init__(
+        self,
+        inferer: Inferer,
+        seed: int = 11121,
+        dof_bound: int | None = None,
+        perf_bound: float | None = None,
+        max_iter: int | None = None,
+        n_init_points_per_slice: int = 1,
+    ):
+
+        super().__init__(inferer, seed, dof_bound, perf_bound, max_iter, n_init_points_per_slice)
+        self.always_pass_prev_prompts = True 
+
+
+class OnePointPer2DSliceInteractivePrompterWithPrevPoint(OnePointPer2DSliceInteractivePrompterNoPrevPoint):
+    def __init__(
+        self,
+        inferer: Inferer,
+        seed: int = 11121,
+        n_ccs_positive_interaction: int = 1,
+        dof_bound: int | None = None,
+        perf_bound: float | None = None,
+        max_iter: int | None = None,
+        n_init_points_per_slice: int = 1,
+
+    ):
+        super().__init__(inferer, seed, n_ccs_positive_interaction, dof_bound, perf_bound, max_iter, n_init_points_per_slice)
+        self.always_pass_prev_prompts = True
+
+
+class PointInterpolationInteractivePrompterWithPrevPoint(PointInterpolationInteractivePrompterNoPrevPoint):
+    def __init__(
+        self,
+        inferer: Inferer,
+        seed: int = 11121,
+        n_ccs_positive_interaction: int = 1,
+        dof_bound: int | None = None,
+        perf_bound: float | None = None,
+        max_iter: int | None = None,
+        n_slice_point_interpolation: int = 5,
+    ):
+        super().__init__(inferer, seed, n_ccs_positive_interaction, dof_bound, perf_bound, max_iter, n_slice_point_interpolation)
+        self.always_pass_prev_prompts = True
+
+
 class PointPropagationInteractivePrompterWithPrevPoint(PointPropagationInteractivePrompterNoPrevPoint):
     def __init__(
         self,
@@ -614,6 +751,7 @@ class PointPropagationInteractivePrompterWithPrevPoint(PointPropagationInteracti
         super().__init__(inferer, seed, n_ccs_positive_interaction, dof_bound, perf_bound, max_iter, n_seed_points_point_propagation, n_points_propagation,)
         self.always_pass_prev_prompts = True
 
+
 interactive_prompt_styles = Literal[
     "OnePointPer2DSliceInteractivePrompterNoPrevPoint",
     "OnePointPer2DSliceInteractivePrompterWithPrevPrompt",
@@ -621,7 +759,12 @@ interactive_prompt_styles = Literal[
     "PointInterpolationInteractivePrompterWithPrevPoint",
     "PointPropagationInteractivePrompterNoPrevPoint",
     "PointPropagationInteractivePrompterWithPrevPoint",
-    "threeDInteractivePrompterSAMMed3D",
+    "threeDCroppedInteractivePrompterNoPrevPoint",
+    "threeDCroppedInteractivePrompterWithPrevPoint",
+    "threeDCroppedFromCenterInteractivePrompterNoPrevPoint",
+    "threeDCroppedFromCenterInteractivePrompterWithPrevPoint",
+    "threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint",
+    "threeDCroppedFromCenterAnd2dAlgoInteractivePrompterWithPrevPoint",
     "twoD1PointUnrealisticInteractivePrompterNoPrevPoint",
     "twoD1PointUnrealisticInteractivePrompterWithPrevPoint",
 ]

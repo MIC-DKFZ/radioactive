@@ -16,4 +16,5 @@ class PromptConfig:
     twoD_interactive_n_points_per_slice: int = 1
     threeD_interactive_n_init_points: int = 1
     threeD_patch_size: tuple[int, int, int] = None
+    threeD_interactive_n_corrective_points: int = 1
     

@@ -39,6 +39,10 @@ from intrab.prompts.interactive_prompter import (
     PointInterpolationInteractivePrompterWithPrevPoint,
     PointPropagationInteractivePrompterNoPrevPoint,
     PointPropagationInteractivePrompterWithPrevPoint,
+    threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint,
+    threeDCroppedFromCenterAnd2dAlgoInteractivePrompterWithPrevPoint,
+    threeDCroppedFromCenterInteractivePrompterNoPrevPoint,
+    threeDCroppedFromCenterInteractivePrompterWithPrevPoint,
     threeDCroppedInteractivePrompterNoPrevPoint,
     threeDCroppedInteractivePrompterWithPrevPoint,
     twoD1PointUnrealisticInteractivePrompterNoPrevPoint,
@@ -177,7 +181,12 @@ def get_wanted_supported_prompters(
                     )
                 )
             if "BoxPer2dSliceFrom3DBoxPrompter" in wanted_prompt_styles:
-                prompters.append(BoxPer2dSliceFrom3DBoxPrompter(inferer, seed))
+                prompters.append(
+                    BoxPer2dSliceFrom3DBoxPrompter(
+                        inferer, 
+                        seed
+                    )
+                )
             if "BoxInterpolationPrompter" in wanted_prompt_styles:
                 prompters.append(
                     BoxInterpolationPrompter(
@@ -187,7 +196,12 @@ def get_wanted_supported_prompters(
                     )
                 )
             if "BoxPropagationPrompter" in wanted_prompt_styles:
-                prompters.append(BoxPropagationPrompter(inferer, seed))
+                prompters.append(
+                    BoxPropagationPrompter(
+                        inferer, 
+                        seed
+                    )
+                )
 
         if "point" in inferer.supported_prompts and "mask" in inferer.supported_prompts:
             if "OnePointPer2DSliceInteractivePrompterNoPrevPoint" in wanted_prompt_styles:
@@ -324,6 +338,58 @@ def get_wanted_supported_prompters(
                         pro_conf.interactive_perf_bound,
                         pro_conf.interactive_max_iter,
                         pro_conf.threeD_patch_size,
+                    )
+                )
+            if "threeDCroppedFromCenterInteractivePrompterNoPrevPoint" in wanted_prompt_styles:
+                prompters.append(
+                    threeDCroppedFromCenterInteractivePrompterNoPrevPoint(
+                        inferer,
+                        seed,
+                        0,
+                        pro_conf.interactive_dof_bound,
+                        pro_conf.interactive_perf_bound,
+                        pro_conf.interactive_max_iter,
+                        pro_conf.threeD_patch_size,
+                    )
+                )
+            if "threeDCroppedFromCenterInteractivePrompterWithPrevPoint" in wanted_prompt_styles:
+                prompters.append(
+                    threeDCroppedFromCenterInteractivePrompterWithPrevPoint(
+                        inferer,
+                        seed,
+                        0,
+                        pro_conf.interactive_dof_bound,
+                        pro_conf.interactive_perf_bound,
+                        pro_conf.interactive_max_iter,
+                        pro_conf.threeD_patch_size,
+                    )
+                )
+            if "threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint" in wanted_prompt_styles:
+                prompters.append(
+                    threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint(
+                        inferer,
+                        seed,
+                        0,
+                        pro_conf.interactive_dof_bound,
+                        pro_conf.interactive_perf_bound,
+                        pro_conf.interactive_max_iter,
+                        pro_conf.threeD_patch_size,
+                        pro_conf.threeD_interactive_n_corrective_points,
+                        pro_conf.twoD_interactive_n_cc
+                    )
+                )
+            if "threeDCroppedFromCenterAnd2dAlgoInteractivePrompterWithPrevPoint" in wanted_prompt_styles:
+                prompters.append(
+                    threeDCroppedFromCenterAnd2dAlgoInteractivePrompterWithPrevPoint(
+                        inferer,
+                        seed,
+                        0,
+                        pro_conf.interactive_dof_bound,
+                        pro_conf.interactive_perf_bound,
+                        pro_conf.interactive_max_iter,
+                        pro_conf.threeD_patch_size,
+                        pro_conf.threeD_interactive_n_corrective_points,
+                        pro_conf.twoD_interactive_n_cc
                     )
                 )
     else:
