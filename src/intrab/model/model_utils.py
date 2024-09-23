@@ -40,6 +40,7 @@ from intrab.prompts.interactive_prompter import (
     PointPropagationInteractivePrompterNoPrevPoint,
     PointPropagationInteractivePrompterWithPrevPoint,
     threeDCroppedInteractivePrompterNoPrevPoint,
+    threeDCroppedInteractivePrompterWithPrevPoint,
     twoD1PointUnrealisticInteractivePrompterNoPrevPoint,
     interactive_prompt_styles,
     twoD1PointUnrealisticInteractivePrompterWithPrevPoint,
@@ -301,9 +302,21 @@ def get_wanted_supported_prompters(
             if "Box3DVolumePrompter" in wanted_prompt_styles:
                 prompters.append(Box3DVolumePrompter(inferer, seed))
         if "point" in inferer.supported_prompts and "mask" in inferer.supported_prompts:
-            if "threeDInteractivePrompter" in wanted_prompt_styles:
+            if "threeDCroppedInteractivePrompterNoPrevPoint" in wanted_prompt_styles:
                 prompters.append(
                     threeDCroppedInteractivePrompterNoPrevPoint(
+                        inferer,
+                        pro_conf.threeD_interactive_n_init_points,
+                        seed,
+                        pro_conf.interactive_dof_bound,
+                        pro_conf.interactive_perf_bound,
+                        pro_conf.interactive_max_iter,
+                        pro_conf.threeD_patch_size,
+                    )
+                )
+            if "threeDCroppedInteractivePrompterWithPrevPoint" in wanted_prompt_styles:
+                prompters.append(
+                    threeDCroppedInteractivePrompterWithPrevPoint(
                         inferer,
                         pro_conf.threeD_interactive_n_init_points,
                         seed,
