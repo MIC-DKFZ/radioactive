@@ -262,10 +262,11 @@ class SAMMed3DInferer(Inferer):
         if prompt.has_boxes:
             raise ValueError(f"Box prompts have been supplied, but are not supported by SAMMed3D.")
 
-        if len(prompt.coords) > 1:
-            logger.warning(
-                "SAMMed3D Can break when multiple points are passed, especially if the points are more than 128 apart in any dimension"
-            )
+        # if len(prompt.coords) > 1:
+        #     logger.warning(
+        #         "SAMMed3D Can break when multiple points are passed, especially if the points are more than 128 apart in any dimension"
+        #     )
+        # Not needed: We take care.
 
         if not promptstep_in_model_coord_system:
             prompt = self.transform_promptstep_to_model_coords(prompt)
