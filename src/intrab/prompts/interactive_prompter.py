@@ -416,7 +416,9 @@ class threeDCroppedFromCenterInteractivePrompterNoPrevPoint(threeDCroppedInterac
             _, middle_coords, _ = get_fg_points_from_cc_centers(self.groundtruth_SAR, max_possible_clicks)
         else:
             all_coords = get_fg_points_from_cc_centers(self.groundtruth_SAR, max_possible_clicks)
-            middle_coords = all_coords[0] # If 1 fg slice, take it's center If 2 fg slices; take the center of the lower one
+            middle_coords = all_coords[0] # If 1 fg slice, take its center If 2 fg slices; take the center of the lower one
+
+        middle_coords = np.atleast_2d(middle_coords)
 
         middle_coords = middle_coords[:,::-1] # Dealign from image, ie zyx -> xyz
         prompt_RAS = PromptStep(point_prompts=(middle_coords, np.array([1])))
@@ -441,7 +443,7 @@ class threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint(
         num_corrective_prompts: int = 1,
         n_ccs_positive_interaction: int = 1
     ):
-        threeDCroppedFromCenterInteractivePrompterNoPrevPoint().__init__(inferer, seed, n_points, dof_bound, perf_bound, max_iter, isolate_around_initial_point_size)
+        super().__init__(inferer, seed, n_points, dof_bound, perf_bound, max_iter, isolate_around_initial_point_size)
         self.num_corrective_prompts = num_corrective_prompts
         self.n_ccs_positive_interaction = n_ccs_positive_interaction
 
@@ -490,6 +492,8 @@ class threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint(
         # ####
 
         prompt_step.set_masks(low_res_logits)
+
+        return prompt_step
 
 
 class twoD1PointUnrealisticInteractivePrompterNoPrevPoint(InteractivePrompter):
