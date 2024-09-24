@@ -1,23 +1,17 @@
 # Experiments content
-from datetime import datetime
 import os
 from pathlib import Path
-import pickle
 
 from loguru import logger
 from intrab.model.inferer import Inferer
-import numpy as np
-import json
 from intrab.model.model_utils import get_wanted_supported_prompters
 from intrab.prompts.prompt_hparams import PromptConfig
 from intrab.prompts.prompter import static_prompt_styles
 
 from intrab.prompts.prompter import Prompter
-import nibabel as nib
 
 
 from tqdm import tqdm
-import shutil
 
 from intrab.utils.io import (
     binarize_gt,
@@ -46,7 +40,7 @@ def run_experiments_organ(
     results_overwrite: bool = False,
     debug: bool = False,
 ):
-    targets: dict = {k.replace("/", "_"): v for k, v in label_dict.items()} 
+    targets: dict = {k.replace("/", "_"): v for k, v in label_dict.items()}
     prompters: list[Prompter] = get_wanted_supported_prompters(inferer, pro_conf, wanted_prompt_styles, seed)
     verify_results_dir_exist(targets=targets, results_dir=results_dir, prompters=prompters)
 
@@ -131,7 +125,6 @@ def run_experiments_organ(
                                 classes_of_interest=(1,),
                                 output_name=target_name,
                             )
-
 
 
 def run_experiments_instances(
