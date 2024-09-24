@@ -408,7 +408,7 @@ class threeDCroppedFromCenterInteractivePrompterNoPrevPoint(threeDCroppedInterac
         max_iter: int | None = None,
         isolate_around_initial_point_size: int = None,
     ):
-        super().__init__(inferer, seed, n_points, dof_bound, perf_bound, max_iter, isolate_around_initial_point_size)
+        super().__init__(inferer = inferer, seed = seed, n_points = n_points, dof_bound = dof_bound, perf_bound = perf_bound, max_iter = max_iter, isolate_around_initial_point_size=isolate_around_initial_point_size)
 
     def get_initial_prompt_step(self) -> PromptStep:
         max_possible_clicks = min(3, len(self.get_slices_to_infer()))
@@ -428,8 +428,7 @@ class threeDCroppedFromCenterInteractivePrompterNoPrevPoint(threeDCroppedInterac
 
 
 class threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint(
-    threeDCroppedFromCenterInteractivePrompterNoPrevPoint,
-    twoDInteractivePrompter
+    threeDCroppedFromCenterInteractivePrompterNoPrevPoint
     ):
     def __init__(
         self,
@@ -441,11 +440,120 @@ class threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint(
         max_iter: int | None = None,
         isolate_around_initial_point_size: int = None,
         num_corrective_prompts: int = 1,
-        n_ccs_positive_interaction: int = 1
+        n_ccs_positive_interaction: int = 1,
+        contour_distance = 2,
+        disk_size_range = (0, 0),
+        scribble_length = 0.6,
     ):
-        super().__init__(inferer, seed, n_points, dof_bound, perf_bound, max_iter, isolate_around_initial_point_size)
+        super().__init__(inferer, seed, n_points = n_points, dof_bound = dof_bound, perf_bound = perf_bound, max_iter = max_iter, isolate_around_initial_point_size=isolate_around_initial_point_size)
         self.num_corrective_prompts = num_corrective_prompts
         self.n_ccs_positive_interaction = n_ccs_positive_interaction
+
+        self.contour_distance = contour_distance
+        self.disk_size_range = disk_size_range
+        self.scribble_length = scribble_length
+
+    @staticmethod
+    def get_generate_negative_prompts_flag(fn_mask: np.ndarray, fp_mask: np.ndarray) -> bool:
+        # Find if there are more fn or fp
+        fn_count = np.sum(fn_mask)
+        fp_count = np.sum(fp_mask)
+
+        generate_negative_prompts_prob = fp_count / (fn_count + fp_count)
+        generate_negative_prompts_flag = np.random.binomial(1, generate_negative_prompts_prob)
+        return bool(generate_negative_prompts_flag)
+
+    def generate_positive_promptstep(
+        self,
+        fn_mask: np.ndarray,
+        n_ccs:int = 1
+    ) -> PromptStep:
+
+        largest_CCs = get_n_largest_CCs(fn_mask, n_ccs)
+
+        centroids = []
+        for cc in largest_CCs: # Loop through largest CCs, adding components as you go
+            slices_to_consider = np.where(np.any(cc, axis = (1,2)))[0]
+            
+            for z in slices_to_consider:
+                CC_slice = cc[z]
+                centroid = get_fg_point_from_cc_center(CC_slice)
+                centroid = [z, centroid[0], centroid[1]]
+                centroids.append(centroid)
+
+        centroids = np.array(centroids)
+
+        # No need to subset to voxels not yet segmented since these are drawn from false negatives
+
+        # Align back to RAS format and return
+        centroids = centroids[:, [2, 1, 0]]  # zyx -> xyz
+        new_positive_promptstep = PromptStep(point_prompts=(centroids, [1] * len(centroids)))
+        return new_positive_promptstep
+
+    def _get_max_fp_sagittal_slice_idx(self, fp_mask):
+        axis = 1  # Can extend to also check when fixing axis 2
+        fp_sums = np.sum(fp_mask, axis=tuple({0, 1, 2} - {axis}))
+        max_fp_idx = np.argmax(fp_sums)
+
+        return max_fp_idx
+
+    def _generate_scribble(
+        self, slice_gt, slice_seg
+    ):  # Mostly a wrapper for gen_countour_fp_scribble, but handles an edge case where it fails
+        if not np.any(
+            slice_gt
+        ):  # There is no gt in the slice, but lots of fps. For now just draw a vertical line down the column with the most fps
+            fp_per_column = np.sum(slice_seg, axis=0)
+            max_fp_column = np.argmax(fp_per_column)
+            scribble = np.zeros_like(slice_seg)
+            scribble[:, max_fp_column] = 1
+        else:
+            scribble = gen_contour_fp_scribble(
+                slice_gt,
+                slice_seg,
+                self.contour_distance,
+                self.disk_size_range,
+                self.scribble_length,
+                seed=self.seed,
+                verbose=False,
+            )
+
+        return scribble
+
+    def generate_negative_promptstep(self, groundtruth, pred, fp_mask):
+        # Obtain contour scribble on worst sagittal slice
+        max_fp_idx = self._get_max_fp_sagittal_slice_idx(fp_mask)
+
+        slice_gt = groundtruth[:, max_fp_idx]
+        slice_seg = pred[:, max_fp_idx]
+
+        # Try to generate a 'scribble' containing lots of false positives
+        scribble = self._generate_scribble(slice_gt, slice_seg)
+
+        if scribble is None:  # Scribble generation failed, get random negative click instead
+            logger.warning(
+                "Generating negative prompt failed - this should not happen. Will generate positive prompt instead."
+            )
+            return None
+
+        else:  # Otherwise subset scribble to false positives to generate new prompt
+            scribble_coords = np.where(scribble)
+            scribble_coords = np.array(scribble_coords).T
+
+            # Obtain false positive points and make new prompt
+            coords_transpose = scribble_coords.T
+            # fmt: off
+            is_fp_mask = slice_seg[*coords_transpose].astype(bool)
+            # fmt: on
+            fp_coords = scribble_coords[is_fp_mask]
+
+            ## Position fp_coords back into original 3d coordinate system
+            missing_axis = np.repeat(max_fp_idx, len(fp_coords))
+            fp_coords_3d = np.vstack([fp_coords[:, 0], missing_axis, fp_coords[:, 1]]).T
+            fp_coords_3d = fp_coords_3d[:, [2, 1, 0]]  # zyx -> xyz
+            new_negative_promptstep = PromptStep(point_prompts=(fp_coords_3d, [0] * len(fp_coords_3d)))
+
+            return new_negative_promptstep
 
     def get_next_prompt_step(
         self, pred_model: np.ndarray, low_res_logits: np.ndarray, all_prompts: list[PromptStep]
