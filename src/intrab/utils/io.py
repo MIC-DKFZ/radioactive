@@ -144,13 +144,6 @@ def verify_results_dir_exist(targets, results_dir, prompters: list[Prompter]) ->
         for target, target_label in targets.items()
     ]
 
-    [
-        Path(results_dir / "binarised_gts" / (f"{target_label:03d}" + "__" + target)).mkdir(
-            exist_ok=True, parents=True
-        )
-        for target, target_label in targets.items()
-    ]
-
 
 def get_labels_from_dataset_json(dataset_dir: Path, excluded_class_ids: list) -> dict[str:int]:
     """
@@ -169,6 +162,8 @@ def get_labels_from_dataset_json(dataset_dir: Path, excluded_class_ids: list) ->
 def create_instance_gt(gt_path: Path) -> tuple[nib.Nifti1Image, list[int]]:
     gt_nib: nib.Nifti1Image = load_any_to_nib(gt_path)
     gt = gt_nib.get_fdata().astype(np.int16)
+    if gt.shape == 4:
+        raise ValueError("Groundtruth should not be 4D!")
     instances = set(np.unique(gt))
     instances = list(instances - {0})
     instance_gt = gt_nib
