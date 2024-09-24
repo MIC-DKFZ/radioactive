@@ -9,6 +9,7 @@ from tqdm import tqdm
 from intrab.datasets_preprocessing.conversion_utils import (
     dicom_to_nrrd,
     get_dicoms_meta_info,
+    match_off_dicom_meta,
     nrrd_to_sitk,
     resample_to_match,
     sitk_to_nrrd,
@@ -31,13 +32,15 @@ def preprocess(raw_download_dir: Path):
     # Get Image Label Pairs
     all_dicoms = get_dicoms_meta_info(dicoms_ct + dicoms_seg)
     all_dicoms = {key: all_dicoms[key] for key in sorted(all_dicoms)}
+    dicom_pairs = match_off_dicom_meta(all_dicoms)
+
     cnt_dicom_map = {}
 
-    for cnt, (study_name, dicom_data) in tqdm(
-        enumerate(all_dicoms.items()), total=len(all_dicoms), desc="Converting RIDER DICOMs to NRRD"
+    for cnt, dicom_pair in tqdm(
+        enumerate(dicom_pairs), total=len(all_dicoms), desc="Converting RIDER DICOMs to NRRD"
     ):
-        ct_path = dicom_data["CT"][0]["filepath"]  # We only have one CT and one SEG in LNQ
-        seg_path = dicom_data["SEG"][0]["filepath"]
+        ct_path = dicom_pair["CT"]["filepath"]  # We only have one CT and one SEG in LNQ
+        seg_path = dicom_pair["SEG"]["filepath"]
         ct: tuple[np.ndarray, dict] = dicom_to_nrrd(ct_path)
         seg: tuple[np.ndarray, dict] = dicom_to_nrrd(seg_path)
 
@@ -72,7 +75,7 @@ def preprocess(raw_download_dir: Path):
         )
         innrrd.to_file(labels_dir / f"rider_lung_{cnt:04d}.nrrd")
         nrrd.write(str(images_dir / f"rider_lung_{cnt:04d}_0000.nrrd"), ct[0], ct[1])
-        cnt_dicom_map[cnt] = study_name
+        cnt_dicom_map[cnt] = dicom_pair["CT"]["StudyInstanceUID"] + "____" + dicom_pair["CT"]["SeriesInstanceUID"]
     # ------------------------------- Dataset Json ------------------------------- #
     with open(output_dir / "dataset.json", "w") as f:
         json.dump(

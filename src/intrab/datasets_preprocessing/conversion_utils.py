@@ -1,6 +1,7 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import tempfile
+from typing import Any
 import SimpleITK as sitk
 from loguru import logger
 import nrrd
@@ -133,7 +134,34 @@ def read_dicom_meta_data(dicom_folder: Path) -> dict:
     return dicom
 
 
-def get_dicoms_meta_info(dicoms: list[Path]) -> dict[str, dict[str, list[Path]]]:
+def match_off_dicom_meta(all_dicoms: dict[str, dict[str, Any]]) -> list[dict]:
+    """Find matches between CT and SEG dicoms."""
+    matches = []
+    for _, values in all_dicoms.items():
+        modalities = values.keys()
+        cts = []
+        segs = []
+        if "CT" in modalities:
+            cts = values["CT"]
+
+        if "SEG" in modalities:
+            segs = values["SEG"]
+
+        if len(cts) == 0 or len(segs) == 0:
+            continue
+        if len(cts) == 1 and len(segs) == 1:
+            matches.append({"CT": cts[0], "SEG": segs[0]})
+        else:
+            ct_series_uids = [ct["SeriesInstanceUID"] for ct in cts]
+            seg_reference_series_uids = [seg["reference_series"] for seg in segs]
+            for ct_id, ct_series_uids in enumerate(ct_series_uids):
+                if ct_series_uids in seg_reference_series_uids:
+                    seg_id = seg_reference_series_uids.index(ct_series_uids)
+                    matches.append({"CT": cts[ct_id], "SEG": segs[seg_id]})
+    return matches
+
+
+def get_dicoms_meta_info(dicoms: list[Path]) -> dict[str, dict[str, Any]]:
     # Looks through a list of dicom folders and returns a dictionary with the matching CT and SEG dicoms.
     all_dicoms = {}
     for d in tqdm(dicoms, desc="Reading DICOM meta data", leave=False):
@@ -141,7 +169,13 @@ def get_dicoms_meta_info(dicoms: list[Path]) -> dict[str, dict[str, list[Path]]]
         study_name: str = meta_data.StudyInstanceUID
         modality = meta_data.Modality
 
-        content = {"filepath": d, "PatientID": meta_data.PatientID, "StudyInstanceUID": study_name}
+        content = {
+            "filepath": d,
+            "PatientID": meta_data.PatientID,
+            "StudyInstanceUID": study_name,
+            "SeriesInstanceUID": meta_data.SeriesInstanceUID,
+            "Modality": modality,
+        }
 
         if study_name not in all_dicoms:
             all_dicoms[study_name] = {}
