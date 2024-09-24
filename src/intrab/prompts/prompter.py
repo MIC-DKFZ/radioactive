@@ -58,6 +58,10 @@ class Prompter:
         # like point/box propagation
         self.promptstep_in_model_coord_system = False
 
+        # Set seed
+        if self.seed is not None:
+            np.random.seed(seed)
+
     def get_performance(self, pred: np.ndarray | nib.Nifti1Image) -> float:
         """Get the DICE between prediciton and groundtruths."""
         if isinstance(pred, nib.Nifti1Image):
