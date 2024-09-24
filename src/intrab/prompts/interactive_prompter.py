@@ -151,6 +151,8 @@ class twoDInteractivePrompter(InteractivePrompter):
         self.disk_size_range = disk_size_range
         self.scribble_length = scribble_length
 
+        self.negative_failed_choose_n_points = 3 # Default
+
 
     @staticmethod
     def get_generate_negative_prompts_flag(fn_mask: np.ndarray, fp_mask: np.ndarray) -> bool:
@@ -254,11 +256,9 @@ class twoDInteractivePrompter(InteractivePrompter):
         # Try to generate a 'scribble' containing lots of false positives
         scribble = self._generate_scribble(slice_gt, slice_seg)
 
-        if scribble is None:  # Scribble generation failed, get random negative click instead
-            logger.warning(
-                "Generating negative prompt failed - this should not happen. Will generate positive prompt instead."
-            )
-            return None
+        if scribble is None:  # if this fails go to exception mode - just choose self.negative_failed_choose_n points instead
+
+            return get_pos_clicks3D(fp_mask, self.negative_failed_choose_n_points, self.seed)
 
         else:  # Otherwise subset scribble to false positives to generate new prompt
             scribble_coords = np.where(scribble)
@@ -270,6 +270,9 @@ class twoDInteractivePrompter(InteractivePrompter):
             is_fp_mask = slice_seg[*coords_transpose].astype(bool)
             # fmt: on
             fp_coords = scribble_coords[is_fp_mask]
+
+            if len(fp_coords) == 0: # if no fp_coords generated go to exception mode - just choose self.negative_failed_choose_n points instead
+                return get_pos_clicks3D(fp_mask, self.negative_failed_choose_n_points, self.seed)
 
             ## Position fp_coords back into original 3d coordinate system
             missing_axis = np.repeat(max_fp_idx, len(fp_coords))
@@ -452,6 +455,7 @@ class threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint(
         self.contour_distance = contour_distance
         self.disk_size_range = disk_size_range
         self.scribble_length = scribble_length
+        self.negative_failed_choose_n_points = 5
 
     @staticmethod
     def get_generate_negative_prompts_flag(fn_mask: np.ndarray, fp_mask: np.ndarray) -> bool:
@@ -531,21 +535,22 @@ class threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint(
         scribble = self._generate_scribble(slice_gt, slice_seg)
 
         if scribble is None:  # Scribble generation failed, get random negative click instead
-            logger.warning(
-                "Generating negative prompt failed - this should not happen. Will generate positive prompt instead."
-            )
-            return None
-
-        else:  # Otherwise subset scribble to false positives to generate new prompt
-            scribble_coords = np.where(scribble)
+            return get_pos_clicks3D(fp_mask, self.negative_failed_choose_n_points, self.seed)
+        
+        else:
+            scribble_coords = np.where(scribble) # Otherwise subset scribble to false positives to generate new prompt
             scribble_coords = np.array(scribble_coords).T
 
             # Obtain false positive points and make new prompt
             coords_transpose = scribble_coords.T
             # fmt: off
             is_fp_mask = slice_seg[*coords_transpose].astype(bool)
+
             # fmt: on
             fp_coords = scribble_coords[is_fp_mask]
+
+            if len(fp_coords) == 0: # if no fp_coords generated go to exception mode - just choose self.negative_failed_choose_n points instead
+                return get_pos_clicks3D(fp_mask, self.negative_failed_choose_n_points, self.seed)
 
             ## Position fp_coords back into original 3d coordinate system
             missing_axis = np.repeat(max_fp_idx, len(fp_coords))
