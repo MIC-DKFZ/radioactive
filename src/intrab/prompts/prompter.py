@@ -222,10 +222,8 @@ class CenterPointPrompter(Prompter):
         return prompt_orig
 
 
-class PointInterpolationPrompter(Prompter):
-    def __init__(self, inferer: Inferer, seed: int = 11111, n_slice_point_interpolation: int = 5):
-        super().__init__(inferer, seed)
-        self.n_slice_point_interpolation = n_slice_point_interpolation
+class PointInterpolationPrompter(Prompter, ABC):
+    n_slice_point_interpolation: int
 
     def get_prompt(self) -> PromptStep:
         """
@@ -239,6 +237,16 @@ class PointInterpolationPrompter(Prompter):
         prompt_RAS = point_interpolation(gt=self.groundtruth_SAR, n_slices=max_possible_clicks)
         prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
         return prompt_orig
+
+
+class ThreePointInterpolationPrompter(PointInterpolationPrompter):
+    n_slice_point_interpolation: int = 3
+
+class FivePointInterpolationPrompter(PointInterpolationPrompter):
+    n_slice_point_interpolation: int = 5
+
+class TenPointInterpolationPrompter(PointInterpolationPrompter):
+    n_slice_point_interpolation: int = 10
 
 
 class PointPropagationPrompter(Prompter):
@@ -298,16 +306,8 @@ class BoxPer2dSliceFrom3DBoxPrompter(Prompter):
         return prompt_orig
 
 
-class BoxInterpolationPrompter(Prompter):
-
-    def __init__(
-        self,
-        inferer: Inferer,
-        seed: int = 11111,
-        n_slice_box_interpolation: int = 5,
-    ):
-        super().__init__(inferer, seed)
-        self.n_slice_box_interpolation = n_slice_box_interpolation
+class BoxInterpolationPrompter(Prompter, ABC):
+    n_slice_box_interpolation: int
 
     def get_prompt(self) -> PromptStep:
         max_possible_clicks = min(self.n_slice_box_interpolation, len(self.get_slices_to_infer()))
@@ -315,6 +315,15 @@ class BoxInterpolationPrompter(Prompter):
         prompt_RAS = box_interpolation(seed_prompt_RAS)
         prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
         return prompt_orig
+
+class ThreeBoxInterpolationPrompter(BoxInterpolationPrompter):
+    n_slice_point_interpolation: int = 3
+
+class FiveBoxInterpolationPrompter(BoxInterpolationPrompter):
+    n_slice_point_interpolation: int = 5
+
+class TenBoxInterpolationPrompter(BoxInterpolationPrompter):
+    n_slice_point_interpolation: int = 10
 
 
 class BoxPropagationPrompter(Prompter):
@@ -429,13 +438,17 @@ static_prompt_styles = Literal[
     "Alternating5PointsPer2DSlicePrompter",
     "Alternating10PointsPer2DSlicePrompter",
     # -------------------- 2D Point Interpolation and propagation ------------------- #
-    "PointInterpolationPrompter",
+    "ThreePointInterpolationPrompter",
+    "FivePointInterpolationPrompter",
+    "TenPointInterpolationPrompter",
     "PointPropagationPrompter",
     # ------------------------------- 2D Box prompters ------------------------------ #
     "BoxPer2DSlicePrompter",
     "BoxPer2dSliceFrom3DBoxPrompter",
     # --------------------- 2D Box Interpolation and Propagation -------------------- #
-    "BoxInterpolationPrompter",
+    "ThreeBoxInterpolationPrompter",
+    "FiveBoxInterpolationPrompter",
+    "TenBoxInterpolationPrompter",
     "BoxPropagationPrompter",
     # ------------------------- 3D Volume Prompters ------------------------- #
     "OnePoints3DVolumePrompter",

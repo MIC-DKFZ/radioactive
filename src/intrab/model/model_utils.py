@@ -9,10 +9,13 @@ from intrab.prompts.prompter import (
     Alternating2PointsPer2DSlicePrompter,
     Alternating3PointsPer2DSlicePrompter,
     Alternating5PointsPer2DSlicePrompter,
+    FivePointInterpolationPrompter,
     FivePointsFromCenterCropped3DVolumePrompter,
     OneFGPointsPer2DSlicePrompter,
     OnePointsFromCenterCropped3DVolumePrompter,
+    TenPointInterpolationPrompter,
     TenPointsFromCenterCropped3DVolumePrompter,
+    ThreePointInterpolationPrompter,
     ThreePoints3DVolumePrompter,
     ThreePointsFromCenterCropped3DVolumePrompter,
     TwoFGPointsPer2DSlicePrompter,
@@ -132,9 +135,25 @@ def get_wanted_supported_prompters(
                 )
             if "CenterPointPrompter" in wanted_prompt_styles:
                 prompters.append(CenterPointPrompter(inferer, seed))
-            if "PointInterpolationPrompter" in wanted_prompt_styles:
+            if "ThreePointInterpolationPrompter" in wanted_prompt_styles:
                 prompters.append(
-                    PointInterpolationPrompter(
+                    ThreePointInterpolationPrompter(
+                        inferer,
+                        n_slice_point_interpolation=pro_conf.twoD_n_slice_point_interpolation,
+                        seed=seed,
+                    )
+                )
+            if "FivePointInterpolationPrompter" in wanted_prompt_styles:
+                prompters.append(
+                    FivePointInterpolationPrompter(
+                        inferer,
+                        n_slice_point_interpolation=pro_conf.twoD_n_slice_point_interpolation,
+                        seed=seed,
+                    )
+                )
+            if "TenPointInterpolationPrompter" in wanted_prompt_styles:
+                prompters.append(
+                    TenPointInterpolationPrompter(
                         inferer,
                         n_slice_point_interpolation=pro_conf.twoD_n_slice_point_interpolation,
                         seed=seed,
