@@ -42,7 +42,7 @@ def get_pos_clicks3D(gt, n_clicks, seed=None):
 
     point_indices = np.random.choice(n_fg_voxels, size=n_clicks, replace=False)
     pos_coords = volume_fg[point_indices]
-    pos_coords = pos_coords[:, ::-1].astype(int)  # Assume gt is in row major zyx, need to reverse order
+    #pos_coords = pos_coords[:, ::-1].astype(int)  # Assume gt is in row major zyx, need to reverse order # We don't do this in 3D since we don't inherit from 2d natural vision
     pos_coords = PromptStep(point_prompts=(pos_coords, [1] * len(pos_coords)))
     return pos_coords
 
@@ -98,22 +98,22 @@ def get_bbox3d(mask_volume: np.ndarray, delta=0):
 
 
 def isolate_patch_around_point(
-    img: np.ndarray, seed_point: PromptStep, patch_dim: tuple[int, int, int]
+    gt: np.ndarray, seed_point: PromptStep, patch_dim: tuple[int, int, int]
 ) -> np.ndarray:
     """
     Sets all values outside a patch_dim[0]xpatch_dim[1]xpatch_dim[2] patch around a seed point to 0. 
     Assumes that point coords are aligned with img coords - no transposition takes place
     """
     patch_dim = np.array(patch_dim)
-    img_or_gt_isolated = np.zeros(img.shape)
+    gt_isolated = np.zeros(gt.shape, dtype = np.uint8)
     seed_coords = seed_point.coords[0]
     low = np.maximum(seed_coords - patch_dim//2, 0).astype(int)
-    high = np.minimum(seed_coords + patch_dim//2, img.shape).astype(int)
-    img_or_gt_isolated[low[0] : high[0], low[1] : high[1], low[2] : high[2]] = img[
+    high = np.minimum(seed_coords + patch_dim//2, gt.shape).astype(int)
+    gt_isolated[low[0] : high[0], low[1] : high[1], low[2] : high[2]] = gt[
         low[0] : high[0], low[1] : high[1], low[2] : high[2]
     ]
 
-    return img_or_gt_isolated
+    return gt_isolated
 
 
 def obtain_misclassified_point_prompt_3d(pred: np.ndarray, gt: np.ndarray, seed: int = None):

@@ -423,7 +423,7 @@ class threeDCroppedFromCenterInteractivePrompterNoPrevPoint(threeDCroppedInterac
 
         middle_coords = np.atleast_2d(middle_coords)
 
-        middle_coords = middle_coords[:,::-1] # Dealign from image, ie zyx -> xyz
+        middle_coords = middle_coords[:,::-1] # Dealign from image, ie zyx -> xyz # don't do this in 3D, we don't inherit from 2d natural vision
         prompt_RAS = PromptStep(point_prompts=(middle_coords, np.array([1])))
         prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
         prompt_model = self.inferer.transform_promptstep_to_model_coords(prompt_orig)
@@ -490,7 +490,7 @@ class threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint(
         # No need to subset to voxels not yet segmented since these are drawn from false negatives
 
         # Align back to RAS format and return
-        centroids = centroids[:, [2, 1, 0]]  # zyx -> xyz
+        # centroids = centroids[:, [2, 1, 0]]  # zyx -> xyz # Don't do this in 3d- we don't inherit from 2d natural vision.
         new_positive_promptstep = PromptStep(point_prompts=(centroids, [1] * len(centroids)))
         return new_positive_promptstep
 
@@ -555,7 +555,7 @@ class threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint(
             ## Position fp_coords back into original 3d coordinate system
             missing_axis = np.repeat(max_fp_idx, len(fp_coords))
             fp_coords_3d = np.vstack([fp_coords[:, 0], missing_axis, fp_coords[:, 1]]).T
-            fp_coords_3d = fp_coords_3d[:, [2, 1, 0]]  # zyx -> xyz
+            # fp_coords_3d = fp_coords_3d[:, [2, 1, 0]]  # zyx -> xyz # Don't do this in 3D - we don't inherit fron 2d natural vision
             new_negative_promptstep = PromptStep(point_prompts=(fp_coords_3d, [0] * len(fp_coords_3d)))
 
             return new_negative_promptstep
@@ -571,6 +571,12 @@ class threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint(
         )
 
         pred_to_compare = self.process_seg_to_compare(pred_model, all_prompts[0], self.isolate_around_initial_point_size)
+
+        from intrab.utils.testing import check_patch
+
+        check_patch(gt_to_compare, all_prompts[0])
+        check_patch(pred_to_compare, all_prompts[0])
+        
 
         ## Now use 2d algorithm logic to generate the negative/positive prompts
         fn_mask = (pred_to_compare == 0) & (gt_to_compare == 1)
