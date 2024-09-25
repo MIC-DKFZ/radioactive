@@ -85,7 +85,7 @@ def run_experiments_organ(
                 ):
                     filepath = results_dir / prompter.name / target_name / base_name
                     if filepath.exists() and not results_overwrite:
-                        logger.debug(f"Skipping {gt_path} as it has already been processed.")
+                        # logger.debug(f"Skipping {gt_path} as it has already been processed.")
                         continue
                     prompter.set_groundtruth(binary_gt_orig_coords)
 
@@ -195,14 +195,14 @@ def run_experiments_instances(
                     instance_pd_path = prompt_pred_path / instance_filename
 
                     if instance_pd_path.exists() and not results_overwrite:
-                        logger.debug(f"Skipping {gt_path} as it has already been processed.")
+                        # logger.debug(f"Skipping {gt_path} as it has already been processed.")
                         continue
                 else:
                     expected_ins_paths = [
                         prompt_pred_path / f"iter_{i}" / instance_filename for i in range(prompter.num_iterations)
                     ]
                     if all([path.exists() for path in expected_ins_paths]) and not results_overwrite:
-                        logger.debug(f"Skipping {gt_path} as it has already been processed.")
+                        # logger.debug(f"Skipping {gt_path} as it has already been processed.")
                         continue
 
                 all_prompt_result: list[PromptResult] | list[list[PromptResult]] = []
