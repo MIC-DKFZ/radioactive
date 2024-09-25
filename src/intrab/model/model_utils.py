@@ -9,12 +9,15 @@ from intrab.prompts.prompter import (
     Alternating2PointsPer2DSlicePrompter,
     Alternating3PointsPer2DSlicePrompter,
     Alternating5PointsPer2DSlicePrompter,
+    FiveBoxInterpolationPrompter,
     FivePointInterpolationPrompter,
     FivePointsFromCenterCropped3DVolumePrompter,
     OneFGPointsPer2DSlicePrompter,
     OnePointsFromCenterCropped3DVolumePrompter,
+    TenBoxInterpolationPrompter,
     TenPointInterpolationPrompter,
     TenPointsFromCenterCropped3DVolumePrompter,
+    ThreeBoxInterpolationPrompter,
     ThreePointInterpolationPrompter,
     ThreePoints3DVolumePrompter,
     ThreePointsFromCenterCropped3DVolumePrompter,
@@ -139,7 +142,6 @@ def get_wanted_supported_prompters(
                 prompters.append(
                     ThreePointInterpolationPrompter(
                         inferer,
-                        n_slice_point_interpolation=pro_conf.twoD_n_slice_point_interpolation,
                         seed=seed,
                     )
                 )
@@ -147,7 +149,6 @@ def get_wanted_supported_prompters(
                 prompters.append(
                     FivePointInterpolationPrompter(
                         inferer,
-                        n_slice_point_interpolation=pro_conf.twoD_n_slice_point_interpolation,
                         seed=seed,
                     )
                 )
@@ -155,7 +156,6 @@ def get_wanted_supported_prompters(
                 prompters.append(
                     TenPointInterpolationPrompter(
                         inferer,
-                        n_slice_point_interpolation=pro_conf.twoD_n_slice_point_interpolation,
                         seed=seed,
                     )
                 )
@@ -211,12 +211,25 @@ def get_wanted_supported_prompters(
                         seed
                     )
                 )
-            if "BoxInterpolationPrompter" in wanted_prompt_styles:
+            if "ThreeBoxInterpolationPrompter" in wanted_prompt_styles:
                 prompters.append(
-                    BoxInterpolationPrompter(
+                    ThreeBoxInterpolationPrompter(
                         inferer,
-                        seed,
-                        n_slice_box_interpolation=pro_conf.twoD_n_slice_box_interpolation,
+                        seed=seed,
+                    )
+                )
+            if "FivePointInterpolationPrompter" in wanted_prompt_styles:
+                prompters.append(
+                    FiveBoxInterpolationPrompter(
+                        inferer,
+                        seed=seed,
+                    )
+                )
+            if "TenBoxInterpolationPrompter" in wanted_prompt_styles:
+                prompters.append(
+                    TenBoxInterpolationPrompter(
+                        inferer,
+                        seed=seed,
                     )
                 )
             if "BoxPropagationPrompter" in wanted_prompt_styles:
