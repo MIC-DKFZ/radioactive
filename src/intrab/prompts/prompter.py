@@ -8,7 +8,7 @@ import torch
 
 from intrab.model.inferer import Inferer
 from intrab.prompts.prompt import PromptStep, merge_sparse_prompt_steps
-from intrab.prompts.prompt_3d import get_pos_clicks3D, get_bbox3d
+from intrab.prompts.prompt_3d import get_linearly_spaced_coords, get_pos_clicks3D, get_bbox3d, subset_points_to_box
 from intrab.prompts.prompt_utils import (
     box_interpolation,
     box_propagation,
@@ -338,7 +338,7 @@ class NPoints3DVolumePrompter(Prompter, ABC):
         super().__init__(inferer, seed)
         self.n_points = self.n_points
 
-    def get_prompt(self) -> tuple[nib.Nifti1Image, dict[int, np.ndarray]]:
+    def get_prompt(self) -> PromptStep:
         prompt_RAS = get_pos_clicks3D(self.groundtruth_SAR, n_clicks=self.n_points, seed=self.seed)
         prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
         return prompt_orig
@@ -364,6 +364,49 @@ class TenPoints3DVolumePrompter(NPoints3DVolumePrompter):
     n_points: int = 10
 
 
+class NPointsFromCenterCropped3DVolumePrompter(Prompter, ABC):
+    n_points: int
+
+    def __init__(self, inferer: Inferer, seed: int = 11111, n_slice_point_interpolation: int = 5, isolate_around_initial_point_size: tuple[int,int,int] = None,):
+        super().__init__(inferer, seed)
+        self.n_slice_point_interpolation = n_slice_point_interpolation
+        self.isolate_around_initial_point_size = np.array(isolate_around_initial_point_size)
+        self.promptstep_in_model_coord_system = True
+
+    def get_prompt(self) -> PromptStep:
+        
+        max_possible_clicks = min(self.n_slice_point_interpolation, len(self.get_slices_to_infer()))
+        prompt_RAS = point_interpolation(gt=self.groundtruth_SAR, n_slices=max_possible_clicks)
+        prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
+        prompt_model = self.inferer.transform_promptstep_to_model_coords(prompt_orig)
+
+        # Must subset so that everything lies in a patch. Take a crop around the centroid of the prompts
+        if self.isolate_around_initial_point_size is not None:
+            prompt_model = subset_points_to_box(prompt_model, self.isolate_around_initial_point_size)
+
+        # Now sample regularly
+        prompt_sub = get_linearly_spaced_coords(prompt_model, self.n_points)
+
+        return prompt_sub
+
+class OnePointsFromCenterCropped3DVolumePrompter(NPointsFromCenterCropped3DVolumePrompter):
+    n_points = 1
+
+
+class TwoPointsFromCenterCropped3DVolumePrompter(NPointsFromCenterCropped3DVolumePrompter):
+    n_points = 2
+
+
+class ThreePointsFromCenterCropped3DVolumePrompter(NPointsFromCenterCropped3DVolumePrompter):
+    n_points = 3
+
+
+class FivePointsFromCenterCropped3DVolumePrompter(NPointsFromCenterCropped3DVolumePrompter):
+    n_points = 5
+
+
+class TenPointsFromCenterCropped3DVolumePrompter(NPointsFromCenterCropped3DVolumePrompter):
+    n_points = 10
 class Box3DVolumePrompter(Prompter):
 
     def get_prompt(self) -> tuple[nib.Nifti1Image, dict[int, np.ndarray]]:
@@ -399,5 +442,10 @@ static_prompt_styles = Literal[
     "ThreePoints3DVolumePrompter",
     "FivePoints3DVolumePrompter",
     "TenPoints3DVolumePrompter",
+    "OnePointsFromCenterCropped3DVolumePrompter",
+    "TwoPointsFromCenterCropped3DVolumePrompter",
+    "ThreePointsFromCenterCropped3DVolumePrompter",
+    "FivePointsFromCenterCropped3DVolumePrompter",
+    "TenPointsFromCenterCropped3DVolumePrompter",
     "Box3DVolumePrompter",
 ]

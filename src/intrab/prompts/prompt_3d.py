@@ -139,7 +139,7 @@ def obtain_misclassified_point_prompt_3d(pred: np.ndarray, gt: np.ndarray, seed:
     return prompt_step
 
 
-def obtain_misclassified_point_prompt_2d(slice_pred: np.ndarray, slice_gt: np.ndarray, slice_idx, seed: int = None):
+def obtain_misclassified_point_prompt_2d(slice_pred: np.ndarray, slice_gt: np.ndarray, slice_idx, seed: int = None) -> PromptStep:
     """
     Obtain a point prompt from the misclassified entries in pred, as compared to gt, and return a promptstep including slice index.
     Much like _3d version, just needs to be explicitly informed of which slice.
@@ -163,3 +163,35 @@ def obtain_misclassified_point_prompt_2d(slice_pred: np.ndarray, slice_gt: np.nd
     prompt_step = PromptStep(point_prompts=(sampled_coords, sampled_labels))
 
     return prompt_step
+
+def subset_points_to_box(promptstep: PromptStep, patch_size: tuple[int, int, int]) -> PromptStep:
+    """
+    given a promptstep of points, subsets to those points within a patch_size crop around the centroid of the points
+    """
+    coords, labels = promptstep.coords, promptstep.labels
+    centroid = np.mean(coords, axis = 0)
+    patch_size = np.array(patch_size) # permit the //2 action
+    bbox_min = centroid-patch_size//2
+    bbox_max = centroid+patch_size//2
+    is_in_box_mask = np.logical_and(np.all(coords>=bbox_min, axis = 1), np.all(coords<bbox_max, axis = 1))
+    coords_sub, labels_sub = coords[is_in_box_mask], labels[is_in_box_mask]
+    prompt_sub = PromptStep(point_prompts = (coords_sub, labels_sub))
+
+    return prompt_sub
+
+def get_linearly_spaced_coords(promptstep: PromptStep, n_points: int) -> PromptStep:
+    """
+    Given a set of points (intended: a vertical scribble), extract `n_points` regularly spaced points from the scribble
+    """
+    coords, labels = promptstep.coords, promptstep.labels
+    # Ensure coords are sorted by z
+    z_coords = coords[:,2] 
+    coords, labels = coords[np.argsort(z_coords)], labels[np.argsort(z_coords)]
+
+    # Obtain indices to sample
+    inds_to_sample = np.linspace(0, len(coords)-1, num = n_points+2, dtype = int)[1:-1] 
+    # take len(...)-1 since we're sampling indices. take num = ... + 2 so we can take omit the beginning and end
+    inds_to_sample = np.unique(inds_to_sample) # omit any repeats if num>len(coords)
+    coords_sub, labels_sub = coords[inds_to_sample], labels[inds_to_sample]
+
+    return PromptStep(point_prompts=(coords_sub, labels_sub))
