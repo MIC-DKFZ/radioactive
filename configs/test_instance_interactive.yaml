@@ -20,7 +20,14 @@ prompting:
     - PointInterpolationInteractivePrompterWithPrevPoint
     - PointPropagationInteractivePrompterNoPrevPoint
     - PointPropagationInteractivePrompterWithPrevPoint
-    - threeDInteractivePrompterSAMMed3D
+    - OnePointsFromCenterCropped3DVolumePrompter
+    - TenPointsFromCenterCropped3DVolumePrompter
+    - threeDCroppedInteractivePrompterNoPrevPoint
+    - threeDCroppedInteractivePrompterWithPrevPoint
+    - threeDCroppedFromCenterInteractivePrompterNoPrevPoint
+    - threeDCroppedFromCenterInteractivePrompterWithPrevPoint
+    - threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint
+    - threeDCroppedFromCenterAnd2dAlgoInteractivePrompterWithPrevPoint
     - twoD1PointUnrealisticInteractivePrompterNoPrevPoint
     - twoD1PointUnrealisticInteractivePrompterWithPrevPoint
 
