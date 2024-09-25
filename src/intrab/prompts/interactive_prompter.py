@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Literal
 import numpy as np
 from click import prompt
+from intrab.datasets_preprocessing.conversion_utils import load_any_to_nib
 from intrab.model.SAMMed3D import SAMMed3DInferer
 from intrab.model.inferer import Inferer
 from intrab.prompts.prompt import PromptStep, merge_sparse_prompt_steps
@@ -94,7 +95,14 @@ class InteractivePrompter(Prompter):
 
     def predict_image(self, image_path: Path) -> list[PromptResult]:
         """Predicts the image for multiple steps until the stopping criteria is met."""
+        # If the groundtruth is all zeros, return an empty mask
+        if np.all(self.groundtruth_model == 0):
+            img: nib.Nifti1Image = load_any_to_nib(image_path)
+            binary_gt = np.zeros_like(img.get_fdata())
+            empty_gt = nib.Nifti1Image(binary_gt.astype(np.uint8), img.affine)
+            return [PromptResult(predicted_image=empty_gt, logits=None, prompt_step=None, perf=0, n_step=0, dof=0)]*(self.max_iter + 1) # return list of expected length
 
+        # Else predict the image
         self.inferer.set_image(image_path)
         dof: int = 0
         num_iter: int = 0
@@ -362,7 +370,14 @@ class threeDCroppedInteractivePrompterNoPrevPoint(InteractivePrompter):
         self, image_path: Path
     ) -> list[PromptResult]:  # Same as in InteractivePrompter, except need to keep track of crop_pad_params.
         """Predicts the image for multiple steps until the stopping criteria is met."""
+        # If the groundtruth is all zeros, return an empty mask
+        if np.all(self.groundtruth_model == 0):
+            img: nib.Nifti1Image = load_any_to_nib(image_path)
+            binary_gt = np.zeros_like(img.get_fdata())
+            empty_gt = nib.Nifti1Image(binary_gt.astype(np.uint8), img.affine)
+            return [PromptResult(predicted_image=empty_gt, logits=None, prompt_step=None, perf=0, n_step=0, dof=0)]*(self.max_iter+1) # return list of expected length
 
+        # Else predict the image
         self.inferer.set_image(image_path)
         dof: int = 0
         num_iter: int = 0
@@ -576,11 +591,6 @@ class threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint(
         )
 
         pred_to_compare = self.process_seg_to_compare(pred_model, all_prompts[0], self.isolate_around_initial_point_size)
-
-        from intrab.utils.testing import check_patch
-
-        check_patch(gt_to_compare, all_prompts[0])
-        check_patch(pred_to_compare, all_prompts[0])
         
 
         ## Now use 2d algorithm logic to generate the negative/positive prompts

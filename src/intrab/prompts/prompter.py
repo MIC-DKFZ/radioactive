@@ -317,13 +317,13 @@ class BoxInterpolationPrompter(Prompter, ABC):
         return prompt_orig
 
 class ThreeBoxInterpolationPrompter(BoxInterpolationPrompter):
-    n_slice_point_interpolation: int = 3
+    n_slice_box_interpolation: int = 3
 
 class FiveBoxInterpolationPrompter(BoxInterpolationPrompter):
-    n_slice_point_interpolation: int = 5
+    n_slice_box_interpolation: int = 5
 
 class TenBoxInterpolationPrompter(BoxInterpolationPrompter):
-    n_slice_point_interpolation: int = 10
+    n_slice_box_interpolation: int = 10
 
 
 class BoxPropagationPrompter(Prompter):
