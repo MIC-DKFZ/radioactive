@@ -7,10 +7,12 @@ from intrab.model.SAMMed3D import SAMMed3DInferer
 from intrab.model.inferer import Inferer
 from intrab.prompts.prompt import PromptStep, merge_sparse_prompt_steps
 from intrab.prompts.prompt_3d import (
+    get_linearly_spaced_coords,
     get_pos_clicks3D,
     isolate_patch_around_point,
     obtain_misclassified_point_prompt_2d,
     obtain_misclassified_point_prompt_3d,
+    subset_points_to_box,
 )
 from intrab.prompts.prompt_utils import (
     get_fg_point_from_cc_center,
@@ -334,6 +336,7 @@ class threeDCroppedInteractivePrompterNoPrevPoint(InteractivePrompter):
 
     def get_initial_prompt_step(self) -> PromptStep:
         prompt_RAS = get_pos_clicks3D(self.groundtruth_SAR, n_clicks=self.n_points, seed=self.seed)
+        prompt_RAS.coords = prompt_RAS.coords[:,::-1] # This isn't done in the function since it's generally to be avoided for 3d models
         prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
         prompt_model = self.inferer.transform_promptstep_to_model_coords(prompt_orig)
         return prompt_model
@@ -410,24 +413,24 @@ class threeDCroppedFromCenterInteractivePrompterNoPrevPoint(threeDCroppedInterac
         perf_bound: float | None = None,
         max_iter: int | None = None,
         isolate_around_initial_point_size: int = None,
-    ):
+        n_slice_point_interpolation:int = None
+        ):
         super().__init__(inferer = inferer, seed = seed, n_points = n_points, dof_bound = dof_bound, perf_bound = perf_bound, max_iter = max_iter, isolate_around_initial_point_size=isolate_around_initial_point_size)
+        self.n_slice_point_interpolation = n_slice_point_interpolation
 
     def get_initial_prompt_step(self) -> PromptStep:
-        max_possible_clicks = min(3, len(self.get_slices_to_infer()))
-        if max_possible_clicks >=3: # Intended case. Edge cases are when there are at most 2 fg clicks.
-            _, middle_coords, _ = get_fg_points_from_cc_centers(self.groundtruth_SAR, max_possible_clicks)
-        else:
-            all_coords = get_fg_points_from_cc_centers(self.groundtruth_SAR, max_possible_clicks)
-            middle_coords = all_coords[0] # If 1 fg slice, take its center If 2 fg slices; take the center of the lower one
-
-        middle_coords = np.atleast_2d(middle_coords)
-
-        middle_coords = middle_coords[:,::-1] # Dealign from image, ie zyx -> xyz # don't do this in 3D, we don't inherit from 2d natural vision
-        prompt_RAS = PromptStep(point_prompts=(middle_coords, np.array([1])))
+        max_possible_clicks = min(self.n_slice_point_interpolation, len(self.get_slices_to_infer()))
+        prompt_RAS = point_interpolation(gt=self.groundtruth_SAR, n_slices=max_possible_clicks)
         prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
         prompt_model = self.inferer.transform_promptstep_to_model_coords(prompt_orig)
-        return prompt_model
+
+        # Must subset so that everything lies in a patch. Take a crop around the centroid of the prompts
+        prompt_cropped = subset_points_to_box(prompt_model, self.isolate_around_initial_point_size)
+
+        # Now sample regularly
+        prompt_sub = get_linearly_spaced_coords(prompt_cropped, self.n_points)
+
+        return prompt_sub
 
 
 class threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint(
@@ -442,13 +445,15 @@ class threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint(
         perf_bound: float | None = None,
         max_iter: int | None = None,
         isolate_around_initial_point_size: int = None,
+        n_slice_point_interpolation: int = 5,
         num_corrective_prompts: int = 1,
         n_ccs_positive_interaction: int = 1,
         contour_distance = 2,
         disk_size_range = (0, 0),
         scribble_length = 0.6,
     ):
-        super().__init__(inferer, seed, n_points = n_points, dof_bound = dof_bound, perf_bound = perf_bound, max_iter = max_iter, isolate_around_initial_point_size=isolate_around_initial_point_size)
+        super().__init__(inferer, seed, n_points = n_points, dof_bound = dof_bound, perf_bound = perf_bound, max_iter = max_iter, isolate_around_initial_point_size=isolate_around_initial_point_size,
+                        n_slice_point_interpolation=n_slice_point_interpolation)
         self.num_corrective_prompts = num_corrective_prompts
         self.n_ccs_positive_interaction = n_ccs_positive_interaction
 
@@ -780,8 +785,10 @@ class threeDCroppedFromCenterInteractivePrompterWithPrevPoint(threeDCroppedFromC
         perf_bound: float | None = None,
         max_iter: int | None = None,
         isolate_around_initial_point_size: int = None,
+        n_slice_point_interpolation: int = 5
     ):
-        super().__init__(inferer, seed, n_points, dof_bound, perf_bound, max_iter, isolate_around_initial_point_size)
+        super().__init__(inferer = inferer, seed = seed, n_points = n_points, dof_bound=dof_bound, perf_bound=perf_bound, max_iter = max_iter, isolate_around_initial_point_size=isolate_around_initial_point_size,
+                        n_slice_point_interpolation=n_slice_point_interpolation)
         self.always_pass_prev_prompts = True
 
 
@@ -797,6 +804,7 @@ class threeDCroppedFromCenterAnd2dAlgoInteractivePrompterWithPrevPoint(
         perf_bound: float | None = None,
         max_iter: int | None = None,
         isolate_around_initial_point_size: int = None,
+        n_slice_point_interpolation: int = 5,
         num_corrective_prompts: int = 1,
         n_ccs_positive_interaction: int = 1
     ):
@@ -807,6 +815,7 @@ class threeDCroppedFromCenterAnd2dAlgoInteractivePrompterWithPrevPoint(
                         perf_bound, 
                         max_iter, 
                         isolate_around_initial_point_size,
+                        n_slice_point_interpolation,
                         num_corrective_prompts,
                         n_ccs_positive_interaction)
         
