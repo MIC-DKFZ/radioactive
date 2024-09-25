@@ -42,6 +42,11 @@ prompting:
     - "ThreePoints3DVolumePrompter"
     - "FivePoints3DVolumePrompter"
     - "TenPoints3DVolumePrompter"
+    - "OnePointsFromCenterCropped3DVolumePrompter"
+    - "TwoPointsFromCenterCropped3DVolumePrompter"
+    - "ThreePointsFromCenterCropped3DVolumePrompter"
+    - "FivePointsFromCenterCropped3DVolumePrompter"
+    - "TenPointsFromCenterCropped3DVolumePrompter"
     # ------------------------------------ 3D Box ----------------------------------- #
     - "Box3DVolumePrompter"
 

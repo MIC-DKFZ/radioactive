@@ -3,9 +3,9 @@ seeds:
   - 11121
 models:
   # - "sam"
-  - "sammed2d"
+  # - "sammed2d"
   # - "medsam"
-  # - "sammed3d"
+  - "sammed3d"
   # - "sammed3d_turbo"
   # - "segvol"
 
@@ -42,6 +42,11 @@ prompting:
     - "ThreePoints3DVolumePrompter"
     - "FivePoints3DVolumePrompter"
     - "TenPoints3DVolumePrompter"
+    - "OnePointsFromCenterCropped3DVolumePrompter"
+    - "TwoPointsFromCenterCropped3DVolumePrompter"
+    - "ThreePointsFromCenterCropped3DVolumePrompter"
+    - "FivePointsFromCenterCropped3DVolumePrompter"
+    - "TenPointsFromCenterCropped3DVolumePrompter"
     # ------------------------------------ 3D Box ----------------------------------- #
     - "Box3DVolumePrompter"
 
