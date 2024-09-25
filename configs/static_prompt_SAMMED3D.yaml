@@ -4,11 +4,14 @@ seeds:
 models:
   # - "sam"
   # - "sammed2d"
-  # - "medsam"
-  - "sammed3d"
+  - "medsam"
+  # - "sammed3d"
   # - "sammed3d_turbo"
   # - "segvol"
 
+
+only_calc: true
+only_eval: false
 
 prompting:
   type: "static"
@@ -42,20 +45,18 @@ prompting:
 
 # List of dataset that will be compared in the next run of the benchmark.
 datasets:
+
   - identifier: 201  # FLAIR MS instances
     type: "instance"
     excluded_classes: [0]
   - identifier: 209  # HanSeg MR Organs
     type: "organ"
     excluded_classes: [0]
-  # - identifier: 501  # HNTS-MRG MR Primary Tumors
-  #   type: "instance"
-  #   excluded_classes: [0]
-  - identifier: 600  # Pengwin CT Bones
-    type: "organ"
+  - identifier: 501  # HNTS-MRG MR Primary Tumors
+    type: "instance"
     excluded_classes: [0]
-  # - identifier: 651  # SegRap CT Organs at Risk
-  #   type: "organ"
+  # - identifier: 600  # Pengwin CT Bones
+  #   type: "instance"
   #   excluded_classes: [0]
   - identifier: 911  # LNQ Metastatic Lymph Nodes
     type: "instance"
@@ -74,4 +75,7 @@ datasets:
     excluded_classes: [0]
   - identifier: 930  # RIDER Lung CT
     type: "instance"
+    excluded_classes: [0]
+  - identifier: 651  # SegRap CT Organs at Risk
+    type: "organ"
     excluded_classes: [0]

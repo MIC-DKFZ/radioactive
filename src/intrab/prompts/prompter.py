@@ -58,7 +58,8 @@ class Prompter:
         # like point/box propagation
         self.promptstep_in_model_coord_system = False
 
-        if seed is not None:
+        # Set seed
+        if self.seed is not None:
             np.random.seed(seed)
 
     def get_performance(self, pred: np.ndarray | nib.Nifti1Image) -> float:
