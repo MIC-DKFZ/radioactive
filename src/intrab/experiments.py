@@ -55,12 +55,16 @@ def run_experiments_organ(
         + "Right now this is assumed to be correct"
     )
 
+    is_on_cluster = "LSF_JOBID" in os.environ
+
     if not only_eval:
         # Loop through all image and label pairs
         target_names: set[str] = set()
-        for img_path, gt_path in tqdm(imgs_gts, desc="looping through files\n", leave=False):
+        for img_path, gt_path in tqdm(imgs_gts, desc="looping through files\n", leave=False, disable=is_on_cluster):
             # Loop through each organ label except the background
-            for target, target_label in tqdm(targets.items(), desc="Predicting targets...\n", leave=False):
+            for target, target_label in tqdm(
+                targets.items(), desc="Predicting targets...\n", leave=False, disable=is_on_cluster
+            ):
                 target_name: str = f"{target_label:03d}" + "__" + target
                 target_names.add(target_name)
 
@@ -77,7 +81,7 @@ def run_experiments_organ(
                     prompters,
                     desc="Prompting with various prompters ...",
                     leave=False,
-                    # disable=True,
+                    disable=is_on_cluster,
                 ):
                     filepath = results_dir / prompter.name / target_name / base_name
                     if filepath.exists() and not results_overwrite:
@@ -160,10 +164,11 @@ def run_experiments_instances(
     pred_output_path = results_dir
     results_dir.mkdir(exist_ok=True, parents=True)
     gt_output_path.mkdir(exist_ok=True)
+    is_on_cluster = "LSF_JOBID" in os.environ
 
     if only_eval:
         # Loop through all image and label pairs
-        for img_path, gt_path in tqdm(imgs_gts, desc="looping through files\n", leave=True):
+        for img_path, gt_path in tqdm(imgs_gts, desc="looping through files\n", leave=True, disable=is_on_cluster):
             # Loop through each organ label except the background
             filename = os.path.basename(gt_path)
             filename_wo_ext = filename.split(".")[0]  # Remove the extension
@@ -180,7 +185,7 @@ def run_experiments_instances(
                 prompters,
                 desc="Prompting with various prompters ...",
                 leave=False,
-                # disable=True,
+                disable=is_on_cluster,
             ):
                 prompt_pred_path = pred_output_path / prompter.name
                 prompt_pred_path.mkdir(exist_ok=True)
