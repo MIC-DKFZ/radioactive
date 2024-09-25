@@ -448,6 +448,17 @@ def get_fg_points_from_slice(slice: np.ndarray, n_clicks: int, slice_index: int,
 
     return pos_coords
 
+def get_center_point_from_slice(slice: np.ndarray, slice_index: int):
+    largest_cc = get_n_largest_CCs(slice)[0]
+    bbox_min, bbox_max = get_2d_bbox_of_gt_slice(largest_cc)
+    slice_fg_center = np.vstack([bbox_min, bbox_max]).mean(axis=0).round()
+
+    nearest_fg_point = get_nearest_fg_point(slice_fg_center, largest_cc)
+    coords_3d = np.array([slice_index, nearest_fg_point[0], nearest_fg_point[1]])
+
+    coords_3d = coords_3d[::-1][None]# zyx-> xyz and format
+
+    return coords_3d
 
 def get_seed_boxes(gt, n) -> PromptStep:
     z_indices = np.where(np.any(gt, axis=(1, 2)))[0]
@@ -522,9 +533,11 @@ def propagate_point(
     for slice_id in slices_todo:
         current_seg_nib, _, _ = inferer.predict(current_prompt, promptstep_in_model_coord_system=True)
         current_seg = inferer.transform_to_model_coords_dense(current_seg_nib, is_seg=True)[0]
-        coords_xyz = get_fg_points_from_slice(
-            current_seg[slice_id], n_clicks=n_clicks, slice_index=slice_id, seed=seed
-        )
+        # coords_xyz = get_fg_points_from_slice(
+        #     current_seg[slice_id], n_clicks=n_clicks, slice_index=slice_id, seed=seed
+        # )
+        # Don't sample randomly. Instead get from center
+        coords_xyz = get_center_point_from_slice(current_seg[slice_id], slice_index = slice_id)
         coords_xyz[:, -1] = increment(coords_xyz[:, -1], upwards)  # Increment the z-coordinate
         labels = np.ones_like(coords_xyz[:, 0])
         all_coords.append(coords_xyz)
