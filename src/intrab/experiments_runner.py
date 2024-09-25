@@ -92,4 +92,6 @@ if __name__ == "__main__":
                     seed=1,
                     experiment_overwrite=None,
                     debug=config.get("debug", False),
+                    only_calc=config.get("only_calc", False),
+                    only_eval=config.get("only_eval", False),
                 )
