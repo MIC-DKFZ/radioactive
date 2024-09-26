@@ -1,6 +1,8 @@
 from argparse import Namespace
+from pathlib import Path
+from intrab.datasets_preprocessing.conversion_utils import load_any_to_nib
 from intrab.model.inferer import Inferer
-from intrab.prompts.prompt import Boxes3D, Points
+from intrab.prompts.prompt import Boxes3D, Points, PromptStep
 from intrab.utils.SegVol_segment_anything.network.model import SegVol
 import torch
 import os
@@ -147,11 +149,20 @@ class SegVolInferer(Inferer):
     def set_image(self, img_path):
         if self._image_already_loaded(img_path=img_path):
             return
+        img_nib = load_any_to_nib(img_path)
+        self.orig_affine = img_nib.affine
+        self.orig_shape = img_nib.shape
+
+        self.img, self.img_zoom_out, self.start_coord, self.end_coord = self.transform_to_model_coords_dense(img_nib, is_seg = False)
+        self.cropped_shape = self.img.shape
+
+    def transform_to_model_coords_dense(self, nifti: str | Path | nib.Nifti1Image, is_seg: bool) -> tuple[np.ndarray, np.ndarray]:
+        if isinstance(nifti, (str, Path)):
+            nifti = load_any_to_nib(nifti)
+
         item = {}
         # generate ct_voxel_ndarray
-        img, metadata = self.img_loader(img_path)
-        self.affine = metadata["affine"]
-        self.shape = img.shape
+        img = nifti.get_fdata()
         img = np.expand_dims(
             img, axis=0
         )  # Ensure image is in CDWH (spatial dimensions will be assumed to be RAS anyway)
@@ -159,15 +170,30 @@ class SegVolInferer(Inferer):
 
         # transform
         item = self.transform(item)
-        self.start_coord = item["foreground_start_coord"]  # Store metadata for later inveresion of transformations
-        self.end_coord = item["foreground_end_coord"]
+        start_coord = item["foreground_start_coord"]  # Store metadata for later inveresion of transformations
+        end_coord = item["foreground_end_coord"]
 
         item_zoom_out = self.zoom_out_transform(item)
         item["zoom_out_image"] = item_zoom_out["image"]
         image, image_zoom_out = item["image"].float().unsqueeze(0), item["zoom_out_image"].float().unsqueeze(0)
-        image_single = image[0, 0]  #
-        self.cropped_shape = image_single.shape
-        self.img, self.img_zoom_out = image_single, image_zoom_out
+        image_single = image[0, 0] 
+        
+        img, img_zoom_out = image_single, image_zoom_out
+        return img, img_zoom_out, start_coord, end_coord
+
+    def transform_to_model_coords_sparse(self, coords: np.ndarray) -> np.ndarray:
+        return super().transform_to_model_coords_sparse(coords)
+
+    # def set_image(self, img_path: str | Path) -> None:
+    #     if self._image_already_loaded(img_path=img_path):
+    #         return
+    #     img_nib = load_any_to_nib(img_path)
+    #     self.orig_affine = img_nib.affine
+    #     self.orig_shape = img_nib.shape
+
+    #     self.img, self.inv_trans_dense = self.transform_to_model_coords_dense(img_nib, is_seg=False)
+    #     self.new_shape = self.img.shape
+    #     self.loaded_image = img_path
 
     def preprocess_prompt(self, prompt, prompt_type, text_prompt=None):
         """
@@ -220,6 +246,9 @@ class SegVolInferer(Inferer):
         text_single = text_prompt
         prompt = text_single, box_single, binary_cube, points_single, binary_points
         return prompt
+
+    def preprocess_img(self, img: np.ndarray): # image preprocessing is handled in set_image
+        pass
 
     @torch.no_grad()
     def segment(self, image_single, image_single_resize, prompt, prompt_type):
@@ -287,13 +316,13 @@ class SegVolInferer(Inferer):
             - TODO
         """
         if not return_logits:
-            mask = (mask > 0).to(torch.uint8)  # Variable name says logits but it's actually raw results.
+            mask = (mask > 0).to(torch.uint8)
         # Invert transform
         mask = mask.transpose(-1, -3)
         start_coord, end_coord = deepcopy(self.start_coord), deepcopy(self.end_coord)
         start_coord[-1], start_coord[-3] = start_coord[-3], start_coord[-1]
         end_coord[-1], end_coord[-3] = end_coord[-3], end_coord[-1]
-        segmentation = torch.zeros(self.shape)
+        segmentation = torch.zeros(self.orig_shape)
         segmentation[start_coord[0] : end_coord[0], start_coord[1] : end_coord[1], start_coord[2] : end_coord[2]] = (
             mask
         )
@@ -301,13 +330,13 @@ class SegVolInferer(Inferer):
 
         return segmentation
 
-    def predict(self, prompt, text_prompt=None, return_logits=False, prev_seg = None, seed=1):
+    def predict(self, prompt:PromptStep | Boxes3D , text_prompt=None, return_logits=False, prev_seg = None, seed=1):
         if self.loaded_image is None:
             raise RuntimeError("Must first set image!")
 
-        if not isinstance(prompt, (Boxes3D, Points)):
+        if not isinstance(prompt, (Boxes3D, PromptStep)):
             raise TypeError(
-                "Prompts must be 3d bounding boxes or points, and must be supplied as an instance of Boxes3D or Points"
+                "Prompts must be 3d bounding boxes or points, and must be supplied as an instance of Boxes3D or PromptStep"
             )
 
         prompt_type = "box" if isinstance(prompt, Boxes3D) else "point"
@@ -327,6 +356,6 @@ class SegVolInferer(Inferer):
         segmentation = self.postprocess_mask(res[-1], return_logits)
 
         # Turn into Nifti object in original space
-        segmentation = nib.Nifti1Image(segmentation, self.affine)
+        segmentation = nib.Nifti1Image(segmentation, self.orig_affine)
 
         return segmentation
