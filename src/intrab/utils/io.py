@@ -206,32 +206,24 @@ def save_nib_instance_gt_as_nrrd(nib_gt: nib.Nifti1Image, out_path: Path):
     innrrd.to_file(out_path)
 
 
-def save_static_instance_results(
-    prompt_results: list[PromptResult] | list[list[PromptResult]],
+def save_instance_results(
+    prompt_results: list[PromptResult],
     pred_out: Path,
     instance_filename: str,
 ):
     """Iterate through all single prompt results that are"""
-    innrrd_im = create_innrrd_instance_im(prompt_results)
-    pred_out.mkdir(exist_ok=True, parents=True)
-    instance_pd_path = pred_out / instance_filename
-    innrrd_im.to_file(instance_pd_path)
-
-
-def save_interactive_instance_results(
-    all_prompt_results: list[list[PromptResult]], pred_out: Path, instance_filename: str
-):
-    """
-    Save the interactive instance results.
-    Each instance has it's own interactive results. The outer list count goes through the instances and the inner list goes through the iterations.
-    """
-
-    # Outer list holds the instances, inner list holds the iterations.
-    n_iterations = len(all_prompt_results[0])
-
-    for n_iters in range(n_iterations):
-        same_iter_prompt_results = [apr[n_iters] for apr in all_prompt_results]
-        save_static_instance_results(same_iter_prompt_results, pred_out / f"iter_{n_iters}", instance_filename)
+    is_interactive = False if len(prompt_results) == 1 else True
+    for cnt, prompt_result in enumerate(prompt_results):
+        assert isinstance(
+            prompt_result.predicted_image, InstanceNrrd
+        ), "Instance results should be in `.in.nrrd` format ."
+        if is_interactive:
+            tmp_path = pred_out / f"iter_{cnt}"
+        else:
+            tmp_path = pred_out
+        tmp_path.mkdir(exist_ok=True, parents=True)
+        instance_pd_path = tmp_path / instance_filename
+        prompt_result.predicted_image.to_file(instance_pd_path)
 
 
 def binarize_gt(gt_path: Path | str, label_of_interest: int) -> nib.Nifti1Image:

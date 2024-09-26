@@ -55,6 +55,16 @@ def maybe_download_mitk():
         os.system(f"rm {mitk_tar}")
 
 
+def nib_to_nrrd(nib_image: nib.Nifti1Image) -> tuple[np.ndarray, dict]:
+    """Converts a nibabel image to an nrrd array."""
+    with TemporaryDirectory() as temp_dir:
+        nib.save(nib_image, temp_dir + "/tmp.nii.gz")
+        image = sitk.ReadImage(temp_dir + "/tmp.nii.gz")
+        sitk.WriteImage(image, temp_dir + "/tmp.nrrd")
+        nrrd_arr, nrrd_header = nrrd.read(temp_dir + "/tmp.nrrd")
+    return nrrd_arr, nrrd_header
+
+
 def nrrd_to_sitk(nrrd_arr, nrrd_header) -> sitk.Image:
     """Converts an nrrd array to an sitk Image."""
     with TemporaryDirectory() as temp_dir:
