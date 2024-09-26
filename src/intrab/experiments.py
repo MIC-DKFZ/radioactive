@@ -205,6 +205,8 @@ def run_experiments_instances(
                         # logger.debug(f"Skipping {gt_path} as it has already been processed.")
                         continue
 
+                # ! TODO: Make this not a list[PromptResult] but a in.nrrd file within the PromptResult
+                #   Same for the list of lists.
                 all_prompt_result: list[PromptResult] | list[list[PromptResult]] = []
                 for instance_id in instance_ids:
                     binary_gt_orig_coords = binarize_gt(gt_path, instance_id)

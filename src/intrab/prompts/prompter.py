@@ -117,8 +117,8 @@ class Prompter:
             prompt, promptstep_in_model_coord_system=self.promptstep_in_model_coord_system
         )
         perf = self.get_performance(pred.get_fdata())
-
-        return PromptResult(predicted_image=pred, logits=logits, prompt_step=prompt, perf=perf, n_step=0, dof=0)
+        prompt_res = PromptResult(predicted_image=pred, logits=None, prompt_step=prompt, perf=perf, n_step=0, dof=0)
+        return prompt_res
 
     @abstractmethod
     def get_prompt(self) -> PromptStep:
@@ -242,8 +242,10 @@ class PointInterpolationPrompter(Prompter, ABC):
 class ThreePointInterpolationPrompter(PointInterpolationPrompter):
     n_slice_point_interpolation: int = 3
 
+
 class FivePointInterpolationPrompter(PointInterpolationPrompter):
     n_slice_point_interpolation: int = 5
+
 
 class TenPointInterpolationPrompter(PointInterpolationPrompter):
     n_slice_point_interpolation: int = 10
@@ -316,11 +318,14 @@ class BoxInterpolationPrompter(Prompter, ABC):
         prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
         return prompt_orig
 
+
 class ThreeBoxInterpolationPrompter(BoxInterpolationPrompter):
     n_slice_box_interpolation: int = 3
 
+
 class FiveBoxInterpolationPrompter(BoxInterpolationPrompter):
     n_slice_box_interpolation: int = 5
+
 
 class TenBoxInterpolationPrompter(BoxInterpolationPrompter):
     n_slice_box_interpolation: int = 10
@@ -377,14 +382,20 @@ class TenPoints3DVolumePrompter(NPoints3DVolumePrompter):
 class NPointsFromCenterCropped3DVolumePrompter(Prompter, ABC):
     n_points: int
 
-    def __init__(self, inferer: Inferer, seed: int = 11111, n_slice_point_interpolation: int = 5, isolate_around_initial_point_size: tuple[int,int,int] = None,):
+    def __init__(
+        self,
+        inferer: Inferer,
+        seed: int = 11111,
+        n_slice_point_interpolation: int = 5,
+        isolate_around_initial_point_size: tuple[int, int, int] = None,
+    ):
         super().__init__(inferer, seed)
         self.n_slice_point_interpolation = n_slice_point_interpolation
         self.isolate_around_initial_point_size = np.array(isolate_around_initial_point_size)
         self.promptstep_in_model_coord_system = True
 
     def get_prompt(self) -> PromptStep:
-        
+
         max_possible_clicks = min(self.n_slice_point_interpolation, len(self.get_slices_to_infer()))
         prompt_RAS = point_interpolation(gt=self.groundtruth_SAR, n_slices=max_possible_clicks)
         prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
@@ -398,6 +409,7 @@ class NPointsFromCenterCropped3DVolumePrompter(Prompter, ABC):
         prompt_sub = get_linearly_spaced_coords(prompt_model, self.n_points)
 
         return prompt_sub
+
 
 class OnePointsFromCenterCropped3DVolumePrompter(NPointsFromCenterCropped3DVolumePrompter):
     n_points = 1
@@ -417,6 +429,8 @@ class FivePointsFromCenterCropped3DVolumePrompter(NPointsFromCenterCropped3DVolu
 
 class TenPointsFromCenterCropped3DVolumePrompter(NPointsFromCenterCropped3DVolumePrompter):
     n_points = 10
+
+
 class Box3DVolumePrompter(Prompter):
 
     def get_prompt(self) -> tuple[nib.Nifti1Image, dict[int, np.ndarray]]:
