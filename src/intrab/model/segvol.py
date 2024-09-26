@@ -116,12 +116,11 @@ class SegVolInferer(Inferer):
     def __init__(self, checkpoint_path, device="cuda"):
         if device != "cuda":
             raise RuntimeError("segvol can only be run on cuda.")
-        self.model = load_segvol(checkpoint_path)
+        super.__init__(checkpoint_path, device)
         self.prev_mask = None
         self.inputs = None
         self.mask_threshold = 0
         self.infer_overlap = 0.5
-        self.verbose = True  # Not used anywhere, kept for alignment with 2d models.
 
         self.spatial_size = (32, 256, 256)
         self.transform = transforms.Compose(
@@ -141,6 +140,9 @@ class SegVolInferer(Inferer):
             keys=["image"], spatial_size=self.spatial_size, mode="nearest-exact"
         )
         self.img_loader = transforms.LoadImage()
+
+    def load_model(self, checkpoint_path, device):
+        return load_segvol(checkpoint_path)
 
     def set_image(self, img_path):
         if self._image_already_loaded(img_path=img_path):
