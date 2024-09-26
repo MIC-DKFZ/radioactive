@@ -378,6 +378,14 @@ class FivePoints3DVolumePrompter(NPoints3DVolumePrompter):
 class TenPoints3DVolumePrompter(NPoints3DVolumePrompter):
     n_points: int = 10
 
+class CentroidPoint3DVolumePrompter(Prompter):
+    def get_prompt(self) -> PromptStep:
+        fg_coords = np.argwhere(self.groundtruth_SAR)
+        centroid_SAR = fg_coords.mean(axis=0)
+        centroid_RAS = centroid_SAR[::-1][None]
+        centroid_prompt_RAS = PromptStep(point_prompts = (centroid_RAS, [1]))
+        prompt_orig = self.transform_prompt_to_original_coords(centroid_prompt_RAS)
+        return prompt_orig
 
 class NPointsFromCenterCropped3DVolumePrompter(Prompter, ABC):
     n_points: int
@@ -470,6 +478,7 @@ static_prompt_styles = Literal[
     "ThreePoints3DVolumePrompter",
     "FivePoints3DVolumePrompter",
     "TenPoints3DVolumePrompter",
+    "CentroidPoint3DVolumePrompter",
     "OnePointsFromCenterCropped3DVolumePrompter",
     "TwoPointsFromCenterCropped3DVolumePrompter",
     "ThreePointsFromCenterCropped3DVolumePrompter",

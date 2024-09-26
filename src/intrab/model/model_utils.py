@@ -9,6 +9,7 @@ from intrab.prompts.prompter import (
     Alternating2PointsPer2DSlicePrompter,
     Alternating3PointsPer2DSlicePrompter,
     Alternating5PointsPer2DSlicePrompter,
+    CentroidPoint3DVolumePrompter,
     FiveBoxInterpolationPrompter,
     FivePointInterpolationPrompter,
     FivePointsFromCenterCropped3DVolumePrompter,
@@ -339,6 +340,8 @@ def get_wanted_supported_prompters(
 
     elif inferer.dim == 3:
         if "point" in inferer.supported_prompts:
+            if "CentroidPoint3DVolumePrompter" in wanted_prompt_styles:
+                prompters.append(CentroidPoint3DVolumePrompter(inferer, seed))
             if "OnePoints3DVolumePrompter" in wanted_prompt_styles:
                 prompters.append(OnePoints3DVolumePrompter(inferer, seed))
             if "TwoPoints3DVolumePrompter" in wanted_prompt_styles and not isinstance(inferer, SAMMed3DInferer): 
