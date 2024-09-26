@@ -129,7 +129,7 @@ def obtain_misclassified_point_prompt_3d(pred: np.ndarray, gt: np.ndarray, seed:
     misclassifieds = np.vstack(np.where(pred != gt)).T
     sampled_ind = np.random.randint(len(misclassifieds))
     sampled_coords = misclassifieds[sampled_ind]
-    sampled_labels = gt[*sampled_coords][None]
+    sampled_labels = gt[tuple(sampled_coords)][None]
     sampled_coords = sampled_coords[None] # Make into 2d array
 
     # Format into PromptStep and return
@@ -153,7 +153,7 @@ def obtain_misclassified_point_prompt_2d(slice_pred: np.ndarray, slice_gt: np.nd
     misclassifieds = np.vstack(np.where(slice_pred != slice_gt)).T
     sampled_ind = np.random.randint(len(misclassifieds))
     sampled_coords = misclassifieds[sampled_ind]
-    sampled_labels = slice_gt[*sampled_coords][None]
+    sampled_labels = slice_gt[tuple(sampled_coords)][None]
     # add 3d context. Below is only difference from obtain_misclassified_point_prompt_3d. Could merge? Is it better for this to be explicitly different functions?
     sampled_coords = np.array([slice_idx, *sampled_coords])
     sampled_coords = sampled_coords[None][:, ::-1]  # zyx -> xyz, and make into 2d array

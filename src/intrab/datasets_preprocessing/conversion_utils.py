@@ -119,7 +119,7 @@ def dicom_to_nrrd(dicom_series_path: Path | str) -> tuple[np.ndarray, dict]:
         else:
             dcm_sub_file = dicom_series_path
         with TemporaryDirectory() as temp_dir:
-            os.system(f"cd {mitk_path} && ./MitkFileConverter.sh -i {dcm_sub_file} -o {temp_dir + "/tmp.nrrd"}")
+            os.system(f"cd {mitk_path} && ./MitkFileConverter.sh -i {dcm_sub_file} -o {temp_dir + '/tmp.nrrd'}")
             array, header = nrrd.read(temp_dir + "/tmp.nrrd")
     return array, header
 

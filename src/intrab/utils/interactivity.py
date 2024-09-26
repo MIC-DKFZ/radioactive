@@ -165,7 +165,7 @@ def iterate_2d(
                 scribble_coords = np.array(scribble_coords).T
 
                 # Obtain false positive points and make new prompt
-                is_fp_mask = slice_seg[*scribble_coords.T].astype(bool)
+                is_fp_mask = slice_seg[tuple(scribble_coords.T)].astype(bool)
                 fp_coords = scribble_coords[is_fp_mask]
 
                 ## Position fp_coords back into original 3d coordinate system
@@ -303,7 +303,7 @@ def iterate_3d(
         misclassifieds = np.vstack(np.where(segmentation != gt_to_compare)).T
         sampled_ind = np.random.randint(len(misclassifieds))
         sampled_coords = [misclassifieds[sampled_ind]]
-        sampled_labels = [gt_to_compare[*sampled_coords[0]]]
+        sampled_labels = [gt_to_compare[tuple(sampled_coords[0])]]
 
         if pass_prev_prompts:
             sampled_coords = np.vstack((prompt.coords, sampled_coords))
