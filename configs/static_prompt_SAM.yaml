@@ -26,12 +26,16 @@ prompting:
     - "Alternating3PointsPer2DSlicePrompter"
     - "Alternating5PointsPer2DSlicePrompter"
     - "Alternating10PointsPer2DSlicePrompter"
-    - "PointInterpolationPrompter"
+    - "ThreePointInterpolationPrompter"
+    - "FivePointInterpolationPrompter"
+    - "TenPointInterpolationPrompter"
     - "PointPropagationPrompter"
     # ------------------------------------ 2D Box ----------------------------------- #
     - "BoxPer2DSlicePrompter"
     - "BoxPer2dSliceFrom3DBoxPrompter"
-    - "BoxInterpolationPrompter"
+    - "ThreeBoxInterpolationPrompter"
+    - "FiveBoxInterpolationPrompter"
+    - "TenBoxInterpolationPrompter"
     - "BoxPropagationPrompter"
     # ----------------------------------- 3D Point ---------------------------------- #
     - "OnePoints3DVolumePrompter"
@@ -39,6 +43,11 @@ prompting:
     - "ThreePoints3DVolumePrompter"
     - "FivePoints3DVolumePrompter"
     - "TenPoints3DVolumePrompter"
+    - "OnePointsFromCenterCropped3DVolumePrompter"
+    - "TwoPointsFromCenterCropped3DVolumePrompter"
+    - "ThreePointsFromCenterCropped3DVolumePrompter"
+    - "FivePointsFromCenterCropped3DVolumePrompter"
+    - "TenPointsFromCenterCropped3DVolumePrompter"
     # ------------------------------------ 3D Box ----------------------------------- #
     - "Box3DVolumePrompter"
 
