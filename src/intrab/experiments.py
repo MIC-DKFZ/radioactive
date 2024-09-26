@@ -166,7 +166,7 @@ def run_experiments_instances(
     gt_output_path.mkdir(exist_ok=True)
     is_on_cluster = "LSF_JOBID" in os.environ
 
-    if only_eval:
+    if not only_eval:
         # Loop through all image and label pairs
         for img_path, gt_path in tqdm(imgs_gts, desc="looping through files\n", leave=True, disable=is_on_cluster):
             # Loop through each organ label except the background
