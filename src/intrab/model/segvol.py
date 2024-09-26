@@ -1,4 +1,6 @@
 from argparse import Namespace
+from pathlib import Path
+from intrab.datasets_preprocessing.conversion_utils import load_any_to_nib
 from intrab.model.inferer import Inferer
 from intrab.prompts.prompt import Boxes3D, Points
 from intrab.utils.SegVol_segment_anything.network.model import SegVol
@@ -18,6 +20,7 @@ import monai.transforms as transforms
 from copy import deepcopy
 
 from intrab.utils.SegVol_segment_anything import sam_model_registry
+from intrab.utils.transforms import resample_to_shape_sparse
 
 
 class MinMaxNormalization(transforms.Transform):
@@ -124,7 +127,8 @@ class SegVolInferer(Inferer):
         self.verbose = True  # Not used anywhere, kept for alignment with 2d models.
 
         self.spatial_size = (32, 256, 256)
-        self.transform = transforms.Compose(
+
+        self.transform_img = transforms.Compose(
             [
                 transforms.Orientationd(
                     keys=["image"], axcodes="RAS"
@@ -132,7 +136,19 @@ class SegVolInferer(Inferer):
                 ForegroundNormalization(keys=["image"]),
                 DimTranspose(keys=["image"]),
                 MinMaxNormalization(),
-                transforms.SpatialPadd(keys=["image"], spatial_size=self.spatial_size, mode="constant"),
+                transforms.SpatialPadd(keys=["image"], spatial_size=(32, 256, 256), mode="constant"),
+                transforms.CropForegroundd(keys=["image"], source_key="image"),
+                transforms.ToTensord(keys=["image"]),
+            ]
+        )
+
+        self.transform_seg = transforms.Compose(
+            [
+                transforms.Orientationd(
+                    keys=["image"], axcodes="RAS"
+                ),  # Doesn't actually do anything since metadata is discarded. Kept for comparability to original
+                DimTranspose(keys=["image"]),
+                transforms.SpatialPadd(keys=["image"], spatial_size=(32, 256, 256), mode="constant"),
                 transforms.CropForegroundd(keys=["image"], source_key="image"),
                 transforms.ToTensord(keys=["image"]),
             ]
@@ -147,25 +163,60 @@ class SegVolInferer(Inferer):
             return
         item = {}
         # generate ct_voxel_ndarray
-        img, metadata = self.img_loader(img_path)
-        self.affine = metadata["affine"]
-        self.shape = img.shape
+        img_nib = load_any_to_nib(img_path)
+        self.orig_affine = img_nib.affine
+        
+        self.img, self.img_zoom_out, self.start_coord, self.end_coord = self.transform_to_model_coords_dense(img_nib, is_seg=False)
+        self.cropped_shape = self.img.shape
+
+    def transform_to_model_coords_dense(self, nifti: str | Path | nib.Nifti1Image, is_seg: bool) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        if isinstance(nifti, (str, Path)):
+            nifti = load_any_to_nib(nifti)
+
+        item = {}
+        # generate ct_voxel_ndarray
+        img = nifti.get_fdata()
         img = np.expand_dims(
             img, axis=0
         )  # Ensure image is in CDWH (spatial dimensions will be assumed to be RAS anyway)
         item["image"] = img
 
         # transform
-        item = self.transform(item)
-        self.start_coord = item["foreground_start_coord"]  # Store metadata for later inveresion of transformations
-        self.end_coord = item["foreground_end_coord"]
+        transform = self.transform_seg if is_seg else self.transform_img
+        item = transform(item)
+        start_coord = item["foreground_start_coord"]  # Store metadata for later inveresion of transformations
+        end_coord = item["foreground_end_coord"]
 
         item_zoom_out = self.zoom_out_transform(item)
         item["zoom_out_image"] = item_zoom_out["image"]
         image, image_zoom_out = item["image"].float().unsqueeze(0), item["zoom_out_image"].float().unsqueeze(0)
-        image_single = image[0, 0]  #
-        self.cropped_shape = image_single.shape
-        self.img, self.img_zoom_out = image_single, image_zoom_out
+        image_single = image[0, 0] 
+        
+        img, img_zoom_out = image_single, image_zoom_out
+        return img, img_zoom_out, start_coord, end_coord
+
+    def transform_to_model_coords_sparse(self, coords: np.ndarray) -> np.ndarray:
+        # OrientationD: Do nothing
+
+        # DimTranspose
+        coords = coords[[2, 1, 0]]  # Swap the first and last coordinates
+
+        # SpatialPad
+        shape_after_dimtranspose = self.orig_shape[::-1]
+
+        total_pads = np.maximum(self.spatial_size-shape_after_dimtranspose, 0 )
+        pad_starts = total_pads//2
+
+        coords = coords + pad_starts
+
+        # CropForegroundd
+        coords = coords - self.start_coord
+
+        # 5. Resized (if applicable)
+        zoomed_out_coords = resample_to_shape_sparse(coords, self.cropped_shape, self.spatial_size, round=True)
+
+        return zoomed_out_coords
+    
 
     def preprocess_prompt(self, prompt, prompt_type, text_prompt=None):
         """
@@ -291,7 +342,7 @@ class SegVolInferer(Inferer):
         start_coord, end_coord = deepcopy(self.start_coord), deepcopy(self.end_coord)
         start_coord[-1], start_coord[-3] = start_coord[-3], start_coord[-1]
         end_coord[-1], end_coord[-3] = end_coord[-3], end_coord[-1]
-        segmentation = torch.zeros(self.shape)
+        segmentation = torch.zeros(self.orig_shape)
         segmentation[start_coord[0] : end_coord[0], start_coord[1] : end_coord[1], start_coord[2] : end_coord[2]] = (
             mask
         )
@@ -325,6 +376,6 @@ class SegVolInferer(Inferer):
         segmentation = self.postprocess_mask(res[-1], return_logits)
 
         # Turn into Nifti object in original space
-        segmentation = nib.Nifti1Image(segmentation, self.affine)
+        segmentation = nib.Nifti1Image(segmentation, self.orig_affine)
 
         return segmentation
