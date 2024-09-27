@@ -1,6 +1,8 @@
 from argparse import Namespace
 from pathlib import Path
 from intrab.datasets_preprocessing.conversion_utils import load_any_to_nib
+from pathlib import Path
+from intrab.datasets_preprocessing.conversion_utils import load_any_to_nib
 from intrab.model.inferer import Inferer
 from intrab.prompts.prompt import Boxes3D, Points, PromptStep
 from intrab.utils.SegVol_segment_anything.network.model import SegVol
@@ -20,6 +22,7 @@ import monai.transforms as transforms
 from copy import deepcopy
 
 from intrab.utils.SegVol_segment_anything import sam_model_registry
+from intrab.utils.transforms import resample_to_shape_sparse
 
 
 class MinMaxNormalization(transforms.Transform):
@@ -125,7 +128,8 @@ class SegVolInferer(Inferer):
         self.infer_overlap = 0.5
 
         self.spatial_size = (32, 256, 256)
-        self.transform = transforms.Compose(
+
+        self.transform_img = transforms.Compose(
             [
                 transforms.Orientationd(
                     keys=["image"], axcodes="RAS"
@@ -133,7 +137,19 @@ class SegVolInferer(Inferer):
                 ForegroundNormalization(keys=["image"]),
                 DimTranspose(keys=["image"]),
                 MinMaxNormalization(),
-                transforms.SpatialPadd(keys=["image"], spatial_size=self.spatial_size, mode="constant"),
+                transforms.SpatialPadd(keys=["image"], spatial_size=(32, 256, 256), mode="constant"),
+                transforms.CropForegroundd(keys=["image"], source_key="image"),
+                transforms.ToTensord(keys=["image"]),
+            ]
+        )
+
+        self.transform_seg = transforms.Compose(
+            [
+                transforms.Orientationd(
+                    keys=["image"], axcodes="RAS"
+                ),  # Doesn't actually do anything since metadata is discarded. Kept for comparability to original
+                DimTranspose(keys=["image"]),
+                transforms.SpatialPadd(keys=["image"], spatial_size=(32, 256, 256), mode="constant"),
                 transforms.CropForegroundd(keys=["image"], source_key="image"),
                 transforms.ToTensord(keys=["image"]),
             ]
@@ -149,17 +165,6 @@ class SegVolInferer(Inferer):
     def set_image(self, img_path):
         if self._image_already_loaded(img_path=img_path):
             return
-        img_nib = load_any_to_nib(img_path)
-        self.orig_affine = img_nib.affine
-        self.orig_shape = img_nib.shape
-
-        self.img, self.img_zoom_out, self.start_coord, self.end_coord = self.transform_to_model_coords_dense(img_nib, is_seg = False)
-        self.cropped_shape = self.img.shape
-
-    def transform_to_model_coords_dense(self, nifti: str | Path | nib.Nifti1Image, is_seg: bool) -> tuple[np.ndarray, np.ndarray]:
-        if isinstance(nifti, (str, Path)):
-            nifti = load_any_to_nib(nifti)
-
         item = {}
         # generate ct_voxel_ndarray
         img = nifti.get_fdata()
@@ -170,30 +175,15 @@ class SegVolInferer(Inferer):
 
         # transform
         item = self.transform(item)
-        start_coord = item["foreground_start_coord"]  # Store metadata for later inveresion of transformations
-        end_coord = item["foreground_end_coord"]
+        self.start_coord = item["foreground_start_coord"]  # Store metadata for later inveresion of transformations
+        self.end_coord = item["foreground_end_coord"]
 
         item_zoom_out = self.zoom_out_transform(item)
         item["zoom_out_image"] = item_zoom_out["image"]
         image, image_zoom_out = item["image"].float().unsqueeze(0), item["zoom_out_image"].float().unsqueeze(0)
-        image_single = image[0, 0] 
-        
-        img, img_zoom_out = image_single, image_zoom_out
-        return img, img_zoom_out, start_coord, end_coord
-
-    def transform_to_model_coords_sparse(self, coords: np.ndarray) -> np.ndarray:
-        return super().transform_to_model_coords_sparse(coords)
-
-    # def set_image(self, img_path: str | Path) -> None:
-    #     if self._image_already_loaded(img_path=img_path):
-    #         return
-    #     img_nib = load_any_to_nib(img_path)
-    #     self.orig_affine = img_nib.affine
-    #     self.orig_shape = img_nib.shape
-
-    #     self.img, self.inv_trans_dense = self.transform_to_model_coords_dense(img_nib, is_seg=False)
-    #     self.new_shape = self.img.shape
-    #     self.loaded_image = img_path
+        image_single = image[0, 0]  #
+        self.cropped_shape = image_single.shape
+        self.img, self.img_zoom_out = image_single, image_zoom_out
 
     def preprocess_prompt(self, prompt, prompt_type, text_prompt=None):
         """

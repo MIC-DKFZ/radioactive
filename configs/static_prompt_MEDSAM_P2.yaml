@@ -26,12 +26,16 @@ prompting:
     - "Alternating3PointsPer2DSlicePrompter"
     - "Alternating5PointsPer2DSlicePrompter"
     - "Alternating10PointsPer2DSlicePrompter"
-    - "PointInterpolationPrompter"
+    - "ThreePointInterpolationPrompter"
+    - "FivePointInterpolationPrompter"
+    - "TenPointInterpolationPrompter"
     - "PointPropagationPrompter"
     # ------------------------------------ 2D Box ----------------------------------- #
     - "BoxPer2DSlicePrompter"
     - "BoxPer2dSliceFrom3DBoxPrompter"
-    - "BoxInterpolationPrompter"
+    - "ThreeBoxInterpolationPrompter"
+    - "FiveBoxInterpolationPrompter"
+    - "TenBoxInterpolationPrompter"
     - "BoxPropagationPrompter"
     # ----------------------------------- 3D Point ---------------------------------- #
     - "OnePoints3DVolumePrompter"
@@ -39,27 +43,32 @@ prompting:
     - "ThreePoints3DVolumePrompter"
     - "FivePoints3DVolumePrompter"
     - "TenPoints3DVolumePrompter"
+    - "OnePointsFromCenterCropped3DVolumePrompter"
+    - "TwoPointsFromCenterCropped3DVolumePrompter"
+    - "ThreePointsFromCenterCropped3DVolumePrompter"
+    - "FivePointsFromCenterCropped3DVolumePrompter"
+    - "TenPointsFromCenterCropped3DVolumePrompter"
     # ------------------------------------ 3D Box ----------------------------------- #
     - "Box3DVolumePrompter"
 
 # List of dataset that will be compared in the next run of the benchmark.
 datasets:
 
-  - identifier: 201  # FLAIR MS instances
-    type: "instance"
-    excluded_classes: [0]
-  - identifier: 209  # HanSeg MR Organs
-    type: "organ"
-    excluded_classes: [0]
-  - identifier: 501  # HNTS-MRG MR Primary Tumors
-    type: "instance"
-    excluded_classes: [0]
-  # - identifier: 600  # Pengwin CT Bones
+  # - identifier: 201  # FLAIR MS instances
   #   type: "instance"
   #   excluded_classes: [0]
-  - identifier: 911  # LNQ Metastatic Lymph Nodes
-    type: "instance"
-    excluded_classes: [0]
+  # - identifier: 209  # HanSeg MR Organs
+  #   type: "organ"
+  #   excluded_classes: [0]
+  # - identifier: 501  # HNTS-MRG MR Primary Tumors
+  #   type: "instance"
+  #   excluded_classes: [0]
+  # # - identifier: 600  # Pengwin CT Bones
+  # #   type: "instance"
+  # #   excluded_classes: [0]
+  # - identifier: 911  # LNQ Metastatic Lymph Nodes
+  #   type: "instance"
+  #   excluded_classes: [0]
   - identifier: 912  # CT Colorectal Liver Metastases
     type: "instance"
     excluded_classes: [0]

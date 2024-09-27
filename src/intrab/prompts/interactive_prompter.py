@@ -203,7 +203,7 @@ class twoDInteractivePrompter(InteractivePrompter):
     #     new_coords = interpolate_points(new_seed_prompt, kind="linear").astype(int)
 
     #     # Subset to those points not yet segmented
-    #     unsegmented_mask = pred[*new_coords.T] != 1
+    #     unsegmented_mask = pred[tuple(new_coords.T)] != 1
     #     new_coords = new_coords[unsegmented_mask]
 
     #     # Align back to RAS format and return
@@ -287,7 +287,7 @@ class twoDInteractivePrompter(InteractivePrompter):
             # Obtain false positive points and make new prompt
             coords_transpose = scribble_coords.T
             # fmt: off
-            is_fp_mask = slice_seg[*coords_transpose].astype(bool)
+            is_fp_mask = slice_seg[tuple(coords_transpose)].astype(bool)
             # fmt: on
             fp_coords = scribble_coords[is_fp_mask]
 
@@ -328,7 +328,7 @@ class twoDInteractivePrompter(InteractivePrompter):
         # ####
         # # Debug:
         # aligned_coords = prompt_step.coords[:, [2,1,0]] # back to zyx
-        # true_labels = self.groundtruth_model[*aligned_coords.T]
+        # true_labels = self.groundtruth_model[tuple(aligned_coords.T)]
         # prompt_type = 'positive' if not generate_negative_prompts_flag or prompt_gen_failed else 'negative'
         # logger.debug(f'{prompt_type} prompts created. # of corrective prompts: {len(true_labels)}, # of mistakes {np.sum(true_labels!=prompt_step.labels)}')
         # ####
@@ -609,7 +609,7 @@ class threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint(
             # Obtain false positive points and make new prompt
             coords_transpose = scribble_coords.T
             # fmt: off
-            is_fp_mask = slice_seg[*coords_transpose].astype(bool)
+            is_fp_mask = slice_seg[tuple(coords_transpose)].astype(bool)
 
             # fmt: on
             fp_coords = scribble_coords[is_fp_mask]
@@ -668,7 +668,7 @@ class threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint(
         # ####
         # # Debug:
         # aligned_coords = prompt_step.coords[:, [2,1,0]] # back to zyx
-        # true_labels = self.groundtruth_model[*aligned_coords.T]
+        # true_labels = self.groundtruth_model[tuple(aligned_coords.T)]
         # prompt_type = 'positive' if not generate_negative_prompts_flag or prompt_gen_failed else 'negative'
         # logger.debug(f'{prompt_type} prompts created. # of corrective prompts: {len(true_labels)}, # of mistakes {np.sum(true_labels!=prompt_step.labels)}')
         # ####

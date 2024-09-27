@@ -3,11 +3,12 @@ import os
 from pathlib import Path
 
 from loguru import logger
+from intrab.datasets_preprocessing.conversion_utils import nib_to_nrrd
 from intrab.model.inferer import Inferer
 from intrab.model.model_utils import get_wanted_supported_prompters
 from intrab.prompts.prompt_hparams import PromptConfig
 from intrab.prompts.prompter import static_prompt_styles
-
+from toinstance import InstanceNrrd
 from intrab.prompts.prompter import Prompter
 
 
@@ -16,9 +17,8 @@ from tqdm import tqdm
 from intrab.utils.io import (
     binarize_gt,
     create_instance_gt,
-    save_interactive_instance_results,
+    save_instance_results,
     save_nib_instance_gt_as_nrrd,
-    save_static_instance_results,
     verify_results_dir_exist,
 )
 from intrab.utils.io import verify_results_dir_exist
@@ -60,10 +60,10 @@ def run_experiments_organ(
     if not only_eval:
         # Loop through all image and label pairs
         target_names: set[str] = set()
-        for img_path, gt_path in tqdm(imgs_gts, desc="looping through files\n", leave=False, disable=is_on_cluster):
+        for img_path, gt_path in tqdm(imgs_gts, desc="looping through files", leave=False, disable=is_on_cluster):
             # Loop through each organ label except the background
             for target, target_label in tqdm(
-                targets.items(), desc="Predicting targets...\n", leave=False, disable=is_on_cluster
+                targets.items(), desc="Predicting targets...", leave=False, disable=True
             ):
                 target_name: str = f"{target_label:03d}" + "__" + target
                 target_names.add(target_name)
@@ -81,7 +81,7 @@ def run_experiments_organ(
                     prompters,
                     desc="Prompting with various prompters ...",
                     leave=False,
-                    disable=is_on_cluster,
+                    disable=True,
                 ):
                     filepath = results_dir / prompter.name / target_name / base_name
                     if filepath.exists() and not results_overwrite:
@@ -106,7 +106,6 @@ def run_experiments_organ(
                             target_path.mkdir(exist_ok=True)
                             pred.predicted_image.to_filename(target_path / base_name)
 
-                            # ToDo: Serialize the prediction results.
     if not only_calc:
         # We always run the semantic eval on the created folders directly.
         for target_name in target_names:
@@ -151,6 +150,7 @@ def run_experiments_instances(
     targets: dict = {k.replace("/", "_"): v for k, v in label_dict.items() if k.lower() != "background"}
     assert len(targets) == 1, "Instance experiments only support two classes -- background and the instance class"
     prompters: list[Prompter] = get_wanted_supported_prompters(inferer, pro_conf, wanted_prompt_styles, seed)
+    verify_results_dir_exist(targets=targets, results_dir=results_dir, prompters=prompters)
 
     if debug:
         logger.warning("Debug mode activated. Only running on the first three images.")
@@ -166,9 +166,13 @@ def run_experiments_instances(
     gt_output_path.mkdir(exist_ok=True)
     is_on_cluster = "LSF_JOBID" in os.environ
 
+    target_label = list(targets.values())[0]
+    target = list(targets.keys())[0]
+    target_name = f"{target_label:03d}" + "__" + target
+
     if not only_eval:
         # Loop through all image and label pairs
-        for img_path, gt_path in tqdm(imgs_gts, desc="looping through files\n", leave=True, disable=is_on_cluster):
+        for img_path, gt_path in tqdm(imgs_gts, desc="looping through files ...", leave=False, disable=is_on_cluster):
             # Loop through each organ label except the background
             filename = os.path.basename(gt_path)
             filename_wo_ext = filename.split(".")[0]  # Remove the extension
@@ -185,14 +189,14 @@ def run_experiments_instances(
                 prompters,
                 desc="Prompting with various prompters ...",
                 leave=False,
-                disable=is_on_cluster,
+                disable=True,
             ):
                 prompt_pred_path = pred_output_path / prompter.name
                 prompt_pred_path.mkdir(exist_ok=True)
 
                 # --------------- Skip prediction if the results already exist. -------------- #
                 if prompter.is_static:
-                    instance_pd_path = prompt_pred_path / instance_filename
+                    instance_pd_path = prompt_pred_path / target_name / instance_filename
 
                     if instance_pd_path.exists() and not results_overwrite:
                         # logger.debug(f"Skipping {gt_path} as it has already been processed.")
@@ -205,9 +209,7 @@ def run_experiments_instances(
                         # logger.debug(f"Skipping {gt_path} as it has already been processed.")
                         continue
 
-                # ! TODO: Make this not a list[PromptResult] but a in.nrrd file within the PromptResult
-                #   Same for the list of lists.
-                all_prompt_result: list[PromptResult] | list[list[PromptResult]] = []
+                all_prompt_results: list[PromptResult] = []
                 for instance_id in instance_ids:
                     binary_gt_orig_coords = binarize_gt(gt_path, instance_id)
                     prompter.set_groundtruth(binary_gt_orig_coords)
@@ -216,16 +218,32 @@ def run_experiments_instances(
                         prediction_result: PromptResult
                         prediction_result = prompter.predict_image(image_path=img_path)
                         # Save the prediction
-                        all_prompt_result.append(prediction_result)
+                        if len(all_prompt_results) == 0:
+                            arr, head = nib_to_nrrd(prediction_result.predicted_image)
+                            inrrd = InstanceNrrd.from_instance_map(arr, head, 1)
+                            prediction_result.predicted_image = inrrd
+                            all_prompt_results.append(prediction_result)
+                        else:
+                            # Currently we don't do any fancy saving of the prompt,
+                            #  so we can also just drop it for now.
+                            arr, _ = nib_to_nrrd(prediction_result.predicted_image)
+                            all_prompt_results[0].predicted_image.add_maps({1: [arr]})
 
                         # Handle interactive experiments
                     else:
-                        all_prompt_result.append(prompter.predict_image(image_path=img_path))
+                        prediction_results: list[PromptResult] = prompter.predict_image(image_path=img_path)
+                        if len(all_prompt_results) == 0:
+                            for pred in prediction_results:
+                                arr, head = nib_to_nrrd(pred.predicted_image)
+                                inrrd = InstanceNrrd.from_instance_map(arr, head, 1)
+                                pred.predicted_image = inrrd
+                                all_prompt_results.append(pred)
+                        else:
+                            for cnt, pred in enumerate(prediction_results):
+                                arr, _ = nib_to_nrrd(pred.predicted_image)
+                                all_prompt_results[cnt].predicted_image.add_maps({1: [arr]})
                     # -------------------- Save static or interactive results -------------------- #
-                if prompter.is_static:
-                    save_static_instance_results(all_prompt_result, prompt_pred_path, instance_filename)
-                else:
-                    save_interactive_instance_results(all_prompt_result, prompt_pred_path, instance_filename)
+                save_instance_results(all_prompt_results, (prompt_pred_path / target_name), instance_filename)
 
     if not only_calc:
         # # We always run the semantic eval on the created folders directly.
