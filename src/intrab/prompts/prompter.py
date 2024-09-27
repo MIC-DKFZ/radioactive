@@ -354,7 +354,10 @@ class NPoints3DVolumePrompter(Prompter, ABC):
         self.n_points = self.n_points
 
     def get_prompt(self) -> PromptStep:
-        prompt_RAS = get_pos_clicks3D(self.groundtruth_SAR, n_clicks=self.n_points, seed=self.seed)
+        prompt_SAR = get_pos_clicks3D(self.groundtruth_SAR, n_clicks=self.n_points, seed=self.seed)
+        # 3d functions don't reverse order of coords by themselves
+        prompt_RAS = prompt_SAR
+        prompt_RAS.coords = prompt_RAS.coords[:,::-1]
         prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
         return prompt_orig
 
