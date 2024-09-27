@@ -92,7 +92,7 @@ def preprocess(raw_download_path: Path):
                 cc_kwargs={"dilation_kernel_radius": 0, "label_connectivity": 3},
             )
             array: list[np.ndarray] = [(cnt + 1) * arr for cnt, arr in enumerate(inrrd.get_instance_maps(class_id=1))]
-            instance_array = np.sum(array, axis=0)
+            instance_array = np.sum(array, axis=0).astype(np.uint16)
             header = inrrd.get_vanilla_header()
             nrrd.write(str(Path(tempdir) / "tmp_file.nrrd"), instance_array, header)
             img = sitk.ReadImage(str(Path(tempdir) / "tmp_file.nrrd"))
