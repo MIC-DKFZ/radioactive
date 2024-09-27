@@ -259,7 +259,7 @@ def run_experiments_instances(
                     )
             else:
                 for i in range(prompter.num_iterations):
-                    pred_path = pred_output_path / prompter.name / f"iter_{i}"
+                    pred_path = pred_output_path / prompter.name / target_name / f"iter_{i}"
                     if pred_path.exists():
                         with logger.catch(level="WARNING"):
                             instance_evaluation(
