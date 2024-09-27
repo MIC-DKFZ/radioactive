@@ -165,6 +165,18 @@ class SegVolInferer(Inferer):
     def set_image(self, img_path):
         if self._image_already_loaded(img_path=img_path):
             return
+        img_nib = load_any_to_nib(img_path)
+        self.orig_affine = img_nib.affine
+        self.orig_shape = img_nib.shape
+
+        self.img, self.img_zoom_out, self.start_coord, self.end_coord = self.transform_to_model_coords_dense(img_nib, is_seg=False)
+        self.cropped_shape = self.img.shape
+        self.loaded_image = img_path
+
+    def transform_to_model_coords_dense(self, nifti: str | Path | nib.Nifti1Image, is_seg: bool) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        if isinstance(nifti, (str, Path)):
+            nifti = load_any_to_nib(nifti)
+
         item = {}
         # generate ct_voxel_ndarray
         img = nifti.get_fdata()
@@ -174,16 +186,43 @@ class SegVolInferer(Inferer):
         item["image"] = img
 
         # transform
-        item = self.transform(item)
-        self.start_coord = item["foreground_start_coord"]  # Store metadata for later inveresion of transformations
-        self.end_coord = item["foreground_end_coord"]
+        transform = self.transform_seg if is_seg else self.transform_img
+        item = transform(item)
+        start_coord = item["foreground_start_coord"]  # Store metadata for later inveresion of transformations
+        end_coord = item["foreground_end_coord"]
 
         item_zoom_out = self.zoom_out_transform(item)
         item["zoom_out_image"] = item_zoom_out["image"]
         image, image_zoom_out = item["image"].float().unsqueeze(0), item["zoom_out_image"].float().unsqueeze(0)
-        image_single = image[0, 0]  #
-        self.cropped_shape = image_single.shape
-        self.img, self.img_zoom_out = image_single, image_zoom_out
+        image_single = image[0, 0] 
+        
+        img, img_zoom_out = image_single, image_zoom_out
+        return img, img_zoom_out, start_coord, end_coord
+    
+    def transform_to_model_coords_sparse(self, coords: np.ndarray) -> np.ndarray:
+        # OrientationD: Do nothing
+
+        # DimTranspose
+        coords = coords[[2, 1, 0]]  # Swap the first and last coordinates
+
+        # SpatialPad
+        # Calculate padding amounts
+        shape_after_dimtranspose = self.orig_shape[::-1]
+
+        # Calculate padding needed for each axis
+        total_pads = np.maximum(self.spatial_size-shape_after_dimtranspose, 0 )
+        pad_starts = total_pads//2
+
+        # Adjust point coordinates for padding
+        coords = coords + pad_starts
+
+        # CropForegroundd
+        coords = coords - self.start_coord
+
+        # 5. Resized (if applicable)
+        zoomed_out_coords = resample_to_shape_sparse(coords, self.cropped_shape, self.spatial_size, round=True)
+
+        return coords, zoomed_out_coords
 
     def preprocess_prompt(self, prompt, prompt_type, text_prompt=None):
         """
