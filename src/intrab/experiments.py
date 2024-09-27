@@ -60,10 +60,10 @@ def run_experiments_organ(
     if not only_eval:
         # Loop through all image and label pairs
         target_names: set[str] = set()
-        for img_path, gt_path in tqdm(imgs_gts, desc="looping through files\n", leave=False, disable=is_on_cluster):
+        for img_path, gt_path in tqdm(imgs_gts, desc="looping through files", leave=False, disable=is_on_cluster):
             # Loop through each organ label except the background
             for target, target_label in tqdm(
-                targets.items(), desc="Predicting targets...\n", leave=False, disable=is_on_cluster
+                targets.items(), desc="Predicting targets...", leave=False, disable=True
             ):
                 target_name: str = f"{target_label:03d}" + "__" + target
                 target_names.add(target_name)
@@ -81,7 +81,7 @@ def run_experiments_organ(
                     prompters,
                     desc="Prompting with various prompters ...",
                     leave=False,
-                    disable=is_on_cluster,
+                    disable=True,
                 ):
                     filepath = results_dir / prompter.name / target_name / base_name
                     if filepath.exists() and not results_overwrite:
@@ -172,7 +172,7 @@ def run_experiments_instances(
 
     if not only_eval:
         # Loop through all image and label pairs
-        for img_path, gt_path in tqdm(imgs_gts, desc="looping through files\n", leave=True, disable=is_on_cluster):
+        for img_path, gt_path in tqdm(imgs_gts, desc="looping through files ...", leave=False, disable=is_on_cluster):
             # Loop through each organ label except the background
             filename = os.path.basename(gt_path)
             filename_wo_ext = filename.split(".")[0]  # Remove the extension
@@ -189,14 +189,14 @@ def run_experiments_instances(
                 prompters,
                 desc="Prompting with various prompters ...",
                 leave=False,
-                disable=is_on_cluster,
+                disable=True,
             ):
                 prompt_pred_path = pred_output_path / prompter.name
                 prompt_pred_path.mkdir(exist_ok=True)
 
                 # --------------- Skip prediction if the results already exist. -------------- #
                 if prompter.is_static:
-                    instance_pd_path = prompt_pred_path / instance_filename
+                    instance_pd_path = prompt_pred_path / target_name / instance_filename
 
                     if instance_pd_path.exists() and not results_overwrite:
                         # logger.debug(f"Skipping {gt_path} as it has already been processed.")
