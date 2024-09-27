@@ -4,10 +4,11 @@ seeds:
 models:
   # - "sam"
   # - "sammed2d"
-  - "medsam"
+  # - "medsam"
   # - "sammed3d"
-  # - "sammed3d_turbo"
+  - "sammed3d_turbo"
   # - "segvol"
+
 
 prompting:
   type: "interactive"
