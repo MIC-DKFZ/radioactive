@@ -23,8 +23,9 @@ def get_crop_pad_params_from_gt_or_prompt(img3D: np.ndarray, prompt: PromptStep 
     else:
         coords_T = prompt.coords.T
         crop_mask = torch.zeros_like(subject.image.data)
+        indices = (0,) + tuple(coords_T)
         # fmt: off
-        crop_mask[0, *coords_T] = 1  # Include initial 0 for the additional N axis
+        crop_mask[indices] = 1  # Include initial 0 for the additional N axis
         # fmt: on
         subject.add_image(tio.LabelMap(tensor=crop_mask, affine=subject.image.affine), image_name="crop_mask")
         crop_transform = tio.CropOrPad(mask_name="crop_mask", target_shape=(128, 128, 128))
