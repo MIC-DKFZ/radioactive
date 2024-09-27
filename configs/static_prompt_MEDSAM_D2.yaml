@@ -9,8 +9,9 @@ models:
   # - "sammed3d_turbo"
   # - "segvol"
 
-only_calc: true
+only_calc: false
 only_eval: false
+
 
 prompting:
   type: "static"
