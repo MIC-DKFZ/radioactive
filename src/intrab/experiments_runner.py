@@ -49,7 +49,7 @@ if __name__ == "__main__":
         twoD_interactive_n_points_per_slice=1,
         threeD_interactive_n_init_points=1,
         threeD_patch_size=(128, 128, 128),  # This argument is only for SAMMed3D - should be different for segvol
-        threeD_interactive_n_corrective_points = 1
+        threeD_interactive_n_corrective_points=1,
     )
 
     # Potentially move the seeds inside to not create new models each seed, but save that time.
@@ -91,7 +91,7 @@ if __name__ == "__main__":
                     exp_params,
                     wanted_prompt_styles,
                     seed=1,
-                    experiment_overwrite=None,
+                    experiment_overwrite=False,
                     debug=config.get("debug", False),
                     only_calc=config.get("only_calc", False),
                     only_eval=config.get("only_eval", False),
