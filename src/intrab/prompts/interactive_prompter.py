@@ -228,9 +228,7 @@ class twoDInteractivePrompter(InteractivePrompter):
         centroids = np.array(centroids)
 
         # No need to subset to voxels not yet segmented since these are drawn from false negatives
-
-        # Align back to RAS format and return
-        centroids = centroids[:, [2, 1, 0]]  # zyx -> xyz
+        #centroids = centroids[:, [2, 1, 0]]  # zyx -> xyz
         new_positive_promptstep = PromptStep(point_prompts=(centroids, [1] * len(centroids)))
         return new_positive_promptstep
 
@@ -299,7 +297,7 @@ class twoDInteractivePrompter(InteractivePrompter):
             ## Position fp_coords back into original 3d coordinate system
             missing_axis = np.repeat(max_fp_idx, len(fp_coords))
             fp_coords_3d = np.vstack([fp_coords[:, 0], missing_axis, fp_coords[:, 1]]).T
-            fp_coords_3d = fp_coords_3d[:, [2, 1, 0]]  # zyx -> xyz
+            #fp_coords_3d = fp_coords_3d[:, [2, 1, 0]]  # zyx -> xyz
             new_negative_promptstep = PromptStep(point_prompts=(fp_coords_3d, [0] * len(fp_coords_3d)))
 
             return new_negative_promptstep
