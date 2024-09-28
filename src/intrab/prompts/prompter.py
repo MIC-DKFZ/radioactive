@@ -90,8 +90,9 @@ class Prompter:
         """
         # Load the groundtruth in model or original spacing
         self.groundtruth_nib = groundtruth
-        self.groundtruth_model = self.inferer.get_transformed_groundtruth(groundtruth)
         self.groundtruth_orig = groundtruth.get_fdata()
+        self.groundtruth_model = self.inferer.get_transformed_groundtruth(groundtruth)
+        # SAR == z, y, x -- so we get the z dim in first axis.
         self.groundtruth_SAR = orig_to_SAR_dense(groundtruth)[0]
         if torch.cuda.is_available():
             self.groundtruth_orig = torch.from_numpy(self.groundtruth_orig).cuda().to(torch.int8)
@@ -128,7 +129,7 @@ class Prompter:
         sparse_transform = partial(
             canonical_to_orig_sparse_coords, orig_affine=self.orig_affine, orig_shape=self.orig_shape
         )
-        return transform_prompt_to_model_coords(prompt_orig, sparse_transform)
+        return transform_prompt_to_model_coords(prompt_orig, sparse_transform, transform_reverses_order=False)
 
 
 class NFGPointsPer2DSlicePrompter(Prompter, ABC):
@@ -354,7 +355,10 @@ class NPoints3DVolumePrompter(Prompter, ABC):
         self.n_points = self.n_points
 
     def get_prompt(self) -> PromptStep:
-        prompt_RAS = get_pos_clicks3D(self.groundtruth_SAR, n_clicks=self.n_points, seed=self.seed)
+        prompt_SAR = get_pos_clicks3D(self.groundtruth_SAR, n_clicks=self.n_points, seed=self.seed)
+        # 3d functions don't reverse order of coords by themselves
+        prompt_RAS = prompt_SAR
+        prompt_RAS.coords = prompt_RAS.coords[:, ::-1]
         prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
         return prompt_orig
 
@@ -378,14 +382,16 @@ class FivePoints3DVolumePrompter(NPoints3DVolumePrompter):
 class TenPoints3DVolumePrompter(NPoints3DVolumePrompter):
     n_points: int = 10
 
+
 class CentroidPoint3DVolumePrompter(Prompter):
     def get_prompt(self) -> PromptStep:
         fg_coords = np.argwhere(self.groundtruth_SAR)
         centroid_SAR = fg_coords.mean(axis=0)
         centroid_RAS = centroid_SAR[::-1][None]
-        centroid_prompt_RAS = PromptStep(point_prompts = (centroid_RAS, [1]))
+        centroid_prompt_RAS = PromptStep(point_prompts=(centroid_RAS, [1]))
         prompt_orig = self.transform_prompt_to_original_coords(centroid_prompt_RAS)
         return prompt_orig
+
 
 class NPointsFromCenterCropped3DVolumePrompter(Prompter, ABC):
     n_points: int

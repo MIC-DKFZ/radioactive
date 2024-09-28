@@ -252,20 +252,20 @@ def run_experiments_instances(
                 with logger.catch(level="WARNING"):
                     instance_evaluation(
                         instance_gt_path=gt_output_path,
-                        instance_pd_path=pred_output_path / prompter.name,
-                        output_path=pred_output_path / prompter.name,
+                        instance_pd_path=pred_output_path / prompter.name / target_name,
+                        output_path=pred_output_path / prompter.name / target_name,
                         classes_of_interest=(1,),
                         dice_threshold=1e-9,
                     )
             else:
                 for i in range(prompter.num_iterations):
-                    pred_path = pred_output_path / prompter.name / f"iter_{i}"
+                    pred_path = pred_output_path / prompter.name / target_name / f"iter_{i}"
                     if pred_path.exists():
                         with logger.catch(level="WARNING"):
                             instance_evaluation(
                                 instance_gt_path=gt_output_path,
-                                instance_pd_path=pred_output_path / prompter.name / f"iter_{i}",
-                                output_path=pred_output_path / prompter.name / f"iter_{i}",
+                                instance_pd_path=pred_output_path / prompter.name / target_name / f"iter_{i}",
+                                output_path=pred_output_path / prompter.name / target_name / f"iter_{i}",
                                 classes_of_interest=(1,),
                                 dice_threshold=1e-9,
                             )
