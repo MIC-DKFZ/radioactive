@@ -91,6 +91,7 @@ checkpoint_registry: dict[model_registry, Path] = {
     "segvol": get_model_path() / "SegVol_v1.pth",
     "sammed3d": get_model_path() / "sam_med3d.pth",
     "sammed3d_turbo": get_model_path() / "sam_med3d_turbo.pth",
+    "sam2": "",
 }
 
 
