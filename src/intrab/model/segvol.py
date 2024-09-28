@@ -22,6 +22,7 @@ import monai.transforms as transforms
 from copy import deepcopy
 
 from intrab.utils.SegVol_segment_anything import sam_model_registry
+from intrab.utils.paths import get_model_path
 from intrab.utils.transforms import resample_to_shape_sparse
 
 
@@ -57,7 +58,7 @@ class ForegroundNormalization(transforms.Transform):
         return d
 
     def normalize(self, ct_narray):
-        ct_voxel_ndarray = ct_narray.copy()
+        ct_voxel_ndarray = deepcopy(ct_narray)
         ct_voxel_ndarray = ct_voxel_ndarray.flatten()
         thred = np.mean(ct_voxel_ndarray)
         voxel_filtered = ct_voxel_ndarray[(ct_voxel_ndarray > thred)]
@@ -78,13 +79,14 @@ def load_segvol(checkpoint_path):
     if script_directory not in sys.path:
         sys.path.append(script_directory)
 
+    model_ckpt = get_model_path() / "SegVol_v1.pth"
     args = Namespace(
         test_mode=True,
         resume=checkpoint_path,
         infer_overlap=0.5,
         spatial_size=(32, 256, 256),
         patch_size=(4, 16, 16),
-        clip_ckpt="./utils/SegVol_segment_anything/clip",  # This might not work if not running the .py in the base dir
+        clip_ckpt=str(model_ckpt),  # This might not work if not running the .py in the base dir
     )
 
     gpu = 0
@@ -106,7 +108,7 @@ def load_segvol(checkpoint_path):
         ## Map model to be loaded to specified single GPU
         loc = "cuda:{}".format(gpu)
         checkpoint = torch.load(args.resume, map_location=loc)
-        segvol_model.load_state_dict(checkpoint["model"], strict=True)
+        segvol_model.load_state_dict(checkpoint["model"], strict=False)
     segvol_model.eval()
 
     return segvol_model
@@ -121,7 +123,7 @@ class SegVolInferer(Inferer):
     def __init__(self, checkpoint_path, device="cuda"):
         if device != "cuda":
             raise RuntimeError("segvol can only be run on cuda.")
-        super.__init__(checkpoint_path, device)
+        super().__init__(checkpoint_path, device)
         self.prev_mask = None
         self.inputs = None
         self.mask_threshold = 0
@@ -169,11 +171,15 @@ class SegVolInferer(Inferer):
         self.orig_affine = img_nib.affine
         self.orig_shape = img_nib.shape
 
-        self.img, self.img_zoom_out, self.start_coord, self.end_coord = self.transform_to_model_coords_dense(img_nib, is_seg=False)
+        self.img, self.img_zoom_out, self.start_coord, self.end_coord = self.transform_to_model_coords_dense(
+            img_nib, is_seg=False
+        )
         self.cropped_shape = self.img.shape
         self.loaded_image = img_path
 
-    def transform_to_model_coords_dense(self, nifti: str | Path | nib.Nifti1Image, is_seg: bool) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    def transform_to_model_coords_dense(
+        self, nifti: str | Path | nib.Nifti1Image, is_seg: bool
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         if isinstance(nifti, (str, Path)):
             nifti = load_any_to_nib(nifti)
 
@@ -194,11 +200,11 @@ class SegVolInferer(Inferer):
         item_zoom_out = self.zoom_out_transform(item)
         item["zoom_out_image"] = item_zoom_out["image"]
         image, image_zoom_out = item["image"].float().unsqueeze(0), item["zoom_out_image"].float().unsqueeze(0)
-        image_single = image[0, 0] 
-        
+        image_single = image[0, 0]
+
         img, img_zoom_out = image_single, image_zoom_out
         return img, img_zoom_out, start_coord, end_coord
-    
+
     def transform_to_model_coords_sparse(self, coords: np.ndarray) -> np.ndarray:
         # OrientationD: Do nothing
 
@@ -210,8 +216,8 @@ class SegVolInferer(Inferer):
         shape_after_dimtranspose = self.orig_shape[::-1]
 
         # Calculate padding needed for each axis
-        total_pads = np.maximum(self.spatial_size-shape_after_dimtranspose, 0 )
-        pad_starts = total_pads//2
+        total_pads = np.maximum(self.spatial_size - shape_after_dimtranspose, 0)
+        pad_starts = total_pads // 2
 
         # Adjust point coordinates for padding
         coords = coords + pad_starts
@@ -276,7 +282,7 @@ class SegVolInferer(Inferer):
         prompt = text_single, box_single, binary_cube, points_single, binary_points
         return prompt
 
-    def preprocess_img(self, img: np.ndarray): # image preprocessing is handled in set_image
+    def preprocess_img(self, img: np.ndarray):  # image preprocessing is handled in set_image
         pass
 
     @torch.no_grad()
@@ -359,7 +365,7 @@ class SegVolInferer(Inferer):
 
         return segmentation
 
-    def predict(self, prompt:PromptStep | Boxes3D , text_prompt=None, return_logits=False, prev_seg = None, seed=1):
+    def predict(self, prompt: PromptStep | Boxes3D, text_prompt=None, return_logits=False, prev_seg=None, seed=1):
         if self.loaded_image is None:
             raise RuntimeError("Must first set image!")
 
