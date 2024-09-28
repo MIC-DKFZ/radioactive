@@ -128,7 +128,7 @@ class Prompter:
         sparse_transform = partial(
             canonical_to_orig_sparse_coords, orig_affine=self.orig_affine, orig_shape=self.orig_shape
         )
-        return transform_prompt_to_model_coords(prompt_orig, sparse_transform)
+        return transform_prompt_to_model_coords(prompt_orig, sparse_transform, transform_reverses_order=False)
 
 
 class NFGPointsPer2DSlicePrompter(Prompter, ABC):

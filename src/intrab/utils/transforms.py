@@ -229,11 +229,8 @@ def _transform_boxes3d_to_model_coords(box: Boxes3D, transform_coords: Callable[
 
 
 def _transform_box_dict_to_model_coords(
-    box_dict: dict[int, np.ndarray], transform_coords: Callable[[np.ndarray], np.ndarray]
+    box_dict: dict[int, np.ndarray], transform_coords: Callable[[np.ndarray], np.ndarray], transform_reverses_order: bool,
 ) -> dict[int, np.ndarray]:
-    """
-    Note! For now, it's assumed that the image is transformed such that the image is in zyx, so the box dict is formatted as {z: x_min,y_min, x_max, y_max}
-    """
 
     box_dict_transformed = {}
     for z, xyxy in box_dict.items():
@@ -241,9 +238,12 @@ def _transform_box_dict_to_model_coords(
         max_vertex = np.array((*xyxy[2:], z))
 
         vertices_combined = np.array([transform_coords(min_vertex), transform_coords(max_vertex)])
-
+        if transform_reverses_order:
+            vertices_combined = vertices_combined[:,::-1]
+            
         min_vertex_transformed = np.min(vertices_combined, axis=0)
         max_vertex_transformed = np.max(vertices_combined, axis=0)
+        
 
         if min_vertex_transformed[2] != max_vertex_transformed[2]:
             logger.warning(
@@ -274,7 +274,7 @@ def _transform_points_prompt_to_model_coords(
 
 
 def transform_prompt_to_model_coords(
-    prompt_orig: PromptStep | Boxes3D, transform_coords: Callable[[np.ndarray], np.ndarray]
+    prompt_orig: PromptStep | Boxes3D, transform_coords: Callable[[np.ndarray], np.ndarray], transform_reverses_order: bool
 ):
     # Deal with special case: Handle 3D boxes
     if isinstance(prompt_orig, Boxes3D):
@@ -292,7 +292,7 @@ def transform_prompt_to_model_coords(
 
     # set boxes if needed
     if prompt_orig.has_boxes:
-        box_dict_model = _transform_box_dict_to_model_coords(prompt_orig.boxes, transform_coords)
+        box_dict_model = _transform_box_dict_to_model_coords(prompt_orig.boxes, transform_coords, transform_reverses_order)
         prompt_model.set_boxes(box_dict_model)
 
     # Set masks - do not transform, mask prompts should always remain in model coordinates

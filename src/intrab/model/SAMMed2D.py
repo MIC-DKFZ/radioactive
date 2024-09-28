@@ -33,6 +33,7 @@ class SAMMed2DInferer(Inferer):
     pass_prev_prompts = True  # Flag to track whether in interactive steps previous prompts should be passed, or only the mask and the new prompt
     dim = 2
     supported_prompts: Sequence[str] = ("box", "point", "mask")
+    transform_reverses_order=True
 
     def __init__(self, checkpoint_path, device):
         image_size = 256
@@ -115,7 +116,8 @@ class SAMMed2DInferer(Inferer):
         return coords
 
     def apply_boxes(self, boxes, original_size, new_size):  # Copied over from SAM-Med2D predictor_sammed.py
-        boxes = self.apply_coords(boxes.reshape(-1, 2, 2), original_size, new_size)
+        boxes = self.apply_coords(boxes.reshape(2, 3), original_size, new_size)
+        boxes = boxes[:,1:] # Remove z coord
         return boxes.reshape(-1, 4)
 
     def preprocess_img(self, img, slices_to_process):
@@ -175,8 +177,9 @@ class SAMMed2DInferer(Inferer):
 
         if prompt.has_boxes:
             for slice_index, box in prompt.boxes.items():
-                box = np.array(box)
+                box = np.array([slice_index, box[1], box[0], slice_index, box[3], box[2]]) # Transform reverses coordinates, so desired points must be given as zyx
                 box = self.apply_boxes(box, (self.H, self.W), self.new_size)
+                box = np.array([box[0,1], box[0,0], box[0,3], box[0,2]])[None] # Desperate fix attempt
                 box = torch.as_tensor(box, dtype=torch.float, device=self.device)
                 box = box[None, :]
                 preprocessed_prompts_dict[slice_index]["box"] = box.to(self.device)

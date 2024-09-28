@@ -17,6 +17,7 @@ class Inferer(ABC):
     supported_prompts: Sequence[prompt_categories] = ...
     dim: Literal[2, 3] = ...
     pass_prev_prompts: bool = ...
+    transform_reverses_order: bool = ...
 
     def __init__(self, checkpoint_path, device):
         self.device = device
@@ -81,7 +82,7 @@ class Inferer(ABC):
         return self.transform_to_model_coords_dense(nifti, is_seg=True)[0]
     
     def transform_promptstep_to_model_coords(self, prompt_orig: PromptStep) -> PromptStep:
-        return transform_prompt_to_model_coords(prompt_orig, self.transform_to_model_coords_sparse)
+        return transform_prompt_to_model_coords(prompt_orig, self.transform_to_model_coords_sparse, self.transform_reverses_order)
 
     def merge_seg_with_prev_seg(
         self, new_seg: np.ndarray, prev_seg: str | Path | nib.Nifti1Image, slices_inferred: np.ndarray
