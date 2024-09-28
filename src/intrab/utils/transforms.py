@@ -48,7 +48,7 @@ class ResizeLongestSide:
         old_h, old_w = original_size
         new_h, new_w = self.get_preprocess_shape(original_size[0], original_size[1], self.target_length)
         coords = deepcopy(coords).astype(float)
-        coords[..., 0] = coords[..., 0] * (new_w / old_w)
+        coords[..., 2] = coords[..., 2] * (new_w / old_w)
         coords[..., 1] = coords[..., 1] * (new_h / old_h)
         return coords
 
@@ -57,7 +57,8 @@ class ResizeLongestSide:
         Expects a numpy array shape Bx4. Requires the original image size
         in (H, W) format.
         """
-        boxes = self.apply_coords(boxes.reshape(-1, 2, 2), original_size)
+        boxes = self.apply_coords(boxes.reshape(2, 3), original_size)
+        boxes = boxes[:, 1:]  # Remove z coord
         return boxes.reshape(-1, 4)
 
     def apply_image_torch(self, image: torch.Tensor) -> torch.Tensor:

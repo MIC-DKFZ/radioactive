@@ -8,7 +8,6 @@ from argparse import Namespace
 import nibabel as nib
 from loguru import logger
 
-from intrab.datasets_preprocessing.conversion_utils import nrrd_to_nib
 from intrab.model.inferer import Inferer
 from intrab.prompts.prompt import PromptStep
 from intrab.utils.SAMMed3D_segment_anything.build_sam import sam_model_registry as registry_sam
@@ -36,6 +35,7 @@ class SAMInferer(Inferer):
     pass_prev_prompts = True  # In supplied demos, sam doesn't take previous prompts, but this vastly increases performance when the model greatly oversegments, for example.
     dim = 2
     supported_prompts = ("box", "point", "mask")
+    transform_reverses_order = True
 
     def __init__(self, checkpoint_path, device):
         super(SAMInferer, self).__init__(checkpoint_path, device)
@@ -93,6 +93,7 @@ class SAMInferer(Inferer):
         self.loaded_image = img_path
 
     def transform_to_model_coords_dense(self, nifti: Path | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
+        # Model space is always throughplane first (commonly the z-axis)
         data, inv_trans = orig_to_SAR_dense(nifti)
 
         return data, inv_trans
@@ -136,15 +137,13 @@ class SAMInferer(Inferer):
         self.slices_processed = slices_processed
         return slices_processed
 
-    def preprocess_prompt(self, prompt, promptstep_in_model_coord_system=False):
+    def preprocess_prompt(self, prompt:PromptStep, promptstep_in_model_coord_system=False):
         """
         Preprocessing steps:
             - Modify in line with the volume cropping
             - Modify in line with the interpolation
             - Collect into a dictionary of slice:slice prompt
         """
-        if not promptstep_in_model_coord_system:
-            prompt = transform_prompt_to_model_coords(prompt, self.transform_to_model_coords_sparse)
 
         preprocessed_prompts_dict = {
             slice_idx: {"point": None, "box": None} for slice_idx in prompt.get_slices_to_infer()
@@ -163,11 +162,12 @@ class SAMInferer(Inferer):
             # Collate
 
             for slice_idx in prompt.get_slices_to_infer():
-                slice_coords_mask = coords_resized[:, 2] == slice_idx
-                slice_coords, slice_labs = (
-                    coords_resized[slice_coords_mask, :2],
+                slice_coords_mask = coords_resized[:, 0] == slice_idx
+                slice_coords, slice_labs = ( # subset to slice
+                    coords_resized[slice_coords_mask],
                     labs[slice_coords_mask],
-                )  # Leave out z coordinate in slice_coords
+                )  
+                slice_coords = slice_coords[:, [2, 1]]  # leave out z and reorder
                 slice_coords, slice_labs = slice_coords.unsqueeze(0), slice_labs.unsqueeze(0)
                 preprocessed_prompts_dict[slice_idx]["point"] = (
                     slice_coords.to(self.device),
@@ -176,7 +176,11 @@ class SAMInferer(Inferer):
 
         if prompt.has_boxes:
             for slice_index, box in prompt.boxes.items():
+                box = np.array(
+                    [slice_index, box[1], box[0], slice_index, box[3], box[2]]
+                )
                 box = self.transform.apply_boxes(box, (self.H, self.W))
+                box = np.array([box[0, 1], box[0, 0], box[0, 3], box[0, 2]])[None]  # Desperate fix attempt
                 box = torch.as_tensor(box, dtype=torch.float, device=self.device)
                 box = box[None, :]
                 preprocessed_prompts_dict[slice_index]["box"] = box.to(self.device)
