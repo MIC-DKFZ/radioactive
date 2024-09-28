@@ -691,15 +691,11 @@ class twoD1PointUnrealisticInteractivePrompterNoPrevPoint(InteractivePrompter):
         self.n_init_points_per_slice = n_init_points_per_slice
 
     def get_initial_prompt_step(self) -> PromptStep:
-        return super().get_initial_prompt_step()
-
-    def get_initial_prompt_step(self) -> PromptStep:
-        initial_prompt_step = get_pos_clicks2D_row_major(
-            self.groundtruth_model, self.n_init_points_per_slice, self.seed
-        )
-
-        return initial_prompt_step
-
+        prompt_RAS = get_pos_clicks2D_row_major(self.groundtruth_SAR, self.n_init_points_per_slice, self.seed)
+        prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
+        prompt_model = self.inferer.transform_promptstep_to_model_coords(prompt_orig)
+        return prompt_model
+    
     def get_next_prompt_step(
         self, pred: np.ndarray, low_res_logits: np.ndarray, all_prompts: list[PromptStep]
     ) -> PromptStep:
