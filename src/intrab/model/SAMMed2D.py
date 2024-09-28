@@ -33,7 +33,7 @@ class SAMMed2DInferer(Inferer):
     pass_prev_prompts = True  # Flag to track whether in interactive steps previous prompts should be passed, or only the mask and the new prompt
     dim = 2
     supported_prompts: Sequence[str] = ("box", "point", "mask")
-    transform_reverses_order=True
+    transform_reverses_order = True
 
     def __init__(self, checkpoint_path, device):
         image_size = 256
@@ -64,6 +64,7 @@ class SAMMed2DInferer(Inferer):
         self.loaded_image = img_path
 
     def transform_to_model_coords_dense(self, nifti: str | Path | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
+        # Model space is always throughplane first (commonly the z-axis)
         data, inv_trans = orig_to_SAR_dense(nifti)
 
         return data, inv_trans
@@ -117,7 +118,7 @@ class SAMMed2DInferer(Inferer):
 
     def apply_boxes(self, boxes, original_size, new_size):  # Copied over from SAM-Med2D predictor_sammed.py
         boxes = self.apply_coords(boxes.reshape(2, 3), original_size, new_size)
-        boxes = boxes[:,1:] # Remove z coord
+        boxes = boxes[:, 1:]  # Remove z coord
         return boxes.reshape(-1, 4)
 
     def preprocess_img(self, img, slices_to_process):
@@ -155,7 +156,7 @@ class SAMMed2DInferer(Inferer):
             coords, labs = prompt.coords, prompt.labels
             coords, labs = np.array(coords).astype(float), np.array(labs).astype(int)
 
-            #coords = coords[:,[2,1,0]] # Change from ZYX to XYZ
+            # coords = coords[:,[2,1,0]] # Change from ZYX to XYZ
             coords_resized = self.apply_coords(coords, (self.H, self.W), self.new_size)
 
             # Convert to torch tensor
@@ -165,11 +166,11 @@ class SAMMed2DInferer(Inferer):
             # Collate
             for slice_idx in prompt.get_slices_to_infer():
                 slice_coords_mask = coords_resized[:, 0] == slice_idx
-                slice_coords, slice_labs = ( # Subset to slice
+                slice_coords, slice_labs = (  # Subset to slice
                     coords_resized[slice_coords_mask],
                     labs[slice_coords_mask],
-                )  
-                slice_coords = slice_coords[:,[2,1]] # leave out z and reorder
+                )
+                slice_coords = slice_coords[:, [2, 1]]  # leave out z and reorder
                 slice_coords, slice_labs = slice_coords.unsqueeze(0).to(self.device), slice_labs.unsqueeze(0).to(
                     self.device
                 )  # add batch dimension, move to device.
@@ -177,9 +178,11 @@ class SAMMed2DInferer(Inferer):
 
         if prompt.has_boxes:
             for slice_index, box in prompt.boxes.items():
-                box = np.array([slice_index, box[1], box[0], slice_index, box[3], box[2]]) # Transform reverses coordinates, so desired points must be given as zyx
+                box = np.array(
+                    [slice_index, box[1], box[0], slice_index, box[3], box[2]]
+                )  # Transform reverses coordinates, so desired points must be given as zyx
                 box = self.apply_boxes(box, (self.H, self.W), self.new_size)
-                box = np.array([box[0,1], box[0,0], box[0,3], box[0,2]])[None] # Desperate fix attempt
+                box = np.array([box[0, 1], box[0, 0], box[0, 3], box[0, 2]])[None]  # Desperate fix attempt
                 box = torch.as_tensor(box, dtype=torch.float, device=self.device)
                 box = box[None, :]
                 preprocessed_prompts_dict[slice_index]["box"] = box.to(self.device)
