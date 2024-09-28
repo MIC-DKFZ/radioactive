@@ -1,6 +1,10 @@
 import torch
 from intrab.model.SAM import SAMInferer
-from sam2.sam2_image_predictor import SAM2ImagePredictor
+
+try:
+    from sam2.sam2_image_predictor import SAM2ImagePredictor
+except ImportError:
+    sam2 = None
 
 
 class SAM2Inferer(SAMInferer):
