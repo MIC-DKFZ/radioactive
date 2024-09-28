@@ -229,7 +229,7 @@ class TextEncoder(nn.Module):
         super().__init__()
         config = CLIPTextConfig()
         self.clip_text_model = CLIPTextModel(config)
-        self.tokenizer = AutoTokenizer.from_pretrained(clip_ckpt)
+        self.tokenizer = AutoTokenizer.from_pretrained("BAAI/SegVol")
         self.dim_align = nn.Linear(512, 768)
         # freeze text encoder
         for param in self.clip_text_model.parameters():
