@@ -103,20 +103,28 @@ class ResizeLongestSide:
 
 
 def orig_to_SAR_dense(nifti: Path | nib.Nifti1Image) -> tuple[np.ndarray, Callable[[np.ndarray], nib.Nifti1Image]]:
+    """ """
+
     if isinstance(nifti, (str, Path)):
         nifti: nib.Nifti1Image = load_any_to_nib(nifti)
     orientation_old = io_orientation(nifti.affine)
 
     if nib.aff2axcodes(nifti.affine) != ("R", "A", "S"):
         nifti = nib.as_closest_canonical(nifti)
+    # Get orientation in canonical space
     orientation_new = io_orientation(nifti.affine)
+    # Create transform back to original image space given the two orientations.
     orientation_transform = ornt_transform(orientation_new, orientation_old)
+    # Get the data and re-orient to
     data = nifti.get_fdata()
     data = data.transpose(2, 1, 0)  # Reorient to zyx
 
     def inv_trans(arr: np.ndarray):
+        # Make z y x - x y z again
         arr = arr.transpose(2, 1, 0)
-        arr_nib = nib.Nifti1Image(arr, nifti.affine)
+        # Create image with original RAS affine (xyz affine)
+        arr_nib = nib.Nifti1Image(arr, nifti.affine, nifti.header)
+        # Then revert to the actual original spacing we had before any transformations.
         arr_orig_ori = arr_nib.as_reoriented(orientation_transform)
         return arr_orig_ori
 
@@ -147,7 +155,7 @@ def orig_to_canonical_sparse_coords(coords: np.ndarray, orig_affine: np.ndarray,
     if was_1d:
         coords = coords[0]
 
-    coords = coords[::-1] # Not sure why this was necessary, but it seemed to be.
+    coords = coords[::-1]  # Not sure why this was necessary, but it seemed to be.
 
     return coords
 
@@ -229,7 +237,9 @@ def _transform_boxes3d_to_model_coords(box: Boxes3D, transform_coords: Callable[
 
 
 def _transform_box_dict_to_model_coords(
-    box_dict: dict[int, np.ndarray], transform_coords: Callable[[np.ndarray], np.ndarray], transform_reverses_order: bool,
+    box_dict: dict[int, np.ndarray],
+    transform_coords: Callable[[np.ndarray], np.ndarray],
+    transform_reverses_order: bool,
 ) -> dict[int, np.ndarray]:
 
     box_dict_transformed = {}
@@ -239,11 +249,10 @@ def _transform_box_dict_to_model_coords(
 
         vertices_combined = np.array([transform_coords(min_vertex), transform_coords(max_vertex)])
         if transform_reverses_order:
-            vertices_combined = vertices_combined[:,::-1]
-            
+            vertices_combined = vertices_combined[:, ::-1]
+
         min_vertex_transformed = np.min(vertices_combined, axis=0)
         max_vertex_transformed = np.max(vertices_combined, axis=0)
-        
 
         if min_vertex_transformed[2] != max_vertex_transformed[2]:
             logger.warning(
@@ -274,7 +283,9 @@ def _transform_points_prompt_to_model_coords(
 
 
 def transform_prompt_to_model_coords(
-    prompt_orig: PromptStep | Boxes3D, transform_coords: Callable[[np.ndarray], np.ndarray], transform_reverses_order: bool
+    prompt_orig: PromptStep | Boxes3D,
+    transform_coords: Callable[[np.ndarray], np.ndarray],
+    transform_reverses_order: bool,
 ):
     # Deal with special case: Handle 3D boxes
     if isinstance(prompt_orig, Boxes3D):
@@ -292,7 +303,9 @@ def transform_prompt_to_model_coords(
 
     # set boxes if needed
     if prompt_orig.has_boxes:
-        box_dict_model = _transform_box_dict_to_model_coords(prompt_orig.boxes, transform_coords, transform_reverses_order)
+        box_dict_model = _transform_box_dict_to_model_coords(
+            prompt_orig.boxes, transform_coords, transform_reverses_order
+        )
         prompt_model.set_boxes(box_dict_model)
 
     # Set masks - do not transform, mask prompts should always remain in model coordinates
