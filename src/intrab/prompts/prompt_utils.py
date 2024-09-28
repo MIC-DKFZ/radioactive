@@ -283,6 +283,7 @@ def get_nearest_fg_point(point, binary_mask):
 #     largestCC = labels == np.argmax(np.bincount(labels.flat)[1:]) + 1
 #     return largestCC.astype(int)
 
+
 def get_n_largest_CCs(segmentation: np.ndarray, n=1):
     labels = label(segmentation)
     assert labels.max() != 0  # assume at least 1 CC
@@ -290,13 +291,14 @@ def get_n_largest_CCs(segmentation: np.ndarray, n=1):
     component_sizes = np.bincount(labels.flat)[1:]  # Ignore background (index 0)
 
     # Get the indices of the n largest components
-    largest_components_indices = np.argsort(component_sizes)[-n:] + 1  # Add 1 to match the labels (because of background)
+    largest_components_indices = (
+        np.argsort(component_sizes)[-n:] + 1
+    )  # Add 1 to match the labels (because of background)
 
     # Create a list of binary masks for the n largest connected components
     largest_CCs = [(labels == i).astype(int) for i in largest_components_indices]
 
     return largest_CCs
-
 
 
 # def get_fg_point_from_cc_center_old(gt_slice: np.ndarray) -> np.ndarray:
@@ -312,6 +314,7 @@ def get_n_largest_CCs(segmentation: np.ndarray, n=1):
 #     # ToDo: verify x,y are not flipped.
 #     nearest_fg_point = get_nearest_fg_point(fg_mean_indices, largest_cc)
 #     return nearest_fg_point
+
 
 def get_fg_point_from_cc_center(gt_slice: np.ndarray) -> np.ndarray:
     """
@@ -448,6 +451,7 @@ def get_fg_points_from_slice(slice: np.ndarray, n_clicks: int, slice_index: int,
 
     return pos_coords
 
+
 def get_center_point_from_slice(slice: np.ndarray, slice_index: int):
     largest_cc = get_n_largest_CCs(slice)[0]
     bbox_min, bbox_max = get_2d_bbox_of_gt_slice(largest_cc)
@@ -456,9 +460,10 @@ def get_center_point_from_slice(slice: np.ndarray, slice_index: int):
     nearest_fg_point = get_nearest_fg_point(slice_fg_center, largest_cc)
     coords_3d = np.array([slice_index, nearest_fg_point[0], nearest_fg_point[1]])
 
-    coords_3d = coords_3d[::-1][None]# zyx-> xyz and format
+    coords_3d = coords_3d[::-1][None]  # zyx-> xyz and format
 
     return coords_3d
+
 
 def get_seed_boxes(gt, n) -> PromptStep:
     z_indices = np.where(np.any(gt, axis=(1, 2)))[0]
@@ -520,9 +525,8 @@ def propagate_point(
 ) -> tuple[np.ndarray, np.ndarray]:
     # Seed prompt is supplied in orig coordinates, need to transform to model coordinates so that the later prompts are all consistent
     seed_prompt = inferer.transform_promptstep_to_model_coords(seed_prompt_orig)
-
     # assert len(seed_prompt.coords) == 1, "Seed point must contain only one point prompt."
-    start_slice = seed_prompt.coords[0][-1]
+    start_slice = seed_prompt.coords[0][0]
     # The todo slices INCLUDES the seed slice. This is different from the box propagation.
     slices_todo = get_slices_to_do(start_slice, slices_to_infer, upwards, include_start=True, include_end=False)
 
@@ -537,12 +541,12 @@ def propagate_point(
         #     current_seg[slice_id], n_clicks=n_clicks, slice_index=slice_id, seed=seed
         # )
         # Don't sample randomly. Instead get from center
-        coords_xyz = get_center_point_from_slice(current_seg[slice_id], slice_index = slice_id)
+        coords_xyz = get_center_point_from_slice(current_seg[slice_id], slice_index=slice_id)
         coords_xyz[:, -1] = increment(coords_xyz[:, -1], upwards)  # Increment the z-coordinate
         labels = np.ones_like(coords_xyz[:, 0])
-        all_coords.append(coords_xyz)
+        all_coords.append(coords_xyz[:, ::-1])
         all_labels.append(labels)
-        current_prompt = PromptStep(Points(coords=coords_xyz, labels=labels))
+        current_prompt = PromptStep(Points(coords=coords_xyz[:, ::-1], labels=labels))
     return np.concatenate(all_coords, axis=0), np.concatenate(all_labels, axis=0)
 
 
