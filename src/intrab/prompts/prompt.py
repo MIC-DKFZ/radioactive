@@ -131,7 +131,8 @@ class PromptStep:
     ) -> np.ndarray:
         points_zs = set()
         if self.coords is not None:
-            points_zs = set(self.coords[:, 2])
+            points_zs = set(self.coords[:, 0])
+            # points_zs = set(self.coords[:, 2])
         boxes_zs = set()
         if self.boxes is not None:
             boxes_zs = set(self.boxes.keys())

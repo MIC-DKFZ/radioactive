@@ -109,7 +109,7 @@ class SAMMed2DInferer(Inferer):
         old_h, old_w = original_size
         new_h, new_w = new_size
         coords = deepcopy(coords).astype(float)
-        coords[..., 0] = coords[..., 0] * (new_w / old_w)
+        coords[..., 2] = coords[..., 2] * (new_w / old_w)
         coords[..., 1] = coords[..., 1] * (new_h / old_h)
 
         return coords
@@ -153,7 +153,7 @@ class SAMMed2DInferer(Inferer):
             coords, labs = prompt.coords, prompt.labels
             coords, labs = np.array(coords).astype(float), np.array(labs).astype(int)
 
-            # coords = coords[:,[2,1,0]] # Change from ZYX to XYZ
+            #coords = coords[:,[2,1,0]] # Change from ZYX to XYZ
             coords_resized = self.apply_coords(coords, (self.H, self.W), self.new_size)
 
             # Convert to torch tensor
@@ -162,11 +162,12 @@ class SAMMed2DInferer(Inferer):
 
             # Collate
             for slice_idx in prompt.get_slices_to_infer():
-                slice_coords_mask = coords_resized[:, 2] == slice_idx
-                slice_coords, slice_labs = (
-                    coords_resized[slice_coords_mask, :2],
+                slice_coords_mask = coords_resized[:, 0] == slice_idx
+                slice_coords, slice_labs = ( # Subset to slice
+                    coords_resized[slice_coords_mask],
                     labs[slice_coords_mask],
-                )  # Leave out z coordinate in slice_coords
+                )  
+                slice_coords = slice_coords[:,[2,1]] # leave out z and reorder
                 slice_coords, slice_labs = slice_coords.unsqueeze(0).to(self.device), slice_labs.unsqueeze(0).to(
                     self.device
                 )  # add batch dimension, move to device.

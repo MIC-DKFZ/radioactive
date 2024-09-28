@@ -147,6 +147,8 @@ def orig_to_canonical_sparse_coords(coords: np.ndarray, orig_affine: np.ndarray,
     if was_1d:
         coords = coords[0]
 
+    coords = coords[::-1] # Not sure why this was necessary, but it seemed to be.
+
     return coords
 
 
