@@ -30,7 +30,6 @@ class Inferer(ABC):
         self.orig_shape: tuple[int, int, int] = None
         self.img: np.ndarray = None
         self.new_shape: tuple[int, int, int] = None
-        self.inv_trans_dense: Callable[[np.ndarray], nib.Nifti1Image] = None
 
     @abstractmethod
     def load_model(self, checkpoint_path, device):

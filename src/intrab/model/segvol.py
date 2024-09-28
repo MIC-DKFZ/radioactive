@@ -216,7 +216,7 @@ class SegVolInferer(Inferer):
         shape_after_dimtranspose = self.orig_shape[::-1]
 
         # Calculate padding needed for each axis
-        total_pads = np.maximum(self.spatial_size - shape_after_dimtranspose, 0)
+        total_pads = np.maximum(np.array(self.spatial_size) - np.array(shape_after_dimtranspose), 0)
         pad_starts = total_pads // 2
 
         # Adjust point coordinates for padding
@@ -228,7 +228,7 @@ class SegVolInferer(Inferer):
         # 5. Resized (if applicable)
         zoomed_out_coords = resample_to_shape_sparse(coords, self.cropped_shape, self.spatial_size, round=True)
 
-        return coords, zoomed_out_coords
+        return zoomed_out_coords
 
     def preprocess_prompt(self, prompt, prompt_type, text_prompt=None):
         """
@@ -351,21 +351,27 @@ class SegVolInferer(Inferer):
             - TODO
         """
         if not return_logits:
-            mask = (mask > 0).to(torch.uint8)
+            mask = (mask > 0).cpu().numpy().astype(np.uint8)
+        
+
+        return mask
+
+    def inv_trans_dense(self, mask: np.ndarray) -> nib.Nifti1Image:
         # Invert transform
-        mask = mask.transpose(-1, -3)
+        mask = np.transpose(mask, (2, 1, 0))
         start_coord, end_coord = deepcopy(self.start_coord), deepcopy(self.end_coord)
         start_coord[-1], start_coord[-3] = start_coord[-3], start_coord[-1]
         end_coord[-1], end_coord[-3] = end_coord[-3], end_coord[-1]
-        segmentation = torch.zeros(self.orig_shape)
+        segmentation = np.zeros(self.orig_shape)
         segmentation[start_coord[0] : end_coord[0], start_coord[1] : end_coord[1], start_coord[2] : end_coord[2]] = (
             mask
         )
-        segmentation = segmentation.cpu().numpy().astype(np.uint8)  # Check if .cpu is necessary
+
+        segmentation = nib.Nifti1Image(segmentation, self.orig_affine)
 
         return segmentation
 
-    def predict(self, prompt: PromptStep | Boxes3D, text_prompt=None, return_logits=False, prev_seg=None, seed=1):
+    def predict(self, prompt: PromptStep | Boxes3D, text_prompt=None, return_logits=False, prev_seg=None, promptstep_in_model_coord_system=False, seed=1):
         if self.loaded_image is None:
             raise RuntimeError("Must first set image!")
 
@@ -384,13 +390,19 @@ class SegVolInferer(Inferer):
         image_single, image_single_resize = self.img, self.img_zoom_out
 
         prompt = deepcopy(prompt)
+        if not promptstep_in_model_coord_system:
+            prompt = self.transform_promptstep_to_model_coords(prompt)
         prompt = self.preprocess_prompt(prompt, prompt_type, text_prompt)
 
         res = self.segment(image_single, image_single_resize, prompt, prompt_type)
 
         segmentation = self.postprocess_mask(res[-1], return_logits)
 
+        segmentation_model_arr = segmentation
+        
         # Turn into Nifti object in original space
-        segmentation = nib.Nifti1Image(segmentation, self.orig_affine)
+        segmentation_orig_nib = self.inv_trans_dense(segmentation)
 
-        return segmentation
+        low_res_logits = None # low_res_logits aren't easily accessed nor used since segvol isn't interactive
+
+        return segmentation_orig_nib, low_res_logits, segmentation_model_arr 
