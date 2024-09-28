@@ -12,6 +12,7 @@ from intrab.utils.paths import get_MITK_path
 import os
 import nibabel as nib
 import numpy as np
+from toinstance import InstanceNrrd
 
 
 class TemporaryFileHandler:
@@ -57,11 +58,17 @@ def maybe_download_mitk():
 
 def nib_to_nrrd(nib_image: nib.Nifti1Image) -> tuple[np.ndarray, dict]:
     """Converts a nibabel image to an nrrd array."""
-    with TemporaryDirectory() as temp_dir:
-        nib.save(nib_image, temp_dir + "/tmp.nii.gz")
-        image = sitk.ReadImage(temp_dir + "/tmp.nii.gz")
-        sitk.WriteImage(image, temp_dir + "/tmp.nrrd")
-        nrrd_arr, nrrd_header = nrrd.read(temp_dir + "/tmp.nrrd")
+    if isinstance(nib_image, nib.Nifti1Image):
+        with TemporaryDirectory() as temp_dir:
+            nib.save(nib_image, temp_dir + "/tmp.nii.gz")
+            image = sitk.ReadImage(temp_dir + "/tmp.nii.gz")
+            sitk.WriteImage(image, temp_dir + "/tmp.nrrd")
+            nrrd_arr, nrrd_header = nrrd.read(temp_dir + "/tmp.nrrd")
+    elif isinstance(nib_image, InstanceNrrd):
+        return nib_image.array, nib_image.header
+    elif isinstance(nib_image, tuple):
+        # assume it's a nrrd
+        return nib_image  # should be tuple anyway
     return nrrd_arr, nrrd_header
 
 
