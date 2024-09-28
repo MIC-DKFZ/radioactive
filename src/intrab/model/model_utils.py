@@ -69,9 +69,9 @@ from intrab.model.SAMMed2D import SAMMed2DInferer
 from intrab.model.MedSAM import MedSAMInferer
 from intrab.model.SAMMed3D import SAMMed3DInferer
 from intrab.model.segvol import SegVolInferer
+from intrab.model.SAM2 import SAM2Inferer
 
-
-model_registry = Literal["sam", "sammed2d", "sammed3d", "sammed3d_turbo", "medsam", "segvol"]
+model_registry = Literal["sam", "sam2", "sammed2d", "sammed3d", "sammed3d_turbo", "medsam", "segvol"]
 
 inferer_registry: dict[model_registry, Type[Inferer]] = {
     "sam": SAMInferer,
@@ -80,6 +80,7 @@ inferer_registry: dict[model_registry, Type[Inferer]] = {
     "sammed3d": SAMMed3DInferer,
     "sammed3d_turbo": SAMMed3DInferer,
     "segvol": SegVolInferer,
+    "sam2": SAM2Inferer,
 }
 
 
@@ -206,12 +207,7 @@ def get_wanted_supported_prompters(
                     )
                 )
             if "BoxPer2dSliceFrom3DBoxPrompter" in wanted_prompt_styles:
-                prompters.append(
-                    BoxPer2dSliceFrom3DBoxPrompter(
-                        inferer, 
-                        seed
-                    )
-                )
+                prompters.append(BoxPer2dSliceFrom3DBoxPrompter(inferer, seed))
             if "ThreeBoxInterpolationPrompter" in wanted_prompt_styles:
                 prompters.append(
                     ThreeBoxInterpolationPrompter(
@@ -234,12 +230,7 @@ def get_wanted_supported_prompters(
                     )
                 )
             if "BoxPropagationPrompter" in wanted_prompt_styles:
-                prompters.append(
-                    BoxPropagationPrompter(
-                        inferer, 
-                        seed
-                    )
-                )
+                prompters.append(BoxPropagationPrompter(inferer, seed))
 
         if "point" in inferer.supported_prompts and "mask" in inferer.supported_prompts:
             if "OnePointPer2DSliceInteractivePrompterNoPrevPoint" in wanted_prompt_styles:
@@ -328,7 +319,7 @@ def get_wanted_supported_prompters(
                 )
             if "twoD1PointUnrealisticInteractivePrompterPrevPoint" in wanted_prompt_styles:
                 prompters.append(
-                        twoD1PointUnrealisticInteractivePrompterWithPrevPoint(
+                    twoD1PointUnrealisticInteractivePrompterWithPrevPoint(
                         inferer,
                         seed,
                         dof_bound=pro_conf.interactive_dof_bound,
@@ -344,26 +335,46 @@ def get_wanted_supported_prompters(
                 prompters.append(CentroidPoint3DVolumePrompter(inferer, seed))
             if "OnePoints3DVolumePrompter" in wanted_prompt_styles:
                 prompters.append(OnePoints3DVolumePrompter(inferer, seed))
-            if "TwoPoints3DVolumePrompter" in wanted_prompt_styles and not isinstance(inferer, SAMMed3DInferer): 
+            if "TwoPoints3DVolumePrompter" in wanted_prompt_styles and not isinstance(inferer, SAMMed3DInferer):
                 prompters.append(TwoPoints3DVolumePrompter(inferer, seed))
-            if "ThreePoints3DVolumePrompter" in wanted_prompt_styles and not isinstance(inferer, SAMMed3DInferer): 
+            if "ThreePoints3DVolumePrompter" in wanted_prompt_styles and not isinstance(inferer, SAMMed3DInferer):
                 prompters.append(ThreePoints3DVolumePrompter(inferer, seed))
-            if "FivePoints3DVolumePrompter" in wanted_prompt_styles and not isinstance(inferer, SAMMed3DInferer): 
+            if "FivePoints3DVolumePrompter" in wanted_prompt_styles and not isinstance(inferer, SAMMed3DInferer):
                 prompters.append(FivePoints3DVolumePrompter(inferer, seed))
-            if "TenPoints3DVolumePrompter" in wanted_prompt_styles and not isinstance(inferer, SAMMed3DInferer): 
+            if "TenPoints3DVolumePrompter" in wanted_prompt_styles and not isinstance(inferer, SAMMed3DInferer):
                 prompters.append(TenPoints3DVolumePrompter(inferer, seed))
 
             if "OnePointsFromCenterCropped3DVolumePrompter" in wanted_prompt_styles:
-                prompters.append(OnePointsFromCenterCropped3DVolumePrompter(inferer, seed, pro_conf.twoD_n_slice_point_interpolation, pro_conf.threeD_patch_size))
-            if "TwoPointsFromCenterCropped3DVolumePrompter" in wanted_prompt_styles: 
-                prompters.append(TwoPointsFromCenterCropped3DVolumePrompter(inferer, seed, pro_conf.twoD_n_slice_point_interpolation, pro_conf.threeD_patch_size))
-            if "ThreePointsFromCenterCropped3DVolumePrompter" in wanted_prompt_styles: 
-                prompters.append(ThreePointsFromCenterCropped3DVolumePrompter(inferer, seed, pro_conf.twoD_n_slice_point_interpolation, pro_conf.threeD_patch_size))
-            if "FivePointsFromCenterCropped3DVolumePrompter" in wanted_prompt_styles: 
-                prompters.append(FivePointsFromCenterCropped3DVolumePrompter(inferer, seed, pro_conf.twoD_n_slice_point_interpolation, pro_conf.threeD_patch_size))
-            if "TenPointsFromCenterCropped3DVolumePrompter" in wanted_prompt_styles: 
-                prompters.append(TenPointsFromCenterCropped3DVolumePrompter(inferer, seed, pro_conf.twoD_n_slice_point_interpolation, pro_conf.threeD_patch_size))
-            
+                prompters.append(
+                    OnePointsFromCenterCropped3DVolumePrompter(
+                        inferer, seed, pro_conf.twoD_n_slice_point_interpolation, pro_conf.threeD_patch_size
+                    )
+                )
+            if "TwoPointsFromCenterCropped3DVolumePrompter" in wanted_prompt_styles:
+                prompters.append(
+                    TwoPointsFromCenterCropped3DVolumePrompter(
+                        inferer, seed, pro_conf.twoD_n_slice_point_interpolation, pro_conf.threeD_patch_size
+                    )
+                )
+            if "ThreePointsFromCenterCropped3DVolumePrompter" in wanted_prompt_styles:
+                prompters.append(
+                    ThreePointsFromCenterCropped3DVolumePrompter(
+                        inferer, seed, pro_conf.twoD_n_slice_point_interpolation, pro_conf.threeD_patch_size
+                    )
+                )
+            if "FivePointsFromCenterCropped3DVolumePrompter" in wanted_prompt_styles:
+                prompters.append(
+                    FivePointsFromCenterCropped3DVolumePrompter(
+                        inferer, seed, pro_conf.twoD_n_slice_point_interpolation, pro_conf.threeD_patch_size
+                    )
+                )
+            if "TenPointsFromCenterCropped3DVolumePrompter" in wanted_prompt_styles:
+                prompters.append(
+                    TenPointsFromCenterCropped3DVolumePrompter(
+                        inferer, seed, pro_conf.twoD_n_slice_point_interpolation, pro_conf.threeD_patch_size
+                    )
+                )
+
         if "box" in inferer.supported_prompts:
             if "Box3DVolumePrompter" in wanted_prompt_styles:
                 prompters.append(Box3DVolumePrompter(inferer, seed))
@@ -402,7 +413,7 @@ def get_wanted_supported_prompters(
                         pro_conf.interactive_perf_bound,
                         pro_conf.interactive_max_iter,
                         pro_conf.threeD_patch_size,
-                        pro_conf.twoD_n_slice_point_interpolation
+                        pro_conf.twoD_n_slice_point_interpolation,
                     )
                 )
             if "threeDCroppedFromCenterInteractivePrompterWithPrevPoint" in wanted_prompt_styles:
@@ -415,7 +426,7 @@ def get_wanted_supported_prompters(
                         pro_conf.interactive_perf_bound,
                         pro_conf.interactive_max_iter,
                         pro_conf.threeD_patch_size,
-                        pro_conf.twoD_n_slice_point_interpolation
+                        pro_conf.twoD_n_slice_point_interpolation,
                     )
                 )
             if "threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint" in wanted_prompt_styles:
@@ -430,7 +441,7 @@ def get_wanted_supported_prompters(
                         pro_conf.threeD_patch_size,
                         pro_conf.twoD_n_slice_point_interpolation,
                         pro_conf.threeD_interactive_n_corrective_points,
-                        pro_conf.twoD_interactive_n_cc
+                        pro_conf.twoD_interactive_n_cc,
                     )
                 )
             if "threeDCroppedFromCenterAnd2dAlgoInteractivePrompterWithPrevPoint" in wanted_prompt_styles:
@@ -445,7 +456,7 @@ def get_wanted_supported_prompters(
                         pro_conf.threeD_patch_size,
                         pro_conf.twoD_n_slice_point_interpolation,
                         pro_conf.threeD_interactive_n_corrective_points,
-                        pro_conf.twoD_interactive_n_cc
+                        pro_conf.twoD_interactive_n_cc,
                     )
                 )
     else:
