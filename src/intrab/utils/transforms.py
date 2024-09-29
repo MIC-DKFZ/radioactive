@@ -150,10 +150,10 @@ class SAM2Transforms(nn.Module):
             assert orig_hw is not None
             h, w = orig_hw
             coords = coords.clone()
-            coords[..., 2] = coords[..., 2] / w 
+            coords[..., 0] = coords[..., 0] / w 
             coords[..., 1] = coords[..., 1] / h
 
-        coords = coords * self.resolution  # unnormalize coords # Tim: I don't thinkk this will return coordinates in the range [0,1].....
+        coords[1:] = coords[1:] * self.resolution  # unnormalize coords # Tim: I don't thinkk this will return coordinates in the range [0,1].....
         return coords
 
     def transform_boxes(
@@ -163,9 +163,8 @@ class SAM2Transforms(nn.Module):
         Expects a tensor of shape Bx4. The coordinates can be in absolute image or normalized coordinates,
         if the coords are in absolute image coordinates, normalize should be set to True and original image size is required.
         """
-        boxes = self.transform_coords(boxes.reshape(2, 3), normalize, orig_hw)
-        boxes = boxes[:, 1:]  # Remove z coord
-        return boxes.reshape(-1, 4)
+        boxes = self.transform_coords(boxes.reshape(-1, 2, 2), normalize, orig_hw)
+        return boxes
 
     def postprocess_masks(self, masks: torch.Tensor, orig_hw) -> torch.Tensor:
         """
