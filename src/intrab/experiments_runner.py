@@ -49,6 +49,7 @@ if __name__ == "__main__":
         twoD_interactive_n_points_per_slice=1,
         threeD_interactive_n_init_points=1,
         threeD_interactive_n_corrective_points=1,
+        threeD_patch_size=(128, 128, 128)
     )
 
     # Potentially move the seeds inside to not create new models each seed, but save that time.
@@ -71,10 +72,6 @@ if __name__ == "__main__":
             imgs_gts: list[tuple[str, str]] = get_img_gts(dataset_root)
             logger.info(f"Found {len(imgs_gts)} image-groundtruth pairs")
             for model_name in config["models"]:
-                if model_name == "sammed3d" or model_name == "sammed3d_turbo":
-                    exp_params.threeD_patch_size=(128, 128, 128)
-                if model_name == "segvol":
-                    exp_params.threeD_patch_size=None
                 # Get dataset and the corresponding img, groundtruth Pairs
                 results_path = Path(get_results_path() / dataset_name / model_name)
                 # Load the model
