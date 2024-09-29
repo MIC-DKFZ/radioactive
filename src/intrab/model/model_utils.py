@@ -3,6 +3,7 @@ from typing import Literal, Type, Union
 
 from loguru import logger
 
+from intrab.model.SAMnorm import SAMNormInferer
 from intrab.prompts.prompt_hparams import PromptConfig
 from intrab.prompts.prompter import (
     Alternating10PointsPer2DSlicePrompter,
@@ -71,7 +72,7 @@ from intrab.model.SAMMed3D import SAMMed3DInferer
 from intrab.model.segvol import SegVolInferer
 from intrab.model.SAM2 import SAM2Inferer
 
-model_registry = Literal["sam", "sam2", "sammed2d", "sammed3d", "sammed3d_turbo", "medsam", "segvol"]
+model_registry = Literal["sam", "sam2", "sammed2d", "sammed3d", "sammed3d_turbo", "medsam", "segvol", "samnorm"]
 
 inferer_registry: dict[model_registry, Type[Inferer]] = {
     "sam": SAMInferer,
@@ -81,6 +82,7 @@ inferer_registry: dict[model_registry, Type[Inferer]] = {
     "sammed3d_turbo": SAMMed3DInferer,
     "segvol": SegVolInferer,
     "sam2": SAM2Inferer,
+    "samnorm": SAMNormInferer,
 }
 
 
@@ -92,6 +94,7 @@ checkpoint_registry: dict[model_registry, Path] = {
     "sammed3d": get_model_path() / "sam_med3d.pth",
     "sammed3d_turbo": get_model_path() / "sam_med3d_turbo.pth",
     "sam2": "",
+    "samnorm": get_model_path() / "sam_vit_h_4b8939.pth",
 }
 
 
