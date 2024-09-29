@@ -4,13 +4,13 @@ from typing import Optional, Tuple
 
 from loguru import logger
 from intrab.datasets_preprocessing.conversion_utils import load_any_to_nib
-from intrab.model.SAM import SAMInferer
+from intrab.model.SAM2 import SAM2Inferer
 from intrab.model.inferer import Inferer
 from intrab.prompts.prompt import PromptStep
 import numpy as np
 
 
-class SAM2NormInferer(SAMInferer):
+class SAM2NormInferer(SAM2Inferer):
     def preprocess_img(self, img, slices_to_process):
         # Perform slicewise processing and collect back into a volume at the end
         slices_processed = {}
