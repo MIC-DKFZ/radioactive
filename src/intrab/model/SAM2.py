@@ -25,6 +25,7 @@ import numpy as np
 
 from intrab.utils.transforms import SAM2Transforms, orig_to_SAR_dense, orig_to_canonical_sparse_coords
 
+
 def _load_checkpoint(model, ckpt_path):
     if ckpt_path is not None:
         sd = torch.load(ckpt_path, map_location="cpu")["model"]
@@ -86,11 +87,16 @@ def build_sam2_hf(model_id, **kwargs):
 
 
 class SAM2Inferer(Inferer):
+    pass_prev_prompts = True  # In supplied demos, sam doesn't take previous prompts, but this vastly increases performance when the model greatly oversegments, for example.
+    dim = 2
+    supported_prompts = ("box", "point", "mask")
+    transform_reverses_order = True
+
     def __init__(self, checkpoint_path, device):
         super().__init__(checkpoint_path, device)
-        mask_threshold = 0.0 # Match sam2_image_predictor.py values
-        max_hole_area = 0.0 #  Match sam2_image_predictor.py values
-        max_sprinkle_area = 0.0 #  Match sam2_image_predictor.py values
+        mask_threshold = 0.0  # Match sam2_image_predictor.py values
+        max_hole_area = 0.0  #  Match sam2_image_predictor.py values
+        max_sprinkle_area = 0.0  #  Match sam2_image_predictor.py values
         self._transforms = SAM2Transforms(
             resolution=self.model.image_size,
             mask_threshold=mask_threshold,
@@ -119,7 +125,9 @@ class SAM2Inferer(Inferer):
             slice = np.round((slice - slice.min()) / (slice.max() - slice.min() + 1e-10) * 255.0).astype(
                 np.uint8
             )  # Change to 0-255 scale
-            slice = np.repeat(slice[..., None], repeats=3, axis=-1)  # Add channel dimension to make it RGB-like -> now HWC
+            slice = np.repeat(
+                slice[..., None], repeats=3, axis=-1
+            )  # Add channel dimension to make it RGB-like -> now HWC
 
             input_slice = self._transforms(slice)
             input_slice = input_slice[None, ...].to(self.device)
@@ -148,7 +156,8 @@ class SAM2Inferer(Inferer):
 
     def transform_to_model_coords_sparse(self, coords: np.ndarray) -> np.ndarray:
         return orig_to_canonical_sparse_coords(coords, self.orig_affine, self.orig_shape)
-    def get_features(self, preprocessed_slice:torch.Tensor) -> dict:
+
+    def get_features(self, preprocessed_slice: torch.Tensor) -> dict:
         backbone_out = self.model.forward_image(preprocessed_slice)
         _, vision_feats, _, _ = self.model._prepare_backbone_features(backbone_out)
         # Add no_mem_embed, which is added to the lowest rest feat. map during training on videos
@@ -161,19 +170,13 @@ class SAM2Inferer(Inferer):
         ][::-1]
         _features = {"image_embed": feats[-1], "high_res_feats": feats[:-1]}
         return _features
-    
-    def _prep_prompts(
-        self, point_coords, point_labels, box, mask_logits, normalize_coords, img_idx=-1
-    ):
+
+    def _prep_prompts(self, point_coords, point_labels, box, mask_logits, normalize_coords, img_idx=-1):
 
         unnorm_coords, labels, unnorm_box, mask_input = None, None, None, None
         if point_coords is not None:
-            assert (
-                point_labels is not None
-            ), "point_labels must be supplied if point_coords is supplied."
-            point_coords = torch.as_tensor(
-                point_coords, dtype=torch.float, device=self.device
-            )
+            assert point_labels is not None, "point_labels must be supplied if point_coords is supplied."
+            point_coords = torch.as_tensor(point_coords, dtype=torch.float, device=self.device)
             unnorm_coords = self._transforms.transform_coords(
                 point_coords, normalize=normalize_coords, orig_hw=self._orig_hw
             )
@@ -186,14 +189,12 @@ class SAM2Inferer(Inferer):
                 box, normalize=normalize_coords, orig_hw=self._orig_hw
             )  # Bx2x2
         if mask_logits is not None:
-            mask_input = torch.as_tensor(
-                mask_logits, dtype=torch.float, device=self.device
-            )
+            mask_input = torch.as_tensor(mask_logits, dtype=torch.float, device=self.device)
             if len(mask_input.shape) == 3:
                 mask_input = mask_input[None, :, :, :]
         return mask_input, unnorm_coords, labels, unnorm_box
-    
-    def preprocess_prompt(self, prompt:PromptStep) -> dict:
+
+    def preprocess_prompt(self, prompt: PromptStep) -> dict:
         preprocessed_prompts_dict = {
             slice_idx: {"point": None, "box": None} for slice_idx in prompt.get_slices_to_infer()
         }
@@ -206,10 +207,10 @@ class SAM2Inferer(Inferer):
 
             for slice_idx in prompt.get_slices_to_infer():
                 slice_coords_mask = coords[:, 0] == slice_idx
-                slice_coords, slice_labs = ( # subset to slice
+                slice_coords, slice_labs = (  # subset to slice
                     coords[slice_coords_mask],
                     labs[slice_coords_mask],
-                )  
+                )
                 slice_coords = slice_coords[:, [2, 1]]  # leave out z and reorder
                 preprocessed_prompts_dict[slice_idx]["point"] = (
                     slice_coords,
@@ -218,16 +219,16 @@ class SAM2Inferer(Inferer):
 
         if prompt.has_boxes:
             for slice_index, box in prompt.boxes.items():
-                #box = np.array([box[1], box[0], box[3], box[2]])[None]  # Desperate fix attempt
+                # box = np.array([box[1], box[0], box[3], box[2]])[None]  # Desperate fix attempt
                 box = box[None]
                 preprocessed_prompts_dict[slice_index]["box"] = box
 
         return preprocessed_prompts_dict
-    
+
     @torch.no_grad()
     def _predict(
         self,
-        _features: dict, # Pass as an argument instead of having it be an attribute
+        _features: dict,  # Pass as an argument instead of having it be an attribute
         point_coords: Optional[torch.Tensor],
         point_labels: Optional[torch.Tensor],
         boxes: Optional[torch.Tensor] = None,
@@ -235,7 +236,6 @@ class SAM2Inferer(Inferer):
         multimask_output: bool = True,
         return_logits: bool = False,
         img_idx: int = -1,
-
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Predict masks for the given input prompts, using the currently set image.
@@ -299,13 +299,8 @@ class SAM2Inferer(Inferer):
         )
 
         # Predict masks
-        batched_mode = (
-            concat_points is not None and concat_points[0].shape[0] > 1
-        )  # multi object prediction
-        high_res_features = [
-            feat_level[img_idx].unsqueeze(0)
-            for feat_level in _features["high_res_feats"]
-        ]
+        batched_mode = concat_points is not None and concat_points[0].shape[0] > 1  # multi object prediction
+        high_res_features = [feat_level[img_idx].unsqueeze(0) for feat_level in _features["high_res_feats"]]
         low_res_masks, iou_predictions, _, _ = self.model.sam_mask_decoder(
             image_embeddings=_features["image_embed"][img_idx].unsqueeze(0),
             image_pe=self.model.sam_prompt_encoder.get_dense_pe(),
@@ -317,9 +312,7 @@ class SAM2Inferer(Inferer):
         )
 
         # Upscale the masks to the original image resolution
-        masks = self._transforms.postprocess_masks(
-            low_res_masks, self._orig_hw
-        )
+        masks = self._transforms.postprocess_masks(low_res_masks, self._orig_hw)
         low_res_masks = torch.clamp(low_res_masks, -32.0, 32.0)
         if not return_logits:
             masks = masks > self.mask_threshold
@@ -336,7 +329,7 @@ class SAM2Inferer(Inferer):
         segmentation = np.zeros((self.D, self.H, self.W), dtype)
 
         for z, low_res_mask in slice_mask_dict.items():
-            segmentation[z, :, :] = low_res_mask[0] # 0 to get rid of batch
+            segmentation[z, :, :] = low_res_mask[0]  # 0 to get rid of batch
 
         return segmentation
 
@@ -380,14 +373,18 @@ class SAM2Inferer(Inferer):
         for slice_idx in slices_to_infer:
             if slice_idx in self.image_embeddings_dict.keys():
                 features_cpu = self.image_embeddings_dict[slice_idx]
-                features = {'image_embed': features_cpu['image_embed'].to(self.device), 
-                                'high_res_feats': [f.to(self.device) for f in features_cpu['high_res_feats']]}
+                features = {
+                    "image_embed": features_cpu["image_embed"].to(self.device),
+                    "high_res_feats": [f.to(self.device) for f in features_cpu["high_res_feats"]],
+                }
             else:
                 slice = slices_processed[slice_idx]
                 with torch.no_grad():
                     features = self.get_features(slice)
-                features_cpu = {'image_embed': features['image_embed'].cpu(), 
-                                'high_res_feats': [f.cpu() for f in features['high_res_feats']]}
+                features_cpu = {
+                    "image_embed": features["image_embed"].cpu(),
+                    "high_res_feats": [f.cpu() for f in features["high_res_feats"]],
+                }
                 self.image_embeddings_dict[slice_idx] = features_cpu
 
             # Get prompts
@@ -395,18 +392,14 @@ class SAM2Inferer(Inferer):
                 preprocessed_prompt_dict[slice_idx]["point"],
                 preprocessed_prompt_dict[slice_idx]["box"],
             )
-            slice_mask = (
-                mask_dict[slice_idx]
-                if slice_idx in mask_dict.keys()
-                else None
-            )
+            slice_mask = mask_dict[slice_idx] if slice_idx in mask_dict.keys() else None
 
             if slice_points is not None:
                 slice_coords, slice_labels = slice_points[0], slice_points[1]
             else:
                 slice_coords, slice_labels = None, None
             mask_input, unnorm_coords, labels, unnorm_box = self._prep_prompts(
-                slice_coords, slice_labels, slice_box, slice_mask, normalize_coords = True
+                slice_coords, slice_labels, slice_box, slice_mask, normalize_coords=True
             )
 
             # Infer
@@ -422,7 +415,7 @@ class SAM2Inferer(Inferer):
 
             masks_np = masks.squeeze(0).float().detach().cpu().numpy()
             iou_predictions_np = iou_predictions.squeeze(0).float().detach().cpu().numpy()
-            low_res_masks_np = low_res_masks.squeeze(0).float().detach().cpu().numpy() 
+            low_res_masks_np = low_res_masks.squeeze(0).float().detach().cpu().numpy()
 
             masks_dict[slice_idx] = masks_np
             low_res_logits_dict[slice_idx] = low_res_masks_np
@@ -439,4 +432,3 @@ class SAM2Inferer(Inferer):
         segmentation_orig = self.inv_trans_dense(segmentation)
 
         return segmentation_orig, low_res_logits_dict, segmentation_model_arr
-
