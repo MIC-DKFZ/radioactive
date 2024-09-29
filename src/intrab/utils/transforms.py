@@ -153,7 +153,7 @@ class SAM2Transforms(nn.Module):
             coords[..., 0] = coords[..., 0] / w 
             coords[..., 1] = coords[..., 1] / h
 
-        coords[1:] = coords[1:] * self.resolution  # unnormalize coords # Tim: I don't thinkk this will return coordinates in the range [0,1].....
+        coords = coords * self.resolution  # unnormalize coords # Tim: I don't thinkk this will return coordinates in the range [0,1].....
         return coords
 
     def transform_boxes(

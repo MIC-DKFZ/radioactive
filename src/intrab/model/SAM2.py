@@ -218,12 +218,9 @@ class SAM2Inferer(Inferer):
 
         if prompt.has_boxes:
             for slice_index, box in prompt.boxes.items():
-                box = np.array(
-                    [slice_index, box[1], box[0], slice_index, box[3], box[2]]
-                )
-                box = np.array([box[0, 1], box[0, 0], box[0, 3], box[0, 2]])[None]  # Desperate fix attempt
-                box = box[None, :]
-                preprocessed_prompts_dict[slice_index]["box"] = box.to(self.device)
+                #box = np.array([box[1], box[0], box[3], box[2]])[None]  # Desperate fix attempt
+                box = box[None]
+                preprocessed_prompts_dict[slice_index]["box"] = box
 
         return preprocessed_prompts_dict
     
@@ -283,7 +280,7 @@ class SAM2Inferer(Inferer):
 
         # Embed prompts
         if boxes is not None:
-            box_coords = boxes.reshape(2, 3)
+            box_coords = boxes.reshape(-1, 2, 2)
             box_labels = torch.tensor([[2, 3]], dtype=torch.int, device=boxes.device)
             box_labels = box_labels.repeat(boxes.size(0), 1)
             # we merge "boxes" and "points" into a single "concat_points" input (where
@@ -358,6 +355,8 @@ class SAM2Inferer(Inferer):
         # Transform prompt if needed
         if not promptstep_in_model_coord_system:
             prompt = self.transform_promptstep_to_model_coords(prompt)
+        else:
+            prompt.coords = prompt.coords[:,::-1]# SAM 2 requires coords to be disaligned from image; reverse order
 
         slices_to_infer = prompt.get_slices_to_infer()
 
@@ -404,8 +403,12 @@ class SAM2Inferer(Inferer):
                 else None
             )
 
+            if slice_points is not None:
+                slice_coords, slice_labels = slice_points[0], slice_points[1]
+            else:
+                slice_coords, slice_labels = None, None
             mask_input, unnorm_coords, labels, unnorm_box = self._prep_prompts(
-                slice_points[0], slice_points[1], slice_box, slice_mask, normalize_coords = True
+                slice_coords, slice_labels, slice_box, slice_mask, normalize_coords = True
             )
 
             # Infer
