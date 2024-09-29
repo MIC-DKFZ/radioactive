@@ -3,8 +3,12 @@ from typing import Literal, Type, Union
 
 from loguru import logger
 
+from intrab.model.MedSAMnorm import MedSAMNormInferer
 from intrab.model.SAM2Norm import SAM2NormInferer
+from intrab.model.SAMMed2Dnorm import SAMMed2DNormInferer
+from intrab.model.SAMMed3DNorm import SAMMed3DNormInferer
 from intrab.model.SAMnorm import SAMNormInferer
+from intrab.model.segvolnorm import SegVolNormInferer
 from intrab.prompts.prompt_hparams import PromptConfig
 from intrab.prompts.prompter import (
     Alternating10PointsPer2DSlicePrompter,
@@ -73,7 +77,7 @@ from intrab.model.SAMMed3D import SAMMed3DInferer
 from intrab.model.segvol import SegVolInferer
 from intrab.model.SAM2 import SAM2Inferer
 
-model_registry = Literal["sam", "sam2", "sammed2d", "sammed3d", "sammed3d_turbo", "medsam", "segvol", "samnorm", "sam2norm"]
+model_registry = Literal["sam", "sam2", "sammed2d", "sammed3d", "sammed3d_turbo", "medsam", "segvol", "samnorm", "sam2norm", "medsamnorm", "sammed2dnorm", "sammed3dnorm", "sammed3d_turbonorm", "segvolnorm"]
 
 inferer_registry: dict[model_registry, Type[Inferer]] = {
     "sam": SAMInferer,
@@ -84,7 +88,12 @@ inferer_registry: dict[model_registry, Type[Inferer]] = {
     "segvol": SegVolInferer,
     "sam2": SAM2Inferer,
     "samnorm": SAMNormInferer,
-    "sam2norm":SAM2NormInferer,
+    "sam2norm": SAM2NormInferer,
+    "medsamnorm": MedSAMNormInferer,
+    "sammed2dnorm": SAMMed2DNormInferer,
+    "sammed3dnorm": SAMMed3DNormInferer,
+    "sammed3d_turbonorm": SAMMed3DNormInferer,
+    "segvolnorm": SegVolNormInferer
 }
 
 
@@ -97,7 +106,12 @@ checkpoint_registry: dict[model_registry, Path] = {
     "sammed3d_turbo": get_model_path() / "sam_med3d_turbo.pth",
     "sam2": "",
     "samnorm": get_model_path() / "sam_vit_h_4b8939.pth",
-    "sam2norm": ","
+    "sam2norm": ",",
+    "medsamnorm": get_model_path() / "medsam_vit_b.pth",
+    "sammed2dnorm": get_model_path() / "sam-med2d_b.pth",
+    "sammed3dnorm": get_model_path() / "sam_med3d.pth",
+    "sammed3d_turbonorm": get_model_path() / "sam_med3d_turbo.pth",
+    "segvolnorm": get_model_path() / "SegVol_v1.pth",
 }
 
 
