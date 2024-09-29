@@ -1,8 +1,11 @@
 from copy import deepcopy
+from pathlib import Path
 from typing import Optional, Tuple
 
 from loguru import logger
+from intrab.datasets_preprocessing.conversion_utils import load_any_to_nib
 from intrab.model.SAM import SAMInferer
+from intrab.model.inferer import Inferer
 from intrab.prompts.prompt import PromptStep
 
 try:
@@ -20,7 +23,7 @@ from hydra.utils import instantiate
 from omegaconf import OmegaConf
 import numpy as np
 
-from intrab.utils.transforms import SAM2Transforms
+from intrab.utils.transforms import SAM2Transforms, orig_to_SAR_dense, orig_to_canonical_sparse_coords
 
 def _load_checkpoint(model, ckpt_path):
     if ckpt_path is not None:
@@ -82,7 +85,7 @@ def build_sam2_hf(model_id, **kwargs):
     return build_sam2(config_file=config_name, ckpt_path=ckpt_path, **kwargs)
 
 
-class SAM2Inferer(SAMInferer):
+class SAM2Inferer(Inferer):
     def __init__(self, checkpoint_path, device):
         super().__init__(checkpoint_path, device)
         self.resolution = self.model.image_size
@@ -102,10 +105,9 @@ class SAM2Inferer(SAMInferer):
         sam2_model = build_sam2_hf("facebook/sam2-hiera-large")
         return sam2_model
 
-    def preprocess_image(self, img, slices_to_process):
+    def preprocess_img(self, img, slices_to_process):
         # Perform slicewise processing and collect back into a volume at the end
         slices_processed = {}
-        self._orig_hw = img[0].shape
         for slice_idx in slices_to_process:
             slice = img[slice_idx, ...]  # Now HW
             slice = np.round((slice - slice.min()) / (slice.max() - slice.min() + 1e-10) * 255.0).astype(
@@ -116,6 +118,28 @@ class SAM2Inferer(SAMInferer):
             input_slice = self._transforms(slice)
         return slices_processed
 
+    def set_image(self, img_path: Path | str):
+        img_path = Path(img_path)
+        if self._image_already_loaded(img_path=img_path):
+            return
+        img_nib = load_any_to_nib(img_path)
+        self.orig_affine = img_nib.affine
+        self.orig_shape = img_nib.shape
+
+        self.img, self.inv_trans_dense = self.transform_to_model_coords_dense(img_nib, is_seg=False)
+        self.loaded_image = img_path
+        self.new_shape = self.img.shape
+        self._orig_hw = self.img[0].shape
+        self.loaded_image = img_path
+
+    def transform_to_model_coords_dense(self, nifti: Path | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
+        # Model space is always throughplane first (commonly the z-axis)
+        data, inv_trans = orig_to_SAR_dense(nifti)
+
+        return data, inv_trans
+
+    def transform_to_model_coords_sparse(self, coords: np.ndarray) -> np.ndarray:
+        return orig_to_canonical_sparse_coords(coords, self.orig_affine, self.orig_shape)
     def get_features(self, preprocessed_slice:torch.Tensor) -> dict:
         backbone_out = self.model.forward_image(preprocessed_slice)
         _, vision_feats, _, _ = self.model._prepare_backbone_features(backbone_out)
@@ -170,11 +194,10 @@ class SAM2Inferer(SAMInferer):
             coords = prompt.coords
             labs = prompt.labels
 
-            coords_resized = self.transform.apply_coords(coords, (self.H, self.W))
+            coords_resized = self._transforms.transform_coords(torch.from_numpy(coords).to(self.device), normalize=True, orig_hw = self._orig_hw)
 
             # Convert to torch tensor
-            coords_resized = torch.as_tensor(coords_resized, dtype=torch.float)
-            labs = torch.as_tensor(labs, dtype=int)
+            labs = torch.as_tensor(labs, dtype=int).to(self.device)
 
             # Collate
 
@@ -196,9 +219,8 @@ class SAM2Inferer(SAMInferer):
                 box = np.array(
                     [slice_index, box[1], box[0], slice_index, box[3], box[2]]
                 )
-                box = self.transform.apply_boxes(box, (self.H, self.W))
+                box = self._transforms.transform_boxes(torch.from_numpy(box).to(self.device), normalize=True, orig_hw = self._orig_hw)
                 box = np.array([box[0, 1], box[0, 0], box[0, 3], box[0, 2]])[None]  # Desperate fix attempt
-                box = torch.as_tensor(box, dtype=torch.float, device=self.device)
                 box = box[None, :]
                 preprocessed_prompts_dict[slice_index]["box"] = box.to(self.device)
 
@@ -262,7 +284,7 @@ class SAM2Inferer(SAMInferer):
 
         # Embed prompts
         if boxes is not None:
-            box_coords = boxes.reshape(-1, 2, 2)
+            box_coords = boxes.reshape(2, 3)
             box_labels = torch.tensor([[2, 3]], dtype=torch.int, device=boxes.device)
             box_labels = box_labels.repeat(boxes.size(0), 1)
             # we merge "boxes" and "points" into a single "concat_points" input (where
