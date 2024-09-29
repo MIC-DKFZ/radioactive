@@ -24,10 +24,10 @@ def check_groundtruths_are_mostly_contiguous(gt_path: Path, tolerance_voxels=10)
 
 
 def main():
-    class_path = Path("/mnt/cluster-data-all/t006d/intra_bench/datasets")
+    class_path = Path("/dkfz/cluster/gpu/data/OE0441/t006d/intra_bench/datasets")
 
     instance_classes_to_verify = [
-        # "Dataset201_MS_Flair_instances",
+        "Dataset201_MS_Flair_instances",
         # "Dataset209_hanseg_mr_oar",
         "Dataset501_hntsmrg_pre_primarytumor",
         # "Dataset600_pengwin",
