@@ -189,7 +189,7 @@ def run_experiments_instances(
             # ---------------- Get binary gt in original coordinate system --------------- #
             # instance_nib, instance_ids = create_instance_gt(gt_path)
             if not instance_gt_path.exists():
-                instance_nib, _ = get_instance_nib_and_instance_ids(instance_nib, instance_ids)
+                instance_nib, _ = get_instance_nib_and_instance_ids(instance_gt_path)
                 save_nib_instance_gt_as_nrrd(instance_nib, instance_gt_path)
 
             prompter: Prompter
