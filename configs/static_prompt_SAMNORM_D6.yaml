@@ -2,7 +2,7 @@
 seeds:
   - 11121
 models:
-  - "sam"
+  - "samnorm"
   # - "sammed2d"
   # - "medsam"
   # - "sammed3d"
