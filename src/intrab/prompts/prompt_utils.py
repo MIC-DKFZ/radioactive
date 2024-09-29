@@ -508,8 +508,12 @@ def box_interpolation(seed_boxes: PromptStep):
 
 def get_seed_point(gt, n_clicks, seed) -> PromptStep:
     slices_to_infer = np.where(np.any(gt, axis=(1, 2)))[0]
-    # ToDo: Maybe pull not always the median slice.
+    # FIX: When having even slices very far apart,
+    # this is problematic because the average seed point will be in an empty slice
     middle_idx = np.median(slices_to_infer).astype(int)
+    if middle_idx not in slices_to_infer:
+        # Take the closest slice as middle idx.
+        middle_idx = slices_to_infer[np.argmin(np.abs(middle_idx - slices_to_infer))]
 
     pos_coords = get_fg_points_from_slice(gt[middle_idx], n_clicks, middle_idx, seed)
 
