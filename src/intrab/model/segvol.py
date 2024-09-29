@@ -185,9 +185,9 @@ class SegVolInferer(Inferer):
         if isinstance(nifti, (str, Path)):
             nifti = load_any_to_nib(nifti)
 
-        if is_seg and self.start_coord is None:
+        if is_seg:
             #raise RuntimeError('An image must first be set before segmentations can be transformed')
-            return None, None, None, None
+            return np.zeros((10,10,10)) # Disgusting fix since groundtruth_model isn't needed
 
         item = {}
         # generate ct_voxel_ndarray

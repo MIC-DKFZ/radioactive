@@ -355,8 +355,6 @@ class SAM2Inferer(Inferer):
         # Transform prompt if needed
         if not promptstep_in_model_coord_system:
             prompt = self.transform_promptstep_to_model_coords(prompt)
-        else:
-            prompt.coords = prompt.coords[:,::-1]# SAM 2 requires coords to be disaligned from image; reverse order
 
         slices_to_infer = prompt.get_slices_to_infer()
 
@@ -382,8 +380,8 @@ class SAM2Inferer(Inferer):
         for slice_idx in slices_to_infer:
             if slice_idx in self.image_embeddings_dict.keys():
                 features_cpu = self.image_embeddings_dict[slice_idx]
-                features = {'image_embed': features['image_embed'].to(self.device), 
-                                'high_res_feats': [f.to(self.device) for f in features['high_res_feats']]}
+                features = {'image_embed': features_cpu['image_embed'].to(self.device), 
+                                'high_res_feats': [f.to(self.device) for f in features_cpu['high_res_feats']]}
             else:
                 slice = slices_processed[slice_idx]
                 with torch.no_grad():
@@ -398,7 +396,7 @@ class SAM2Inferer(Inferer):
                 preprocessed_prompt_dict[slice_idx]["box"],
             )
             slice_mask = (
-                torch.from_numpy(mask_dict[slice_idx]).to(self.device).unsqueeze(0).unsqueeze(0)
+                mask_dict[slice_idx]
                 if slice_idx in mask_dict.keys()
                 else None
             )

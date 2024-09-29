@@ -710,6 +710,7 @@ class twoD1PointUnrealisticInteractivePrompterNoPrevPoint(InteractivePrompter):
             all_slice_prompt_steps.append(slice_prompt_step)
 
         new_prompt_step = merge_sparse_prompt_steps(all_slice_prompt_steps)
+        new_prompt_step.coords = new_prompt_step.coords[:, ::-1] # Desperate fix attempt
         new_prompt_step.set_masks(low_res_logits)
 
         return new_prompt_step
