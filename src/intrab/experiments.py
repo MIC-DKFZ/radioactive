@@ -1,4 +1,5 @@
 # Experiments content
+from functools import lru_cache
 import os
 from pathlib import Path
 
@@ -133,6 +134,12 @@ def run_experiments_organ(
                                 )
 
 
+@lru_cache(maxsize=1)
+def get_instance_nib_and_instance_ids(gt_path: Path):
+    instance_nib, instance_ids = create_instance_gt(gt_path)
+    return instance_nib, instance_ids
+
+
 def run_experiments_instances(
     inferer: Inferer,
     imgs_gts: list[tuple[str, str]],
@@ -180,8 +187,9 @@ def run_experiments_instances(
             instance_gt_path = gt_output_path / instance_filename
 
             # ---------------- Get binary gt in original coordinate system --------------- #
-            instance_nib, instance_ids = create_instance_gt(gt_path)
+            # instance_nib, instance_ids = create_instance_gt(gt_path)
             if not instance_gt_path.exists():
+                instance_nib, _ = get_instance_nib_and_instance_ids(instance_nib, instance_ids)
                 save_nib_instance_gt_as_nrrd(instance_nib, instance_gt_path)
 
             prompter: Prompter
@@ -210,6 +218,7 @@ def run_experiments_instances(
                         continue
 
                 all_prompt_results: list[PromptResult] = []
+                _, instance_ids = get_instance_nib_and_instance_ids(gt_path)
                 for instance_id in instance_ids:
                     binary_gt_orig_coords = binarize_gt(gt_path, instance_id)
                     prompter.set_groundtruth(binary_gt_orig_coords)

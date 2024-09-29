@@ -181,6 +181,8 @@ def preprocess(raw_download_dir: Path):
     output_label_dir = output_dir / "labelsTr"
     output_label_dir.mkdir(parents=True, exist_ok=True)
 
+    # Has a lot of classes so we want to reduce the overall time it takes
+    cases_wanted = list(cases_labels_dir.iterdir())[:30]
     for case_dir in tqdm(list(cases_labels_dir.iterdir()), desc="Creating Image Labels"):
         joint_labels: dict[str, np.ndarray] = {}
         for organ in case_dir.iterdir():
