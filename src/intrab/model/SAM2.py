@@ -88,7 +88,6 @@ def build_sam2_hf(model_id, **kwargs):
 class SAM2Inferer(Inferer):
     def __init__(self, checkpoint_path, device):
         super().__init__(checkpoint_path, device)
-        self.resolution = self.model.image_size
         mask_threshold = 0.0 # Match sam2_image_predictor.py values
         max_hole_area = 0.0 #  Match sam2_image_predictor.py values
         max_sprinkle_area = 0.0 #  Match sam2_image_predictor.py values
@@ -98,6 +97,13 @@ class SAM2Inferer(Inferer):
             max_hole_area=max_hole_area,
             max_sprinkle_area=max_sprinkle_area,
         )
+        self.mask_threshold = mask_threshold
+
+        self._bb_feat_sizes = [
+            (256, 256),
+            (128, 128),
+            (64, 64),
+        ]
 
         self.multimask_output = False
 
@@ -116,6 +122,8 @@ class SAM2Inferer(Inferer):
             slice = np.repeat(slice[..., None], repeats=3, axis=-1)  # Add channel dimension to make it RGB-like -> now HWC
 
             input_slice = self._transforms(slice)
+            input_slice = input_slice[None, ...].to(self.device)
+            slices_processed[slice_idx] = input_slice
         return slices_processed
 
     def set_image(self, img_path: Path | str):
@@ -167,7 +175,7 @@ class SAM2Inferer(Inferer):
                 point_coords, dtype=torch.float, device=self.device
             )
             unnorm_coords = self._transforms.transform_coords(
-                point_coords, normalize=normalize_coords, orig_hw=self._orig_hw[img_idx]
+                point_coords, normalize=normalize_coords, orig_hw=self._orig_hw
             )
             labels = torch.as_tensor(point_labels, dtype=torch.int, device=self.device)
             if len(unnorm_coords.shape) == 2:
@@ -175,7 +183,7 @@ class SAM2Inferer(Inferer):
         if box is not None:
             box = torch.as_tensor(box, dtype=torch.float, device=self.device)
             unnorm_box = self._transforms.transform_boxes(
-                box, normalize=normalize_coords, orig_hw=self._orig_hw[img_idx]
+                box, normalize=normalize_coords, orig_hw=self._orig_hw
             )  # Bx2x2
         if mask_logits is not None:
             mask_input = torch.as_tensor(
@@ -194,24 +202,18 @@ class SAM2Inferer(Inferer):
             coords = prompt.coords
             labs = prompt.labels
 
-            coords_resized = self._transforms.transform_coords(torch.from_numpy(coords).to(self.device), normalize=True, orig_hw = self._orig_hw)
-
-            # Convert to torch tensor
-            labs = torch.as_tensor(labs, dtype=int).to(self.device)
-
             # Collate
 
             for slice_idx in prompt.get_slices_to_infer():
-                slice_coords_mask = coords_resized[:, 0] == slice_idx
+                slice_coords_mask = coords[:, 0] == slice_idx
                 slice_coords, slice_labs = ( # subset to slice
-                    coords_resized[slice_coords_mask],
+                    coords[slice_coords_mask],
                     labs[slice_coords_mask],
                 )  
                 slice_coords = slice_coords[:, [2, 1]]  # leave out z and reorder
-                slice_coords, slice_labs = slice_coords.unsqueeze(0), slice_labs.unsqueeze(0)
                 preprocessed_prompts_dict[slice_idx]["point"] = (
-                    slice_coords.to(self.device),
-                    slice_labs.to(self.device),
+                    slice_coords,
+                    slice_labs,
                 )
 
         if prompt.has_boxes:
@@ -219,7 +221,6 @@ class SAM2Inferer(Inferer):
                 box = np.array(
                     [slice_index, box[1], box[0], slice_index, box[3], box[2]]
                 )
-                box = self._transforms.transform_boxes(torch.from_numpy(box).to(self.device), normalize=True, orig_hw = self._orig_hw)
                 box = np.array([box[0, 1], box[0, 0], box[0, 3], box[0, 2]])[None]  # Desperate fix attempt
                 box = box[None, :]
                 preprocessed_prompts_dict[slice_index]["box"] = box.to(self.device)
@@ -229,6 +230,7 @@ class SAM2Inferer(Inferer):
     @torch.no_grad()
     def _predict(
         self,
+        _features: dict, # Pass as an argument instead of having it be an attribute
         point_coords: Optional[torch.Tensor],
         point_labels: Optional[torch.Tensor],
         boxes: Optional[torch.Tensor] = None,
@@ -236,6 +238,7 @@ class SAM2Inferer(Inferer):
         multimask_output: bool = True,
         return_logits: bool = False,
         img_idx: int = -1,
+
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Predict masks for the given input prompts, using the currently set image.
@@ -272,10 +275,6 @@ class SAM2Inferer(Inferer):
             of masks and H=W=256. These low res logits can be passed to
             a subsequent iteration as mask input.
         """
-        if not self._is_image_set:
-            raise RuntimeError(
-                "An image must be set with .set_image(...) before mask prediction."
-            )
 
         if point_coords is not None:
             concat_points = (point_coords, point_labels)
@@ -308,10 +307,10 @@ class SAM2Inferer(Inferer):
         )  # multi object prediction
         high_res_features = [
             feat_level[img_idx].unsqueeze(0)
-            for feat_level in self._features["high_res_feats"]
+            for feat_level in _features["high_res_feats"]
         ]
         low_res_masks, iou_predictions, _, _ = self.model.sam_mask_decoder(
-            image_embeddings=self._features["image_embed"][img_idx].unsqueeze(0),
+            image_embeddings=_features["image_embed"][img_idx].unsqueeze(0),
             image_pe=self.model.sam_prompt_encoder.get_dense_pe(),
             sparse_prompt_embeddings=sparse_embeddings,
             dense_prompt_embeddings=dense_embeddings,
@@ -322,7 +321,7 @@ class SAM2Inferer(Inferer):
 
         # Upscale the masks to the original image resolution
         masks = self._transforms.postprocess_masks(
-            low_res_masks, self._orig_hw[img_idx]
+            low_res_masks, self._orig_hw
         )
         low_res_masks = torch.clamp(low_res_masks, -32.0, 32.0)
         if not return_logits:
@@ -340,9 +339,7 @@ class SAM2Inferer(Inferer):
         segmentation = np.zeros((self.D, self.H, self.W), dtype)
 
         for z, low_res_mask in slice_mask_dict.items():
-            if not return_logits:
-                low_res_mask = (low_res_mask > 0.5).to(torch.uint8)
-            segmentation[z, :, :] = low_res_mask.cpu().numpy()
+            segmentation[z, :, :] = low_res_mask[0] # 0 to get rid of batch
 
         return segmentation
 
@@ -385,12 +382,15 @@ class SAM2Inferer(Inferer):
 
         for slice_idx in slices_to_infer:
             if slice_idx in self.image_embeddings_dict.keys():
-                features = self.image_embeddings_dict[slice_idx]
+                features_cpu = self.image_embeddings_dict[slice_idx]
+                features = {'image_embed': features['image_embed'].to(self.device), 
+                                'high_res_feats': [f.to(self.device) for f in features['high_res_feats']]}
             else:
                 slice = slices_processed[slice_idx]
                 with torch.no_grad():
                     features = self.get_features(slice)
-                features_cpu = {k:v.cpu() for k,v in features.items()}
+                features_cpu = {'image_embed': features['image_embed'].cpu(), 
+                                'high_res_feats': [f.cpu() for f in features['high_res_feats']]}
                 self.image_embeddings_dict[slice_idx] = features_cpu
 
             # Get prompts
@@ -405,11 +405,12 @@ class SAM2Inferer(Inferer):
             )
 
             mask_input, unnorm_coords, labels, unnorm_box = self._prep_prompts(
-                slice_points[0], slice_points[1], slice_box, slice_mask, 
+                slice_points[0], slice_points[1], slice_box, slice_mask, normalize_coords = True
             )
 
             # Infer
-            masks_dict, iou_predictions, low_res_masks = self._predict(
+            masks, iou_predictions, low_res_masks = self._predict(
+                features,
                 unnorm_coords,
                 labels,
                 unnorm_box,
@@ -418,7 +419,7 @@ class SAM2Inferer(Inferer):
                 return_logits=return_logits,
             )
 
-            masks_np = masks_dict.squeeze(0).float().detach().cpu().numpy()
+            masks_np = masks.squeeze(0).float().detach().cpu().numpy()
             iou_predictions_np = iou_predictions.squeeze(0).float().detach().cpu().numpy()
             low_res_masks_np = low_res_masks.squeeze(0).float().detach().cpu().numpy() 
 
