@@ -4,12 +4,16 @@ import numpy as np
 import nibabel as nib
 
 from tqdm import tqdm
+import nrrd
 
 
 def check_groundtruths_are_mostly_contiguous(gt_path: Path, tolerance_voxels=10):
-    if gt_path.name.endswith(".nrrd"):
+    if gt_path.name.endswith(".in.nrrd"):
         innrrd = InstanceNrrd.from_innrrd(gt_path)
         instance_maps = innrrd.get_instance_maps(1)
+    elif gt_path.name.endswith(".nrrd"):
+        arr, _ = nrrd.read(str(gt_path))
+        instance_maps = [np.where(arr == idx, 1, 0) for idx in np.unique(arr) if idx != 0]
     else:
         img = nib.load(gt_path).get_fdata()
         instance_maps = [np.where(img == idx, 1, 0) for idx in np.unique(img) if idx != 0]
@@ -24,20 +28,20 @@ def check_groundtruths_are_mostly_contiguous(gt_path: Path, tolerance_voxels=10)
 
 
 def main():
-    class_path = Path("/dkfz/cluster/gpu/data/OE0441/t006d/intra_bench/datasets")
+    class_path = Path("/mnt/cluster-data-all/t006d/intra_bench/datasets")
 
     instance_classes_to_verify = [
-        "Dataset201_MS_Flair_instances",
+        # "Dataset201_MS_Flair_instances",
         # "Dataset209_hanseg_mr_oar",
-        "Dataset501_hntsmrg_pre_primarytumor",
+        # "Dataset501_hntsmrg_pre_primarytumor",
         # "Dataset600_pengwin",
         # "Dataset651_segrap",
-        "Dataset911_LNQ_instances",
+        # "Dataset911_LNQ_instances",
         "Dataset912_colorectal_livermets",
-        "Dataset913_adrenal_acc_ki67",
+        # "Dataset913_adrenal_acc_ki67",
         # "Dataset920_hcc_tace_liver",
-        "Dataset921_hcc_tace_lesion",
-        "Dataset930_RIDER_LungCT",
+        # "Dataset921_hcc_tace_lesion",
+        # "Dataset930_RIDER_LungCT",
     ]
 
     for ds in instance_classes_to_verify:
