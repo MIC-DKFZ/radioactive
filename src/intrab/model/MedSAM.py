@@ -80,11 +80,18 @@ class MedSAMInferer(Inferer):
         slices_processed = {}
         for slice_idx in slices_to_process:
             slice = img[slice_idx, ...]
+            lower_bound, upper_bound = np.percentile(
+                slice[slice > 0], 0.5
+            ), np.percentile(slice[slice > 0], 99.5)
+            slice = np.clip(slice, lower_bound, upper_bound)
+
             slice = np.repeat(
                 slice[..., np.newaxis], repeats=3, axis=2
             )  # Repeat three times along a new final axis to simulate being a color image.
 
             slice = cv2.resize(slice, (1024, 1024), interpolation=cv2.INTER_CUBIC)
+
+            
 
             slice = (slice - slice.min()) / np.clip(
                 slice.max() - slice.min(), a_min=1e-8, a_max=None
