@@ -125,6 +125,10 @@ class SAMMed2DInferer(Inferer):
         slices_processed = {}
         for slice_idx in slices_to_process:
             slice = img[slice_idx, ...]
+            lower_bound, upper_bound = np.percentile(
+                slice[slice > 0], 0.5
+            ), np.percentile(slice[slice > 0], 99.5)
+            slice = np.clip(slice, lower_bound, upper_bound)
 
             slice = np.round((slice - slice.min()) / (slice.max() - slice.min() + 1e-6) * 255).astype(
                 np.uint8
