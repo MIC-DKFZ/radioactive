@@ -405,7 +405,9 @@ class NPointsFromCenterCropped3DVolumePrompter(Prompter, ABC):
     ):
         super().__init__(inferer, seed)
         self.n_slice_point_interpolation = n_slice_point_interpolation
-        self.isolate_around_initial_point_size = np.array(isolate_around_initial_point_size)
+        self.isolate_around_initial_point_size = isolate_around_initial_point_size
+        if self.isolate_around_initial_point_size is not None:
+            self.isolate_around_initial_point_size = np.array(isolate_around_initial_point_size)
         self.promptstep_in_model_coord_system = True
 
     def get_prompt(self) -> PromptStep:

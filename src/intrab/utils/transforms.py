@@ -294,7 +294,7 @@ def resample_to_shape_sparse(
     Transform an nx2 or nx3 array of coordinates in line with resampling from an original shape to a target shape.
     Rounding to integer coordinates is supported, but if this transform is composed with others, it may introduce rounding issues.
     """
-    coords = coords * target_shape / current_shape
+    coords = coords * (np.array(target_shape)-1) / (np.array(current_shape)-1) # -1 since coords can range in value from 0 to shape-1
     if round:
         coords = np.round(coords)
 
@@ -326,8 +326,8 @@ def _transform_boxes3d_to_model_coords(box: Boxes3D, transform_coords: Callable[
     min_vertex, max_vertex = box.bbox
     vertices_combined = np.array([transform_coords(min_vertex), transform_coords(max_vertex)])
 
-    min_vertex_transformed = np.max(vertices_combined, axis=0)
-    max_vertex_transformed = np.min(vertices_combined, axis=0)
+    min_vertex_transformed = np.min(vertices_combined, axis=0)
+    max_vertex_transformed = np.max(vertices_combined, axis=0)
 
     box_model = Boxes3D(min_vertex_transformed, max_vertex_transformed)
 
@@ -387,7 +387,7 @@ def transform_prompt_to_model_coords(
 ):
     # Deal with special case: Handle 3D boxes
     if isinstance(prompt_orig, Boxes3D):
-        return _transform_boxes3d_to_model_coords(prompt_orig)
+        return _transform_boxes3d_to_model_coords(prompt_orig, transform_coords)
 
     # Initialise empty promptstep
     prompt_model = PromptStep()

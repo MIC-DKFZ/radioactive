@@ -128,6 +128,8 @@ class SegVolInferer(Inferer):
         self.inputs = None
         self.mask_threshold = 0
         self.infer_overlap = 0.5
+        self.start_coord = None
+        self.end_coord = None
 
         self.spatial_size = (32, 256, 256)
 
@@ -148,12 +150,12 @@ class SegVolInferer(Inferer):
         self.transform_seg = transforms.Compose(
             [
                 transforms.Orientationd(
-                    keys=["image"], axcodes="RAS"
+                    keys=["image", "seg"], axcodes="RAS"
                 ),  # Doesn't actually do anything since metadata is discarded. Kept for comparability to original
-                DimTranspose(keys=["image"]),
-                transforms.SpatialPadd(keys=["image"], spatial_size=(32, 256, 256), mode="constant"),
-                transforms.CropForegroundd(keys=["image"], source_key="image"),
-                transforms.ToTensord(keys=["image"]),
+                DimTranspose(keys=["image", "seg"]),
+                transforms.SpatialPadd(keys=["image", "seg"], spatial_size=(32, 256, 256), mode="constant"),
+                transforms.CropForegroundd(keys=["image", "seg"], source_key="image"),
+                transforms.ToTensord(keys=["image", "seg"]),
             ]
         )
         self.zoom_out_transform = transforms.Resized(
@@ -183,17 +185,32 @@ class SegVolInferer(Inferer):
         if isinstance(nifti, (str, Path)):
             nifti = load_any_to_nib(nifti)
 
+        if is_seg and self.start_coord is None:
+            #raise RuntimeError('An image must first be set before segmentations can be transformed')
+            return None, None, None, None
+
         item = {}
         # generate ct_voxel_ndarray
         img = nifti.get_fdata()
         img = np.expand_dims(
             img, axis=0
         )  # Ensure image is in CDWH (spatial dimensions will be assumed to be RAS anyway)
-        item["image"] = img
 
         # transform
-        transform = self.transform_seg if is_seg else self.transform_img
-        item = transform(item)
+        if not is_seg:
+            item["image"] = img
+            item = self.transform_img(item)
+        else:
+            dummy_img = np.zeros_like(self.img)
+            dummy_img[self.start_coord[0] : self.end_coord[0], self.start_coord[1] : self.end_coord[1], self.start_coord[2] : self.end_coord[2]] = 1 # used for crop transform; must crop the same way as the image was cropped.
+            item["image"] = dummy_img
+            item["seg"] = img
+
+            item = self.transform_seg(item)
+            item["image"] = item["seg"]
+            del item["seg"]
+            # now make appropriate for zoom out transform
+            
         start_coord = item["foreground_start_coord"]  # Store metadata for later inveresion of transformations
         end_coord = item["foreground_end_coord"]
 
@@ -243,16 +260,15 @@ class SegVolInferer(Inferer):
         box_single = points_single = binary_cube = binary_points = None
 
         if prompt_type == "point":
-            # prompt.coords = prompt.coords[:,::-1]
             coords, labels = prompt.coords, prompt.labels
-            # coords = coords[:,::-1]
-            # Transform in line with cropping
-            coords = coords - self.start_coord
-            coords = np.maximum(coords, 0)
-            coords = np.minimum(coords, self.end_coord)
-            coords = np.round(
-                coords * np.array(self.spatial_size) / np.array(self.cropped_shape)
-            )  # Transform in line with resizing
+            # # coords = coords[:,::-1]
+            # # Transform in line with cropping # These transforms were moved to transform_to_model_coordinates_sparse
+            # coords = coords - self.start_coord
+            # coords = np.maximum(coords, 0)
+            # coords = np.minimum(coords, self.end_coord)
+            # coords = np.round(
+            #     coords * np.array(self.spatial_size) / np.array(self.cropped_shape)
+            # )  # Transform in line with resizing
 
             coords, labels = torch.from_numpy(coords).float(), torch.from_numpy(labels).float()
             points_single = (coords.unsqueeze(0).cuda(), labels.unsqueeze(0).cuda())
@@ -261,14 +277,16 @@ class SegVolInferer(Inferer):
                 binary_points_resize.unsqueeze(0).unsqueeze(0).float(), size=self.cropped_shape, mode="nearest"
             )[0][0]
         if prompt_type == "box":
-            # Transform box in line with image transformations
+            # # Transform box in line with image transformations # These transforms were moved to transform_to_model_coordinates_sparse
+            # box_single = np.array(prompt.bbox)  # Change from pair of points to 2x3 array
+            # box_single = box_single - self.start_coord  # transform in line with cropping
+            # box_single[0] = np.maximum(box_single[0], 0)
+            # box_single[1] = np.minimum(box_single[1], self.end_coord)
+            # box_single = np.round(
+            #     box_single * np.array(self.spatial_size) / np.array(self.cropped_shape)
+            # )  # Transform in line with resizing
+
             box_single = np.array(prompt.bbox)  # Change from pair of points to 2x3 array
-            box_single = box_single - self.start_coord  # transform in line with cropping
-            box_single[0] = np.maximum(box_single[0], 0)
-            box_single[1] = np.minimum(box_single[1], self.end_coord)
-            box_single = np.round(
-                box_single * np.array(self.spatial_size) / np.array(self.cropped_shape)
-            )  # Transform in line with resizing
             box_single = box_single.flatten()
             box_single = torch.from_numpy(box_single).unsqueeze(0).float().cuda()
 
@@ -358,16 +376,26 @@ class SegVolInferer(Inferer):
 
     def inv_trans_dense(self, mask: np.ndarray) -> nib.Nifti1Image:
         # Invert transform
-        mask = np.transpose(mask, (2, 1, 0))
-        start_coord, end_coord = deepcopy(self.start_coord), deepcopy(self.end_coord)
-        start_coord[-1], start_coord[-3] = start_coord[-3], start_coord[-1]
-        end_coord[-1], end_coord[-3] = end_coord[-3], end_coord[-1]
-        # end_coord = np.minimum(end_coord, self.orig_shape)# concerning that this is needed.
-        # start_coord = np.maximum(start_coord, 0) # Not added due to thrown error, but for safety
-        segmentation = np.zeros(self.orig_shape)
-        segmentation[start_coord[0] : end_coord[0], start_coord[1] : end_coord[1], start_coord[2] : end_coord[2]] = ( # ToDo needs fixing, try MS instances
+        shape_after_dimtranspose = self.orig_shape[::-1]
+        # undo crop foreground
+        padded_segmenation_shape = np.maximum(self.spatial_size, shape_after_dimtranspose)
+        padded_segmentation = np.zeros(padded_segmenation_shape, dtype = np.uint8) # Should be created in 32,256,256 shape
+        padded_segmentation[self.start_coord[0] : self.end_coord[0], self.start_coord[1] : self.end_coord[1], self.start_coord[2] : self.end_coord[2]] = ( #  stick into 32,256,256 shape then undo pad # ToDo needs fixing, try MS instances: 
             mask
         )
+
+        # undo spatial pad
+        total_pads = np.maximum(np.array(self.spatial_size) - np.array(shape_after_dimtranspose), 0)
+        pad_starts = total_pads // 2
+
+        transposed_segmentation = padded_segmentation[
+            pad_starts[0]:shape_after_dimtranspose[0]+pad_starts[0],
+            pad_starts[1]:shape_after_dimtranspose[1]+pad_starts[1],
+            pad_starts[2]:shape_after_dimtranspose[2]+pad_starts[2]
+        ]
+
+        # undo dim_transpose
+        segmentation = np.transpose(transposed_segmentation, (2, 1, 0))
 
         segmentation = nib.Nifti1Image(segmentation, self.orig_affine)
 

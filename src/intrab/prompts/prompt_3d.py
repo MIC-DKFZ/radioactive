@@ -168,6 +168,7 @@ def subset_points_to_box(promptstep: PromptStep, patch_size: tuple[int, int, int
     """
     given a promptstep of points, subsets to those points within a patch_size crop around the centroid of the points
     """
+    patch_size = np.array(patch_size)
     coords, labels = promptstep.coords, promptstep.labels
     centroid = np.mean(coords, axis = 0)
     patch_size = np.array(patch_size) # permit the //2 action
