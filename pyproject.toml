@@ -37,7 +37,6 @@ dependencies = [
     'pre-commit',
     'nbstripout',
     'einops',
-    'nneval',
     'gdown',
     'tcia_utils',
     'pydicom',
