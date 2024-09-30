@@ -545,6 +545,9 @@ def propagate_point(
         #     current_seg[slice_id], n_clicks=n_clicks, slice_index=slice_id, seed=seed
         # )
         # Don't sample randomly. Instead get from center
+        if np.all(current_seg[slice_id] == 0):  # Terminate if no fg generated
+            logger.debug("No prediction despite prompt given. Stopping propagation.")
+            break
         coords_xyz = get_center_point_from_slice(current_seg[slice_id], slice_index=slice_id)
         coords_xyz[:, -1] = increment(coords_xyz[:, -1], upwards)  # Increment the z-coordinate
         labels = np.ones_like(coords_xyz[:, 0])
