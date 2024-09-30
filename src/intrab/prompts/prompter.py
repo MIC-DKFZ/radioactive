@@ -103,7 +103,7 @@ class Prompter:
     def predict_image(self, image_path: Path) -> PromptResult:
         """Generate segmentation given prompt-style and model behavior."""
         # If the groundtruth is all zeros, return an empty mask
-        if np.all(self.groundtruth_model == 0):
+        if np.all(self.groundtruth_model == 0) and torch.all(self.groundtruth_orig==0):
             img: nib.Nifti1Image = load_any_to_nib(image_path)
             binary_gt = np.zeros_like(img.get_fdata())
             empty_gt = nib.Nifti1Image(binary_gt.astype(np.uint8), img.affine)
