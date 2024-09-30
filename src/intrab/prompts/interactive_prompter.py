@@ -151,6 +151,11 @@ class InteractivePrompter(Prompter):
             )
             num_iter += 1
 
+            if perf == 1: 
+                break # Crazy, but happened with sam2
+
+        if len(all_prompt_results) < self.max_iter + 1:
+            all_prompt_results.extend([all_prompt_results[-1]]*(self.max_iter + 1-len(all_prompt_results))) # Repeat last result so we have self.max_iter+1 results
         return all_prompt_results
 
 
@@ -708,8 +713,9 @@ class twoD1PointUnrealisticInteractivePrompterNoPrevPoint(InteractivePrompter):
         for slice_idx in slices_inferred:
             slice_seg = pred[slice_idx]
             slice_gt = self.groundtruth_model[slice_idx]
-            slice_prompt_step = obtain_misclassified_point_prompt_2d(slice_seg, slice_gt, slice_idx, self.seed)
-            all_slice_prompt_steps.append(slice_prompt_step)
+            if not np.all(slice_seg == slice_gt): # check for perfect prediction. Crazy, but happened with
+                slice_prompt_step = obtain_misclassified_point_prompt_2d(slice_seg, slice_gt, slice_idx, self.seed)
+                all_slice_prompt_steps.append(slice_prompt_step)
 
         new_prompt_step = merge_sparse_prompt_steps(all_slice_prompt_steps)
         new_prompt_step.coords = new_prompt_step.coords[:, ::-1] # Desperate fix attempt
