@@ -4,6 +4,8 @@ seeds:
 models:
 - "sam"
   # - "samnorm"
+  # - "sam2"
+  # - "sam2norm"
   # - "sammed2d"
   # - "sammed2dnorm"
   # - "medsam"
