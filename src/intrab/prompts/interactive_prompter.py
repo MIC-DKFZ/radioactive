@@ -131,6 +131,8 @@ class InteractivePrompter(Prompter):
 
         while not self.stopping_criteria_met(dof, perf, num_iter):
             prompt_step = self.get_next_prompt_step(pred, logits, [ap.prompt_step for ap in all_prompt_results])
+            if prompt_step is None:
+                break # None is returned if prediction is perfect
             # Option to never forget previous prompts but feed all of them again in one huge joint prompt.
             if self.always_pass_prev_prompts:
                 merged_prompt_step = merge_sparse_prompt_steps(
@@ -189,34 +191,15 @@ class twoDInteractivePrompter(InteractivePrompter):
         fn_count = np.sum(fn_mask)
         fp_count = np.sum(fp_mask)
 
+        if fn_count == 0:
+            return True
+        elif fp_count == 0:
+            return False
+
         generate_negative_prompts_prob = fp_count / (fn_count + fp_count)
         generate_negative_prompts_flag = np.random.binomial(1, generate_negative_prompts_prob)
         return bool(generate_negative_prompts_flag)
-
-    # def generate_positive_promptstep_old(
-    #     self,
-    #     pred: np.ndarray,
-    #     fn_mask: np.ndarray,
-    #     slices_inferred: set,
-    # ) -> PromptStep:
-
-    #     bottom_seed_prompt, _, top_seed_prompt = get_fg_points_from_cc_centers(self.groundtruth_model, 3)
-
-    #     # Try to find fn coord in the middle 40% axially of the volume
-    #     new_middle_seed_prompt = get_middle_seed_point(fn_mask, slices_inferred)
-
-    #     # Interpolate linearly from botom_seed-prompt to top_seed_prompt through the new middle prompt to get new positive prompts
-    #     new_seed_prompt = np.vstack([bottom_seed_prompt, new_middle_seed_prompt, top_seed_prompt])
-    #     new_coords = interpolate_points(new_seed_prompt, kind="linear").astype(int)
-
-    #     # Subset to those points not yet segmented
-    #     unsegmented_mask = pred[tuple(new_coords.T)] != 1
-    #     new_coords = new_coords[unsegmented_mask]
-
-    #     # Align back to RAS format and return
-    #     new_coords = new_coords[:, [2, 1, 0]]  # zyx -> xyz
-    #     new_positive_promptstep = PromptStep(point_prompts=(new_coords, [1] * len(new_coords)))
-    #     return new_positive_promptstep
+    
 
     def generate_positive_promptstep(self, fn_mask: np.ndarray, n_ccs: int = 1) -> PromptStep:
 
@@ -315,8 +298,11 @@ class twoDInteractivePrompter(InteractivePrompter):
         pred, _ = self.inferer.transform_to_model_coords_dense(
             pred, is_seg=True
         )  # Transform to the coordinate system in which inference will occur
+        if np.all(pred == self.groundtruth_model):
+            return None
         fn_mask = (pred == 0) & (self.groundtruth_model == 1)
         fp_mask = (pred == 1) & (self.groundtruth_model == 0)
+
 
         generate_negative_prompts_flag = self.get_generate_negative_prompts_flag(fn_mask, fp_mask)
 
