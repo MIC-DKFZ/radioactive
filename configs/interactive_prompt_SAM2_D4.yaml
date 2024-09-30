@@ -2,12 +2,19 @@
 seeds:
   - 11121
 models:
-  - "sam2"
+  # - "sam"
+  # - "samnorm"
   # - "sammed2d"
+  # - "sammed2dnorm"
   # - "medsam"
+  # - "medsamnorm"
   # - "sammed3d"
+  # - "sammed3dnorm"
   # - "sammed3d_turbo"
+  # - "sammed3d_turbonorm"
   # - "segvol"
+  # - "segvolnorm"
+
 prompting:
   type: "interactive"
   prompt_styles:
@@ -15,9 +22,15 @@ prompting:
     - OnePointPer2DSliceInteractivePrompterWithPrevPrompt
     - PointInterpolationInteractivePrompterNoPrevPoint
     - PointInterpolationInteractivePrompterWithPrevPoint
+    - BoxInterpolationInteractivePrompterNoPrevPoint
     - PointPropagationInteractivePrompterNoPrevPoint
     - PointPropagationInteractivePrompterWithPrevPoint
-    - threeDInteractivePrompterSAMMed3D
+    - threeDCroppedInteractivePrompterNoPrevPoint
+    - threeDCroppedInteractivePrompterWithPrevPoint
+    - threeDCroppedFromCenterInteractivePrompterNoPrevPoint
+    - threeDCroppedFromCenterInteractivePrompterWithPrevPoint
+    - threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint
+    - threeDCroppedFromCenterAnd2dAlgoInteractivePrompterWithPrevPoint
     - twoD1PointUnrealisticInteractivePrompterNoPrevPoint
     - twoD1PointUnrealisticInteractivePrompterWithPrevPoint
 
@@ -29,11 +42,11 @@ datasets:
   # - identifier: 209  # HanSeg MR Organs
   #   type: "organ"
   #   excluded_classes: [0]
-  # # - identifier: 501  # HNTS-MRG MR Primary Tumors
+  # - identifier: 501  # HNTS-MRG MR Primary Tumors
   #   type: "instance"
   #   excluded_classes: [0]
   - identifier: 600  # Pengwin CT Bones
-    type: "organ"
+    type: "instance"
     excluded_classes: [0]
   # - identifier: 651  # SegRap CT Organs at Risk
   #   type: "organ"

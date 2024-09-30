@@ -51,6 +51,7 @@ from intrab.prompts.prompter import (
 )
 
 from intrab.prompts.interactive_prompter import (
+    BoxInterpolationInteractivePrompterNoPrevPoint,
     OnePointPer2DSliceInteractivePrompterNoPrevPoint,
     OnePointPer2DSliceInteractivePrompterWithPrevPoint,
     PointInterpolationInteractivePrompterNoPrevPoint,
@@ -300,6 +301,17 @@ def get_wanted_supported_prompters(
                         pro_conf.interactive_perf_bound,
                         pro_conf.interactive_max_iter,
                         pro_conf.twoD_n_slice_point_interpolation,
+                    )
+                )
+            if "BoxInterpolationInteractivePrompterNoPrevPoint" in wanted_prompt_styles:
+                prompters.append(
+                    BoxInterpolationInteractivePrompterNoPrevPoint(
+                        inferer,
+                        seed,
+                        pro_conf.twoD_interactive_n_cc,
+                        pro_conf.interactive_dof_bound,
+                        pro_conf.interactive_perf_bound,
+                        pro_conf.interactive_max_iter,
                     )
                 )
             if "PointPropagationInteractivePrompterNoPrevPoint" in wanted_prompt_styles:

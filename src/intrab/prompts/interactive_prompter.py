@@ -16,10 +16,12 @@ from intrab.prompts.prompt_3d import (
     subset_points_to_box,
 )
 from intrab.prompts.prompt_utils import (
+    box_interpolation,
     get_fg_point_from_cc_center,
     get_n_largest_CCs,
     get_pos_clicks2D_row_major,
     get_fg_points_from_cc_centers,
+    get_seed_boxes,
     get_seed_point,
     interpolate_points,
     get_middle_seed_point,
@@ -766,6 +768,34 @@ class PointInterpolationInteractivePrompterNoPrevPoint(twoDInteractivePrompter):
         prompt_model = self.inferer.transform_promptstep_to_model_coords(prompt_orig)
         return prompt_model
 
+class BoxInterpolationInteractivePrompterNoPrevPoint(twoDInteractivePrompter):
+    def __init__(
+        self,
+        inferer: Inferer,
+        seed: int = 11121,
+        n_ccs_positive_interaction: int = 1,
+        dof_bound: int | None = None,
+        perf_bound: float | None = None,
+        max_iter: int | None = None,
+    ):
+        super().__init__(inferer, seed, n_ccs_positive_interaction, dof_bound, perf_bound, max_iter)
+        self.n_slice_box_interpolation = 3
+
+    def get_initial_prompt_step(self) -> PromptStep:
+        """
+        Simulates the user clicking in the connected component's center of mass `n_slice_point_interpolation` times.
+        Slices are selected equidistantly between min and max slices with foreground (if not contiguous defaults to closest neighbors).
+        Then the points are interpolated between the slices centers and prompted to the model.
+
+        :return: The PromptStep from the interpolation of the points.
+        """
+        max_possible_clicks = min(self.n_slice_box_interpolation, len(self.get_slices_to_infer()))
+        seed_prompt_RAS = get_seed_boxes(self.groundtruth_SAR, max_possible_clicks)
+        prompt_RAS = box_interpolation(seed_prompt_RAS)
+        prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
+        prompt_model = self.inferer.transform_promptstep_to_model_coords(prompt_orig)
+        return prompt_model
+
 
 class PointPropagationInteractivePrompterNoPrevPoint(twoDInteractivePrompter):
     def __init__(
@@ -964,6 +994,7 @@ interactive_prompt_styles = Literal[
     "OnePointPer2DSliceInteractivePrompterWithPrevPrompt",
     "PointInterpolationInteractivePrompterNoPrevPoint",
     "PointInterpolationInteractivePrompterWithPrevPoint",
+    "BoxInterpolationInteractivePrompterNoPrevPoint",
     "PointPropagationInteractivePrompterNoPrevPoint",
     "PointPropagationInteractivePrompterWithPrevPoint",
     "threeDCroppedInteractivePrompterNoPrevPoint",

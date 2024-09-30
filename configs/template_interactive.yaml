@@ -22,6 +22,7 @@ prompting:
     - OnePointPer2DSliceInteractivePrompterWithPrevPrompt
     - PointInterpolationInteractivePrompterNoPrevPoint
     - PointInterpolationInteractivePrompterWithPrevPoint
+    - BoxInterpolationInteractivePrompterNoPrevPoint
     - PointPropagationInteractivePrompterNoPrevPoint
     - PointPropagationInteractivePrompterWithPrevPoint
     - threeDCroppedInteractivePrompterNoPrevPoint
