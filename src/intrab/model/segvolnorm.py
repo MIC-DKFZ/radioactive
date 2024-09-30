@@ -79,4 +79,5 @@ class SegVolNormInferer(SegVolInferer):
 
         # Clip the image array
         self.img = np.clip(self.img, self.global_min, self.global_max)
+        self.img = torch.as_tensor(self.img)
 

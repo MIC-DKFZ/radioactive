@@ -319,7 +319,8 @@ class SegVolInferer(Inferer):
         # zoom-in inference:
         min_d, min_h, min_w, max_d, max_h, max_w = logits2roi_coor(self.spatial_size, logits_global_zoom_out)
         if min_d is None:
-            raise RuntimeError("Fail to detect foreground!")
+            res = (None, None, None, None, logits_global_zoom_out)
+            #raise RuntimeError("Fail to detect foreground!")
 
         # Crop roi
         image_single_cropped = (
