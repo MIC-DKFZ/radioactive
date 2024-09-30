@@ -242,6 +242,10 @@ class SegVolInferer(Inferer):
         # CropForegroundd
         coords = coords - self.start_coord
 
+        # Ensure that coords lie within model patch - can occur if 'background' is segmented as gt
+        coords = np.minimum(coords, self.cropped_shape)
+        coords = np.maximum(coords, 0)
+
         # 5. Resized (if applicable)
         zoomed_out_coords = resample_to_shape_sparse(coords, self.cropped_shape, self.spatial_size, round=True)
 
