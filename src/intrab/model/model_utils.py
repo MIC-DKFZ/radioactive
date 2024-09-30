@@ -350,7 +350,7 @@ def get_wanted_supported_prompters(
                         n_init_points_per_slice=pro_conf.twoD_interactive_n_points_per_slice,
                     )
                 )
-            if "twoD1PointUnrealisticInteractivePrompterPrevPoint" in wanted_prompt_styles:
+            if "twoD1PointUnrealisticInteractivePrompterWithPrevPoint" in wanted_prompt_styles:
                 prompters.append(
                     twoD1PointUnrealisticInteractivePrompterWithPrevPoint(
                         inferer,

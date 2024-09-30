@@ -21,7 +21,7 @@ prompting:
   type: "interactive"
   prompt_styles:
     - OnePointPer2DSliceInteractivePrompterNoPrevPoint
-    - OnePointPer2DSliceInteractivePrompterWithPrevPrompt
+    - OnePointPer2DSliceInteractivePrompterWithPrevPoint
     - PointInterpolationInteractivePrompterNoPrevPoint
     - PointInterpolationInteractivePrompterWithPrevPoint
     - BoxInterpolationInteractivePrompterNoPrevPoint
