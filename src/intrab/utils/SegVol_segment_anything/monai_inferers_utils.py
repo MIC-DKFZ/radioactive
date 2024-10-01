@@ -65,6 +65,13 @@ def build_binary_cube(bbox, binary_cube_shape):
 
 def build_binary_points(points, labels, shape):
     binary_points = torch.zeros(shape, dtype=torch.int16)
+    
+    # clamp in case necessary
+    max_dims = torch.tensor(shape) - 1
+    min_dims = torch.tensor([0, 0, 0])
+    points = torch.clamp(points, min=min_dims, max=max_dims)
+
+
     binary_points[points[labels == 1, 0].long(), points[labels == 1, 1].long(), points[labels == 1, 2].long()] = 1
     return binary_points
 
