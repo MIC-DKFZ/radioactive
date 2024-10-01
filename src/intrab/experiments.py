@@ -259,22 +259,28 @@ def run_experiments_instances(
         for prompter in prompters:
             if prompter.is_static:
                 with logger.catch(level="WARNING"):
-                    instance_evaluation(
-                        instance_gt_path=gt_output_path,
-                        instance_pd_path=pred_output_path / prompter.name / target_name,
-                        output_path=pred_output_path / prompter.name / target_name,
-                        classes_of_interest=(1,),
-                        dice_threshold=1e-9,
-                    )
+                    pred_path = pred_output_path / prompter.name / target_name
+                    if not (pred_path / "sample_wise_instance_wise_results.json").exists():
+                        instance_evaluation(
+                            instance_gt_path=gt_output_path,
+                            instance_pd_path=pred_output_path / prompter.name / target_name,
+                            output_path=pred_output_path / prompter.name / target_name,
+                            classes_of_interest=(1,),
+                            dice_threshold=1e-9,
+                            n_processes=12,
+                        )
             else:
                 for i in range(prompter.num_iterations):
                     pred_path = pred_output_path / prompter.name / target_name / f"iter_{i}"
                     if pred_path.exists():
                         with logger.catch(level="WARNING"):
-                            instance_evaluation(
-                                instance_gt_path=gt_output_path,
-                                instance_pd_path=pred_output_path / prompter.name / target_name / f"iter_{i}",
-                                output_path=pred_output_path / prompter.name / target_name / f"iter_{i}",
-                                classes_of_interest=(1,),
-                                dice_threshold=1e-9,
-                            )
+                            # Don't overwrite if results exist
+                            if not (pred_path / "sample_wise_instance_wise_results.json").exists():
+                                instance_evaluation(
+                                    instance_gt_path=gt_output_path,
+                                    instance_pd_path=pred_path,
+                                    output_path=pred_path,
+                                    classes_of_interest=(1,),
+                                    dice_threshold=1e-9,
+                                    n_processes=12,
+                                )
