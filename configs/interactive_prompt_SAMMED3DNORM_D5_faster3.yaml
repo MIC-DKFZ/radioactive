@@ -27,12 +27,12 @@ prompting:
 #    - BoxInterpolationInteractivePrompterNoPrevPoint
 #    - PointPropagationInteractivePrompterNoPrevPoint
 #    - PointPropagationInteractivePrompterWithPrevPoint
-    - threeDCroppedInteractivePrompterNoPrevPoint
-    - threeDCroppedInteractivePrompterWithPrevPoint
-    - threeDCroppedFromCenterInteractivePrompterNoPrevPoint
-    - threeDCroppedFromCenterInteractivePrompterWithPrevPoint
-#    - threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint
-#    - threeDCroppedFromCenterAnd2dAlgoInteractivePrompterWithPrevPoint
+#    - threeDCroppedInteractivePrompterNoPrevPoint
+#    - threeDCroppedInteractivePrompterWithPrevPoint
+#    - threeDCroppedFromCenterInteractivePrompterNoPrevPoint
+#    - threeDCroppedFromCenterInteractivePrompterWithPrevPoint
+    - threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint
+    - threeDCroppedFromCenterAnd2dAlgoInteractivePrompterWithPrevPoint
 #    - twoD1PointUnrealisticInteractivePrompterNoPrevPoint
 #    - twoD1PointUnrealisticInteractivePrompterWithPrevPoint
 

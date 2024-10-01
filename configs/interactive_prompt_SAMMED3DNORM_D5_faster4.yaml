@@ -31,8 +31,8 @@ prompting:
 #    - threeDCroppedInteractivePrompterWithPrevPoint
 #    - threeDCroppedFromCenterInteractivePrompterNoPrevPoint
 #    - threeDCroppedFromCenterInteractivePrompterWithPrevPoint
-    - threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint
-    - threeDCroppedFromCenterAnd2dAlgoInteractivePrompterWithPrevPoint
+#    - threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint
+#    - threeDCroppedFromCenterAnd2dAlgoInteractivePrompterWithPrevPoint
     - twoD1PointUnrealisticInteractivePrompterNoPrevPoint
     - twoD1PointUnrealisticInteractivePrompterWithPrevPoint
 

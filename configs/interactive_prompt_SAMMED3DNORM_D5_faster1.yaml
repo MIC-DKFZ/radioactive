@@ -20,15 +20,15 @@ models:
 prompting:
   type: "interactive"
   prompt_styles:
-    - OnePointPer2DSliceInteractivePrompterNoPrevPoint
-    - OnePointPer2DSliceInteractivePrompterWithPrevPoint
-    - PointInterpolationInteractivePrompterNoPrevPoint
+#    - OnePointPer2DSliceInteractivePrompterNoPrevPoint
+#    - OnePointPer2DSliceInteractivePrompterWithPrevPoint
+#    - PointInterpolationInteractivePrompterNoPrevPoint
 #    - PointInterpolationInteractivePrompterWithPrevPoint
 #    - BoxInterpolationInteractivePrompterNoPrevPoint
 #    - PointPropagationInteractivePrompterNoPrevPoint
 #    - PointPropagationInteractivePrompterWithPrevPoint
-#    - threeDCroppedInteractivePrompterNoPrevPoint
-#    - threeDCroppedInteractivePrompterWithPrevPoint
+    - threeDCroppedInteractivePrompterNoPrevPoint
+    - threeDCroppedInteractivePrompterWithPrevPoint
 #    - threeDCroppedFromCenterInteractivePrompterNoPrevPoint
 #    - threeDCroppedFromCenterInteractivePrompterWithPrevPoint
 #    - threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint
