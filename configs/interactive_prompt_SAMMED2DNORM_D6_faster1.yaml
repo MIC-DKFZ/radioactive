@@ -1,4 +1,4 @@
-interactive_prompt_SAMMED2DNORM_D6.yaml# Holds all information needed to run experiments.
+# Holds all information needed to run experiments.
 seeds:
   - 11121
 models:
