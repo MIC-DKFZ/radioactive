@@ -260,7 +260,7 @@ def run_experiments_instances(
             if prompter.is_static:
                 with logger.catch(level="WARNING"):
                     pred_path = pred_output_path / prompter.name / target_name
-                    if not (pred_path / "sample_wise_instance_wise_results.json").exists():
+                    if not (pred_path / "aggregated_lwcw_results.json").exists():
                         instance_evaluation(
                             instance_gt_path=gt_output_path,
                             instance_pd_path=pred_output_path / prompter.name / target_name,
@@ -275,7 +275,7 @@ def run_experiments_instances(
                     if pred_path.exists():
                         with logger.catch(level="WARNING"):
                             # Don't overwrite if results exist
-                            if not (pred_path / "sample_wise_instance_wise_results.json").exists():
+                            if not (pred_path / "aggregated_lwcw_results.json").exists():
                                 instance_evaluation(
                                     instance_gt_path=gt_output_path,
                                     instance_pd_path=pred_path,
