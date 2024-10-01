@@ -211,7 +211,7 @@ def run_experiments_instances(
                         continue
                 else:
                     expected_ins_paths = [
-                        prompt_pred_path / f"iter_{i}" / instance_filename for i in range(prompter.num_iterations)
+                        prompt_pred_path / target_name / f"iter_{i}" / instance_filename for i in range(6)
                     ]
                     if all([path.exists() for path in expected_ins_paths]) and not results_overwrite:
                         # logger.debug(f"Skipping {gt_path} as it has already been processed.")
