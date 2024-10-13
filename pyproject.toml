@@ -6,8 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "intrab"
 version = "0.0"
 authors = [
-    {name = "Timothy Tempus", email = "timothy.tempus@dkfz-heidelberg.de"},
-    {name = "Tassilo Wald", email = "tassilo.wald@dkfz-heidelberg.de"}
+    {name = "Tassilo Wald", email = "tassilo.wald@dkfz-heidelberg.de"},
+    {name = "Timothy Tempus", email = "timothy.tempus@dkfz-heidelberg.de"}
     ]
 description = "IntRaBench - Interactive Radiology Benchmark provides a easy-to-use framework to evaluate current State-of-the-Art medical interactive segmentation models."
 dependencies = [
@@ -43,7 +43,9 @@ dependencies = [
     'SimpleITK-SimpleElastix',
     'natsort',
     'pandas',
-    'idc-index'
+    'idc-index',
+    'toinstance @ git+https://github.com/TaWald/InstanceNrrd.git',
+    'nneval @ git+https://github.com/TaWald/MedEval'
 ]
 
 readme = "README.md"
