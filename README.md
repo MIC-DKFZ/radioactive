@@ -1,4 +1,6 @@
-# **IntRa** Bench: Introducing the **Int**eractive **Ra**diology Benchmark
+
+![INTRABENCH](assets/images/intrabench.png)
+---
 The IntRa Bench provides the medical segmentation field a comprehensive benchmark, that fairly compares existing open-set interactive segmentation methods on a broad-range of tasks and modalities.
 The benchmark is intended to provide users with a clear understanding of how to best prompt existing methods and provides developers with a extendaable framework to easily compare their newly developed methods against the currently available methods.
 
