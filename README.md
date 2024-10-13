@@ -1,87 +1,40 @@
 # **IntRa** Bench: Introducing the **Int**eractive **Ra**diology Benchmark
-The IntRa Bench provides the medical segmentation field a comprehensive benchmark, that fairly compares existing open-set interactive segmentatio methods on a broad-range of tasks and modalities.
+The IntRa Bench provides the medical segmentation field a comprehensive benchmark, that fairly compares existing open-set interactive segmentation methods on a broad-range of tasks and modalities.
 The benchmark is intended to provide users with a clear understanding of how to best prompt existing methods and provides developers with a extendaable framework to easily compare their newly developed methods against the currently available methods.
 
-## ToDo's
-- [ ] Single center Points (Static Predictions)
-- [ ] Single bbox (deterministic)
-- [ ] Check-out current checkpoints or provide version (last-accessed) time point when checkpoints were loaded
-  - [ ] Upload checkpoints to Zenodo to allow auto-downloading them on-demand
-- [ ] Move preprocessing lesions into the normal call
-  - [ ] Try reading -- if not exists create.
-- [ ] Add some more seeds of the same model to get more robust results
-- [ ] SegVol does sample from foreground mask it creates in zoom-in zoom-out mode, so it does not receive the "same" prompt
 
-## Installing the Benchmark
-ToDo
+## Installation
 
-## Extending the Benchmark
-ToDo
 
-## Currently supported models
-ToDo
+## Usage
+To use the benchmark three steps need to be conducted:
+### 1. Downloading the datasets
+The datasets used in the benchmark can be downloaded using the following command:
 
-[SAM](https://github.com/facebookresearch/segment-anything) (WIP, branch: sam)
-
-[MedSAM](needlink) (To do)
-
-[SAM-Med2D](https://github.com/OpenGVLab/SAM-Med2D) (To do)
-
-[SAM-Med3D](https://github.com/uni-medical/SAM-Med3D) (To do)
-
-### Other
-
-[Universeg](https://github.com/JJGO/UniverSeg) (To do)
-
-[SEEM](https://github.com/UX-Decoder/Segment-Everything-Everywhere-All-At-Once) (To do)
-
-Checkpoint from SAM-Med3D obtained on the relevant repository
-
-## Directory Structure
-Please store your volumes and labels like
-data
-  ├── imagesTs
-  │ ├── word_0025.nii.gz
-  │ ├── ...
-  ├── labelsTs
-  │ ├── word_0025.nii.gz
-  │ ├── ...
-  ├── ...
-  ├── dataset.json
-
-In particular:
-* Images are only drawn from the TEST folders, so imagesTr and LabelsTr will be ignored
-* Only nifti files are supported currently
-* dataset.json file must be included, and is used to find the foreground labels and what they correspond to.
-
-## Use
-### Prompt Generation
-
-Point prompts are generated first to permit using the same prompts for each model. Generate them with `generate_points.py` taking flags
-- -tdp, or --test_data_path: Where the query images are stored (in the directory structure specified in Directory Strucutre)
-- -rp, or --results_path: Where the prompts file should be stored. Use the same directory in `validation.py` for the segmentation maps.
-- -nc, or --n_clicks [default = 5]: The number of clicks to generate per volume per foreground label (for 3D models) or per slice containing foreground per foreground label (for 2D models).
-
-For example:
-```
-python generate_points.py \
-    -tdp /home/t722s/Desktop/Datasets/BratsMini/ \
-    -rp /home/t722s/Desktop/Sam-Med3DTest/evalBrats/ \
-    -nc 5
+```python
+python ./src/intrab/datasets_preprocessing/download_all_datasets.py
+# or only download a subset of datasets
+python ./src/intrab/datasets_preprocessing/download_all_datasets.py --datasets ms_flair hanseg # can be multiple
 ```
 
-### Inference
-Perform inference with `validation_interface.py` (in progress. Use validation_interface.ipynb for now)
+Regarding selective downloads one can choose from:
+  `["segrap", "hanseg", "ms_flair", "hntsmrg", "hcc_tace", "adrenal_acc", "rider_lung", "colorectal", "lnq", "pengwin"]`
 
-### Evaluation
-Obtain evaluation results with `evaluate_folder.py`. Requires flags
-- -tdp, or --test_data_path: Where the test data are stored (format as in Directory Structure)
-- -rp, or --results_path: Where the segmentations are stored. Use the same directory in `validation.py`
+### 2. Preprocessing the dataset
+The dataset is often provided in a raw format, e.g. DICOMs which are not directly usable and can be a pain to deal with. To simplify things we provide preprocessing schemes that convert these directly to easier useable formats. The preprocessing can be done using the following commands.
 
-Evaluation results will be stored in the `-rp` folder as `evaluation_dice.json`
-
+```python
+python ./src/intrab/datasets_preprocessing/preprocess_datasets.py --datasets ms_flair hanseg  # can be multiple
 ```
-python evaluate_folder.py \
-    -tdp /home/t722s/Desktop/Datasets/BratsMini/ \
-    -rp /home/t722s/Desktop/Sam-Med3DTest/evalBrats
+
+or again any choice of datasets from the list below:
+`ms_flair, hanseg, hntsmrg, pengwin, segrap, lnq, colorectal, adrenal_acc, hcc_tace, rider_lung`
+
+### 3. Running the benchmark
+The benchmark for the `ms_flair` dataset and the `SAM` model can be run using the following command.
+
+```python
+python ./src/intrab/experiments_runner.py --config ./configs/static_prompt_SAMNORM_D1.yaml
 ```
+
+Other configs can also be selected, but this can serve as an exemplary command to understand the benchmarking process.
