@@ -1,13 +1,12 @@
 
 ![INTRABENCH](assets/images/intrabench.png)
 ---
-The IntRa Bench provides the medical segmentation field a comprehensive benchmark, that fairly compares existing open-set interactive segmentation methods on a broad-range of tasks and modalities.
-The benchmark is intended to provide users with a clear understanding of how to best prompt existing methods and provides developers with a extendaable framework to easily compare their newly developed methods against the currently available methods.
+The **Int**eractive **Ra**diology **Bench**chmark allows open-set interactive 2D or 3D segmentation methods to evaluate themselves fairly against other methods on the field of radiological images. **IntRaBench** currently includes _6 interactive segmentation methods_, spans _eight datasets_ (including CT and MRI) with _various anatomical and pathological targets_.
+
+Through this benchmark, we provide users with transparent results on what the best existing methods are and provide developers an extendable framework, allowing them to easily compare their newly developed models or prompting schemes against currently available methods.
 
 
 ## Installation
-
-
 ## Usage
 To use the benchmark three steps need to be conducted:
 ### 1. Downloading the datasets
