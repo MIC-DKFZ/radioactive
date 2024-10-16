@@ -47,7 +47,7 @@ dependencies = [
     'toinstance @ git+https://github.com/TaWald/InstanceNrrd.git',
     'nneval @ git+https://github.com/TaWald/MedEval',
     'hydra',
-    'sam2 @ git+https://github.com/facebookresearch/sam2.git'
+    'SAM_2 @ git+https://github.com/facebookresearch/sam2.git'
 ]
 
 readme = "README.md"
