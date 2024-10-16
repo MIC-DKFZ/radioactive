@@ -5,8 +5,12 @@ The **Int**eractive **Ra**diology **Bench**chmark allows open-set interactive 2D
 
 Through this benchmark, we provide users with transparent results on what the best existing methods are and provide developers an extendable framework, allowing them to easily compare their newly developed models or prompting schemes against currently available methods.
 
-
 ## Installation
+1. Download repostory (clone or download and extract manually)
+2. `cd intrabench`
+3. Activate virtualenv of choice and `pip install -e .`
+4. Done.
+
 ## Usage
 To use the benchmark three steps need to be conducted:
 ### 1. Downloading the datasets
