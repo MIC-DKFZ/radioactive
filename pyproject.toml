@@ -45,8 +45,7 @@ dependencies = [
     'pandas',
     'idc-index',
     'toinstance @ git+https://github.com/TaWald/InstanceNrrd.git',
-    'nneval @ git+https://github.com/TaWald/MedEval',
-    'hydra',
+    'nneval @ git+https://github.com/TaWald/MedEval'
 ]
 
 readme = "README.md"
