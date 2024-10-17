@@ -46,6 +46,7 @@ Required checkpoints are:
 - `sam_vit_h_4b8939.pth` [SAM](https://github.com/facebookresearch/segment-anything?tab=readme-ov-file#model-checkpoints)
 - `sam-med2d_b.pth` [SAMMED2D](https://drive.google.com/file/d/1ARiB5RkSsWmAB_8mqWnwDF8ZKTtFwsjl/view)
 - `SegVol_v1.pth` [SegVol](https://drive.google.com/drive/folders/1TEJtgctH534Ko5r4i79usJvqmXVuLf54)
+
 Only the checkpoints for the models that are going to be used need to be downloaded.
 
 ### 4. Running the benchmark
