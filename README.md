@@ -7,10 +7,10 @@ Through this benchmark, we provide users with transparent results on what the b
 
 ## Installation
 1. Activate virtualenv of choice (with e.g. python 3.12)
-2. Clone & install SAM2 `git clone https://github.com/facebookresearch/sam2.git && cd sam2 && pip install -e .`
-3. Download IntRaBench repository (clone or download and extract manually)
-4. `cd intrabench && pip install -e .`
-5. Done.
+2. Download IntRaBench repository (clone or download and extract manually)
+3. `cd intrabench && pip install -e .`
+  (# This will take a while to resolve dependencies -- A more constrained requirements file will be provided in the future)
+4. Done.
 
 ## Usage
 To use the benchmark three steps need to be conducted:
