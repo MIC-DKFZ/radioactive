@@ -6,10 +6,11 @@ The **Int**eractive **Ra**diology **Bench**chmark allows open-set interactive 2D
 Through this benchmark, we provide users with transparent results on what the best existing methods are and provide developers an extendable framework, allowing them to easily compare their newly developed models or prompting schemes against currently available methods.
 
 ## Installation
-1. Download repostory (clone or download and extract manually)
-2. `cd intrabench`
-3. Activate virtualenv of choice and `pip install -e .`
-4. Done.
+1. Activate virtualenv of choice (with e.g. python 3.12)
+2. Clone & install SAM2 `git clone https://github.com/facebookresearch/sam2.git && cd sam2 && pip install -e .`
+3. Download IntRaBench repository (clone or download and extract manually)
+4. `cd intrabench && pip install -e .`
+5. Done.
 
 ## Usage
 To use the benchmark three steps need to be conducted:
