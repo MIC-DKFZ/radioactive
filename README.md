@@ -12,6 +12,13 @@ Through this benchmark, we provide users with transparent results on what the b
   (This will take a while to resolve dependencies -- A more constrained requirements file will be provided in the future)
 4. Done.
 
+### Setting Environment Variables
+To use the benchmark, three environment variables need to be set:
+- `INTRAB_DATA_PATH` - Datasets will be downloaded into this and preprocessed in it.
+- `INTRAB_MODEL_PATH` - Model checkpoints will be stored here
+- `INTRAB_RESULTS_PATH` - Predictions and evaluation resulst will be located here.
+- `INTRAB_MITK_PATH` - (Optional) The path for the MITK executable, if not set the benchmark will auto-download and use the downloaded binaries of MITK instead.
+
 ## Usage
 To use the benchmark three steps need to be conducted:
 ### 1. Downloading the datasets
