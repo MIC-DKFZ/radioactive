@@ -12,7 +12,7 @@ authors = [
 description = "IntRaBench - Interactive Radiology Benchmark provides a easy-to-use framework to evaluate current State-of-the-Art medical interactive segmentation models."
 dependencies = [
     'huggingface-hub',
-    'albumentations',
+    'albumentations==1.4.8',
     'ipython',
     'matplotlib',
     'scipy',
