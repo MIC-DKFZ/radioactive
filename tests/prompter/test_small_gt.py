@@ -2,8 +2,8 @@ from typing import Literal
 import numpy as np
 import pytest
 
-from intrab.prompts.prompt_3d import get_bbox3d, get_pos_clicks3D
-from intrab.prompts.prompt_utils import (
+from radioa.prompts.prompt_3d import get_bbox3d, get_pos_clicks3D
+from radioa.prompts.prompt_utils import (
     box_interpolation,
     get_bbox3d_sliced,
     get_minimal_boxes_row_major,

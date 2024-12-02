@@ -2,7 +2,7 @@
 import nibabel as nib
 import os
 
-os.environ["INTRAB_MODEL_PATH"] = "/home/t722s/E132-Projekte/Projects/2023_Tempus_intrab/checkpoints"
+os.environ["RADIOA_MODEL_PATH"] = "/home/t722s/E132-Projekte/Projects/2023_Tempus_intrab/checkpoints"
 
 from radioa.model import SAM2
 from radioa.model.model_utils import checkpoint_registry
