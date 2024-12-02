@@ -1,5 +1,5 @@
 
-![INTRABENCH](assets/images/radioactive.png)
+![RadioActive](assets/images/radioactive.png)
 ---
 The **Radio**logical Inter**active** Benchchmark allows open-set interactive 2D or 3D segmentation methods to evaluate themselves fairly against other methods on the field of radiological images. **Radioactive** currently includes _6 interactive segmentation methods_, spans _ten datasets_ (including CT and MRI) with _various anatomical and pathological targets_.
 
@@ -7,17 +7,17 @@ Through this benchmark, we provide users with transparent results on what the b
 
 ## Installation
 1. Activate virtualenv of choice (with e.g. python 3.12)
-2. Download IntRaBench repository (clone or download and extract manually)
-3. `cd intrabench && pip install -e .`
+2. Download RadioActive repository (clone or download and extract manually)
+3. `cd radioactive && pip install -e .`
   (This will take a while to resolve dependencies -- A more constrained requirements file will be provided in the future)
 4. Done.
 
 ### Setting Environment Variables
 To use the benchmark, three environment variables need to be set:
-- `INTRAB_DATA_PATH` - Datasets will be downloaded into this and preprocessed in it.
-- `INTRAB_MODEL_PATH` - Model checkpoints will be stored here
-- `INTRAB_RESULTS_PATH` - Predictions and evaluation resulst will be located here.
-- `INTRAB_MITK_PATH` - (Optional) The path for the MITK executable, if not set the benchmark will auto-download and use the downloaded binaries of MITK instead.
+- `RADIOA_DATA_PATH` - Datasets will be downloaded into this and preprocessed in it.
+- `RADIOA_MODEL_PATH` - Model checkpoints will be stored here
+- `RADIOA_RESULTS_PATH` - Predictions and evaluation resulst will be located here.
+- `RADIOA_MITK_PATH` - (Optional) The path for the MITK executable, if not set the benchmark will auto-download and use the downloaded binaries of MITK instead.
 
 ## Usage
 To use the benchmark three steps need to be conducted:
@@ -25,9 +25,9 @@ To use the benchmark three steps need to be conducted:
 The datasets used in the benchmark can be downloaded using the following command:
 
 ```python
-python ./src/intrab/datasets_preprocessing/download_all_datasets.py
+python ./src/radioa/datasets_preprocessing/download_all_datasets.py
 # or only download a subset of datasets
-python ./src/intrab/datasets_preprocessing/download_all_datasets.py --datasets ms_flair hanseg # can be multiple
+python ./src/radioa/datasets_preprocessing/download_all_datasets.py --datasets ms_flair hanseg # can be multiple
 ```
 
 Regarding selective downloads one can choose from:
@@ -37,7 +37,7 @@ Regarding selective downloads one can choose from:
 The dataset is often provided in a raw format, e.g. DICOMs which are not directly usable and can be a pain to deal with. To simplify things we provide preprocessing schemes that convert these directly to easier useable formats. The preprocessing can be done using the following commands.
 
 ```python
-python ./src/intrab/datasets_preprocessing/preprocess_datasets.py --datasets ms_flair hanseg  # can be multiple
+python ./src/radioa/datasets_preprocessing/preprocess_datasets.py --datasets ms_flair hanseg  # can be multiple
 ```
 
 or again any choice of datasets from the list below:
@@ -60,7 +60,7 @@ Only the checkpoints for the models that are going to be used need to be downloa
 The benchmark for the `ms_flair` dataset and the `SAM` model can be run using the following command.
 
 ```python
-python ./src/intrab/experiments_runner.py --config ./configs/static_prompt_SAMNORM_D1.yaml
+python ./src/radioa/experiments_runner.py --config ./configs/static_prompt_SAMNORM_D1.yaml
 ```
 
 Other configs can also be selected, but this can serve as an exemplary command to understand the benchmarking process.
