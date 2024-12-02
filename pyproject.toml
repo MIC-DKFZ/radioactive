@@ -3,13 +3,13 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "intrab"
+name = "radioa"
 version = "0.0"
 authors = [
     {name = "Tassilo Wald", email = "tassilo.wald@dkfz-heidelberg.de"},
     {name = "Timothy Tempus", email = "timothy.tempus@dkfz-heidelberg.de"}
     ]
-description = "IntRaBench - Interactive Radiology Benchmark provides a easy-to-use framework to evaluate current State-of-the-Art medical interactive segmentation models."
+description = "RadioActive - The Radiological Interactive Benchmark provides a easy-to-use framework to evaluate current State-of-the-Art medical interactive segmentation models."
 dependencies = [
     'huggingface-hub',
     'albumentations',
