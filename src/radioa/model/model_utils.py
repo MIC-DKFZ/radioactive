@@ -79,13 +79,6 @@ model_registry = Literal[
     "sammed3d_turbo",
     "medsam",
     "segvol",
-    "samnorm",
-    "sam2norm",
-    "medsamnorm",
-    "sammed2dnorm",
-    "sammed3dnorm",
-    "sammed3d_turbonorm",
-    "segvolnorm",
 ]
 
 inferer_registry: dict[model_registry, Type[Inferer]] = {
@@ -96,13 +89,6 @@ inferer_registry: dict[model_registry, Type[Inferer]] = {
     "sammed3d_turbo": SAMMed3DInferer,
     "segvol": SegVolInferer,
     "sam2": SAM2Inferer,
-    "samnorm": SAMNormInferer,
-    "sam2norm": SAM2NormInferer,
-    "medsamnorm": MedSAMNormInferer,
-    "sammed2dnorm": SAMMed2DNormInferer,
-    "sammed3dnorm": SAMMed3DNormInferer,
-    "sammed3d_turbonorm": SAMMed3DNormInferer,
-    "segvolnorm": SegVolNormInferer,
 }
 
 
@@ -114,13 +100,6 @@ checkpoint_registry: dict[model_registry, Path] = {
     "sammed3d": get_model_path() / "sam_med3d.pth",
     "sammed3d_turbo": get_model_path() / "sam_med3d_turbo.pth",
     "sam2": "",
-    "samnorm": get_model_path() / "sam_vit_h_4b8939.pth",
-    "sam2norm": ",",
-    "medsamnorm": get_model_path() / "medsam_vit_b.pth",
-    "sammed2dnorm": get_model_path() / "sam-med2d_b.pth",
-    "sammed3dnorm": get_model_path() / "sam_med3d.pth",
-    "sammed3d_turbonorm": get_model_path() / "sam_med3d_turbo.pth",
-    "segvolnorm": get_model_path() / "SegVol_v1.pth",
 }
 
 
