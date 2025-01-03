@@ -7,7 +7,8 @@ name = "radioa"
 version = "0.0"
 authors = [
     {name = "Tassilo Wald", email = "tassilo.wald@dkfz-heidelberg.de"},
-    {name = "Timothy Tempus", email = "timothy.tempus@dkfz-heidelberg.de"}
+    {name = "Constantin Ulrich", email = "constantin.ulrich@dkfz-heidelberg.de"},
+    {name = "Emily Tempus", email = "timothy.tempus@dkfz-heidelberg.de"}
     ]
 description = "RadioActive - The Radiological Interactive Benchmark provides a easy-to-use framework to evaluate current State-of-the-Art medical interactive segmentation models."
 dependencies = [

@@ -55,6 +55,7 @@ class SAMMed2DInferer(Inferer):
     def set_image(self, img_path: str | Path) -> None:
         if self._image_already_loaded(img_path=img_path):
             return
+        self.image_embeddings_dict = {}
         img_nib = load_any_to_nib(img_path)
         self.orig_affine = img_nib.affine
         self.orig_shape = img_nib.shape
@@ -95,8 +96,6 @@ class SAMMed2DInferer(Inferer):
 
         return low_res_masks
 
-    def clear_embeddings(self):
-        self.image_embeddings_dict = {}
 
     def transforms(self, new_size):  # Copied over from SAM-Med2D predictor_sammed.py
         Transforms = []
@@ -125,6 +124,8 @@ class SAMMed2DInferer(Inferer):
         slices_processed = {}
         for slice_idx in slices_to_process:
             slice = img[slice_idx, ...]
+            lower_bound, upper_bound = np.percentile(slice[slice > 0], 0.5), np.percentile(slice[slice > 0], 99.5)
+            slice = np.clip(slice, lower_bound, upper_bound)
 
             slice = np.round((slice - slice.min()) / (slice.max() - slice.min() + 1e-6) * 255).astype(
                 np.uint8
@@ -139,6 +140,7 @@ class SAMMed2DInferer(Inferer):
             slices_processed[slice_idx] = slice.float()
 
         return slices_processed
+
 
     def preprocess_prompt(self, prompt, promptstep_in_model_coord_system=False):
         """

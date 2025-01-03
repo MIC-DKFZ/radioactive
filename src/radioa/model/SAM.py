@@ -7,12 +7,10 @@ from copy import deepcopy
 from argparse import Namespace
 import nibabel as nib
 from loguru import logger
-
 from radioa.model.inferer import Inferer
 from radioa.prompts.prompt import PromptStep
 from radioa.utils.SAMMed3D_segment_anything.build_sam import sam_model_registry as registry_sam
 from radioa.datasets_preprocessing.conversion_utils import load_any_to_nib
-
 from radioa.utils.transforms import (
     ResizeLongestSide,
     orig_to_SAR_dense,
@@ -47,7 +45,7 @@ class SAMInferer(Inferer):
         self.device = device
         self.image_embeddings_dict = {}
         self.verbose = True
-
+        print('init inferer')
         self.pixel_mean = self.model.pixel_mean
         self.pixel_std = self.model.pixel_std
         self.transform = ResizeLongestSide(self.model.image_encoder.img_size)
@@ -79,27 +77,28 @@ class SAMInferer(Inferer):
 
         return best_mask
 
+
     def set_image(self, img_path: Path | str):
         img_path = Path(img_path)
         if self._image_already_loaded(img_path=img_path):
             return
+        self.image_embeddings_dict = {}
         img_nib = load_any_to_nib(img_path)
+        self.old_img = img_nib.get_fdata()
         self.orig_affine = img_nib.affine
         self.orig_shape = img_nib.shape
-
+        self.img_name = img_path.stem
         self.img, self.inv_trans_dense = self.transform_to_model_coords_dense(img_nib, is_seg=False)
         self.loaded_image = img_path
         self.new_shape = self.img.shape
         self.loaded_image = img_path
 
-    def transform_to_model_coords_dense(self, nifti: Path | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
-        # Model space is always throughplane first (commonly the z-axis)
-        data, inv_trans = orig_to_SAR_dense(nifti)
+        # clip image to 0.5% - 99.5%
+        self.global_min = np.percentile(self.img, 0.5)
+        self.global_max = np.percentile(self.img, 99.5)
 
-        return data, inv_trans
-
-    def transform_to_model_coords_sparse(self, coords: np.ndarray) -> np.ndarray:
-        return orig_to_canonical_sparse_coords(coords, self.orig_affine, self.orig_shape)
+        # Clip the image array
+        self.img = np.clip(self.img, self.global_min, self.global_max)
 
     def preprocess_img(self, img, slices_to_process):
         """
@@ -111,22 +110,22 @@ class SAMInferer(Inferer):
         slices_processed = {}
         for slice_idx in slices_to_process:
             slice = img[slice_idx, ...]  # Now HW
-            slice = np.round((slice - slice.min()) / (slice.max() - slice.min() + 1e-10) * 255.0).astype(
+            slice = np.round((slice - self.global_min) / (self.global_max - self.global_min + 1e-10) * 255.0).astype(
                 np.uint8
             )  # Change to 0-255 scale
             slice = np.repeat(slice[..., None], repeats=3, axis=-1)  # Add channel dimension to make it RGB-like
             slice = self.transform.apply_image(slice)
             slice = torch.as_tensor(slice, device=self.device)
             slice = slice.permute(2, 0, 1).contiguous()[
-                None, :, :, :
-            ]  # Change to BCHW, make memory storage contiguous.
+                    None, :, :, :
+                    ]  # Change to BCHW, make memory storage contiguous.
 
-            if self.input_size is None:
-                self.input_size = tuple(
-                    slice.shape[-2:]
-                )  # Store the input size pre-padding if it hasn't been done yet
-
-            slice = slice = (slice - self.pixel_mean) / self.pixel_std
+            # if self.input_size is None:
+            #     self.input_size = tuple(
+            #         slice.shape[-2:]
+            #     )  # Store the input size pre-padding if it hasn't been done yet
+            self.input_size = tuple(slice.shape[-2:])
+            slice = (slice - self.pixel_mean) / self.pixel_std
 
             h, w = slice.shape[-2:]
             padh = self.model.image_encoder.img_size - h
@@ -136,6 +135,16 @@ class SAMInferer(Inferer):
             slices_processed[slice_idx] = slice
         self.slices_processed = slices_processed
         return slices_processed
+
+
+    def transform_to_model_coords_dense(self, nifti: Path | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
+        # Model space is always throughplane first (commonly the z-axis)
+        data, inv_trans = orig_to_SAR_dense(nifti)
+
+        return data, inv_trans
+
+    def transform_to_model_coords_sparse(self, coords: np.ndarray) -> np.ndarray:
+        return orig_to_canonical_sparse_coords(coords, self.orig_affine, self.orig_shape)
 
     def preprocess_prompt(self, prompt: PromptStep, promptstep_in_model_coord_system=False):
         """
@@ -193,7 +202,6 @@ class SAMInferer(Inferer):
         # Combine segmented slices into a volume with 0s for non-segmented slices
         dtype = np.float32 if return_logits else np.uint8
         segmentation = np.zeros((self.D, self.H, self.W), dtype)
-
         for z, low_res_mask in slice_mask_dict.items():
             low_res_mask = low_res_mask.unsqueeze(0).unsqueeze(0)  # Include batch and channel dimensions
             mask_input_res = F.interpolate(
@@ -237,7 +245,7 @@ class SAMInferer(Inferer):
             self.H,
             self.W,
         )  # Used for the transform class, which is taken from the original SAM code, hence the 2D size
-
+        print(self.img.shape)
         mask_dict = prompt.masks if prompt.masks is not None else {}
         preprocessed_prompt_dict = self.preprocess_prompt(prompt)
         slices_to_process = [
@@ -275,16 +283,15 @@ class SAMInferer(Inferer):
             self.slice_lowres_outputs[slice_idx] = slice_raw_outputs
 
         low_res_logits = {k: torch.sigmoid(v).squeeze().cpu().numpy() for k, v in self.slice_lowres_outputs.items()}
-
         segmentation = self.postprocess_slices(self.slice_lowres_outputs, return_logits)
 
         # Fill in missing slices using a previous segmentation if desired
         if prev_seg is not None:
+            print('never')
             segmentation = self.merge_seg_with_prev_seg(segmentation, prev_seg, slices_to_infer)
 
         # Reorient to original orientation and return with metadata
         # Turn into Nifti object in original space
         segmentation_model_arr = segmentation
         segmentation_orig = self.inv_trans_dense(segmentation)
-
         return segmentation_orig, low_res_logits, segmentation_model_arr

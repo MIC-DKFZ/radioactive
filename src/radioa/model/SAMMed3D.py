@@ -68,6 +68,7 @@ class SAMMed3DInferer(Inferer):
     def set_image(self, img_path: str | Path) -> None:
         if self._image_already_loaded(img_path=img_path):
             return
+        self.image_embeddings_dict = {}
         img_nib = load_any_to_nib(img_path)
         self.orig_affine = img_nib.affine
         self.orig_shape = img_nib.shape
@@ -75,6 +76,13 @@ class SAMMed3DInferer(Inferer):
         self.img, self.inv_trans_dense = self.transform_to_model_coords_dense(img_path, is_seg=False)
         self.new_shape = self.img.shape
         self.loaded_image = img_path
+
+        # clip image to 0.5% - 99.5%
+        self.global_min = np.percentile(self.img, 0.5)
+        self.global_max = np.percentile(self.img, 99.5)
+
+        # Clip the image array
+        self.img = np.clip(self.img, self.global_min, self.global_max)
 
     def transform_to_model_coords_dense(self, nifti: Path | str | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
         """

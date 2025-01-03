@@ -2,13 +2,6 @@ from pathlib import Path
 from typing import Literal, Type, Union
 
 from loguru import logger
-
-from radioa.model.MedSAMnorm import MedSAMNormInferer
-from radioa.model.SAM2Norm import SAM2NormInferer
-from radioa.model.SAMMed2Dnorm import SAMMed2DNormInferer
-from radioa.model.SAMMed3DNorm import SAMMed3DNormInferer
-from radioa.model.SAMnorm import SAMNormInferer
-from radioa.model.segvolnorm import SegVolNormInferer
 from radioa.prompts.prompt_hparams import PromptConfig
 from radioa.prompts.prompter import (
     Alternating10PointsPer2DSlicePrompter,

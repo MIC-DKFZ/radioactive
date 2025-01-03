@@ -2,7 +2,7 @@
 from functools import lru_cache
 import os
 from pathlib import Path
-
+import numpy as np
 from loguru import logger
 from radioa.datasets_preprocessing.conversion_utils import nib_to_nrrd
 from radioa.model.inferer import Inferer
@@ -232,6 +232,7 @@ def run_experiments_instances(
                             inrrd = InstanceNrrd.from_instance_map(arr, head, 1)
                             prediction_result.predicted_image = inrrd
                             all_prompt_results.append(prediction_result)
+
                         else:
                             # Currently we don't do any fancy saving of the prompt,
                             #  so we can also just drop it for now.

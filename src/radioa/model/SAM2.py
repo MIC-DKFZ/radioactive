@@ -123,7 +123,7 @@ class SAM2Inferer(Inferer):
         slices_processed = {}
         for slice_idx in slices_to_process:
             slice = img[slice_idx, ...]  # Now HW
-            slice = np.round((slice - slice.min()) / (slice.max() - slice.min() + 1e-10) * 255.0).astype(
+            slice = np.round((slice - self.global_min) / (self.global_max - self.global_min + 1e-10) * 255.0).astype(
                 np.uint8
             )  # Change to 0-255 scale
             slice = np.repeat(
@@ -139,6 +139,7 @@ class SAM2Inferer(Inferer):
         img_path = Path(img_path)
         if self._image_already_loaded(img_path=img_path):
             return
+        self.image_embeddings_dict = {}
         img_nib = load_any_to_nib(img_path)
         self.orig_affine = img_nib.affine
         self.orig_shape = img_nib.shape
@@ -149,6 +150,13 @@ class SAM2Inferer(Inferer):
         self._orig_hw = self.img[0].shape
         self.loaded_image = img_path
 
+        # clip image to 0.5% - 99.5%
+        self.global_min = np.percentile(self.img, 0.5)
+        self.global_max = np.percentile(self.img, 99.5)
+
+        # Clip the image array
+        self.img = np.clip(self.img, self.global_min, self.global_max)
+
     def transform_to_model_coords_dense(self, nifti: Path | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
         # Model space is always throughplane first (commonly the z-axis)
         data, inv_trans = orig_to_SAR_dense(nifti)
@@ -157,6 +165,7 @@ class SAM2Inferer(Inferer):
 
     def transform_to_model_coords_sparse(self, coords: np.ndarray) -> np.ndarray:
         return orig_to_canonical_sparse_coords(coords, self.orig_affine, self.orig_shape)
+
 
     def get_features(self, preprocessed_slice: torch.Tensor) -> dict:
         backbone_out = self.model.forward_image(preprocessed_slice)

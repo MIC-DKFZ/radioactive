@@ -223,6 +223,7 @@ def save_instance_results(
             tmp_path = pred_out
         tmp_path.mkdir(exist_ok=True, parents=True)
         instance_pd_path = tmp_path / instance_filename
+        # view_batch(prompt_result.logits, width=300, height=300)
         prompt_result.predicted_image.to_file(instance_pd_path)
 
 
