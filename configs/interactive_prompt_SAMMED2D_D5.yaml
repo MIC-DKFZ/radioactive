@@ -16,7 +16,7 @@ models:
   # - "sammed3d_turbonorm"
   # - "segvol"
   # - "segvolnorm"
-only_eval: True
+
 prompting:
   type: "interactive"
   prompt_styles:

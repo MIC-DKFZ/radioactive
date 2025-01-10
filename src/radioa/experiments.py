@@ -108,7 +108,12 @@ def run_experiments_organ(
                             pred.predicted_image.to_filename(target_path / base_name)
 
     if not only_calc:
+        target_names: set[str] = set()
         # We always run the semantic eval on the created folders directly.
+        for target, target_label in targets.items():
+            target_name: str = f"{target_label:03d}" + "__" + target
+            target_names.add(target_name)
+
         for target_name in target_names:
             for prompter in prompters:
                 if prompter.is_static:
