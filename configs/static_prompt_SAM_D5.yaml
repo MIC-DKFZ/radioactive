@@ -10,7 +10,7 @@ models:
   # - "segvol"
 
 only_calc: false
-only_eval: True
+only_eval: false
 
 prompting:
   type: "static"
