@@ -38,7 +38,6 @@ class SAMMed3DInferer(Inferer):
     offset_mode = "center"  # Changing this will require siginificant reworking of code; currently doesn't matter anyway since the other method doesn't work
     pass_prev_prompts = True
     target_spacing = (1.5, 1.5, 1.5)
-
     def __init__(self, checkpoint, device="cuda", use_only_first_point=True):
         super().__init__(checkpoint, device)
         self.use_only_first_point = use_only_first_point
