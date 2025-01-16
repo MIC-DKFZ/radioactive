@@ -9,7 +9,7 @@ from radioa.eval.crawl_all_res import prompter_names, models_colors
 GREY_SHADES: Dict[str, str] = {
     'SamMed 3D': '\\rowcolor[gray]{0.95}',
     'SamMed 3D Turbo': '\\rowcolor[gray]{0.9}',
-    ' SegVol': '\\rowcolor[gray]{1}',
+    'SegVol': '\\rowcolor[gray]{1}',
 }
 
 # ========== Utility Functions ==========
@@ -165,7 +165,7 @@ if __name__ == '__main__':
     # Plotting examples
 
     threeD_df = sorted_df[sorted_df['Prompter'].isin(threeD_prompters)]
-    selected_models_3D: List[str] = [' SegVol', 'SamMed 3D', 'SamMed 3D Turbo',]
+    selected_models_3D: List[str] = ['SegVol', 'SamMed 3D', 'SamMed 3D Turbo',]
 
     plot_barplot(
         df=threeD_df[threeD_df['Model'].isin(selected_models_3D)],

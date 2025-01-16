@@ -12,7 +12,7 @@ models_colors = {
     "MedSam": "#7f7f7f",  #
     "SamMed 3D": "#d8a6a6",  # "#d9f0a3",
     "SamMed 3D Turbo": "#a00000",  # "#78c679",
-    " SegVol": "#59a89c",  #  "#006837",
+    "SegVol": "#59a89c",  #  "#006837",
 }
 short_d_names = {
     'Dataset201_MS_Flair_instances': 'D1',
@@ -28,7 +28,7 @@ short_d_names = {
     'Dataset651_segrap': 'D10',
 
 }
-short_m_names = {'medsam': 'MedSam', 'sammed3d': 'SamMed 3D', 'sammed2d': 'SamMed 2D', 'sam': 'SAM', 'sammed3d_turbo': 'SamMed 3D Turbo', 'sam2': 'SAM2', 'segvol': ' SegVol'}
+short_m_names = {'medsam': 'MedSam', 'sammed3d': 'SamMed 3D', 'sammed2d': 'SamMed 2D', 'sam': 'SAM', 'sammed3d_turbo': 'SamMed 3D Turbo', 'sam2': 'SAM2', 'segvol': 'SegVol'}
 
 prompter_names = {'PointPropagationPrompter': ['5P Prop', '7'],
                   'Alternating5PointsPer2DSlicePrompter': ['5$\pm$PPS', '5X'],
@@ -64,22 +64,21 @@ prompter_names = {'PointPropagationPrompter': ['5P Prop', '7'],
                   'FivePointsFromCenterCropped3DVolumePrompter': ['5 center PPV', '5'],
                   'TenPointsFromCenterCropped3DVolumePrompter': ['10 center PPV', '10'],
                   'Box3DVolumePrompter': ['3D Box', '3'],
-                  'OnePointPer2DSliceInteractivePrompterNoPrevPoint': ['1PPS + Scribble Refine Not', '1x/3'],
-                  'OnePointPer2DSliceInteractivePrompterWithPrevPrompt': ['1PPS + Scribble Refine With', '1X/3'],
-                  'twoD1PointUnrealisticInteractivePrompterWithPrevPoint': ['1PPS + 1PPS Refine With', '1X/1X'],
-                  'twoD1PointUnrealisticInteractivePrompterNoPrevPoint': ['1PPS + 1PPS Refine Not', '1X/1X'],
-                  'PointInterpolationInteractivePrompterNoPrevPoint': ['P Inter + Scribble  Refine Not', '5/3'],
-                  'PointInterpolationInteractivePrompterWithPrevPoint': ['P Inter + Scribble  Refine With', '5/3'],
-                  'PointPropagationInteractivePrompterWithPrevPoint': ['P Prop + Scribble Refine With', '7/3'],
-                  'PointPropagationInteractivePrompterNoPrevPoint': ['P Prop + Scribble Refine Not', '7/3'],
-                  'threeDCroppedInteractivePrompterNoPrevPoint': ['1PPV Not + 1 PPV Refine Not ', '1/1'],
-                  'threeDCroppedInteractivePrompterWithPrevPoint': ['1PPV Not + 1 PPV Refine With', '1/1'],
-                  'threeDCroppedFromCenterInteractivePrompterNoPrevPoint': ['3D Center Basic Not +  1 PPV Refine With', '1/1'],
-                  'threeDCroppedFromCenterInteractivePrompterWithPrevPoint': ['1 center PPV + 1 PPV Refine With', '1/1'],
-                  'threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint': ['1 center PPV + Scribble Refine Not', '1/3'],
-                  'threeDCroppedFromCenterAnd2dAlgoInteractivePrompterWithPrevPoint': ['1 center PPV + Scribble Refine With', '1/3'],
-                  'OnePointPer2DSliceInteractivePrompterWithPrevPoint': ['1PPS + Scribble Refine With', '1/3'],
-                  'BoxInterpolationInteractivePrompterNoPrevPoint': ['3B Inter + Scribble Refine', '6/3']
+                  'OnePointPer2DSliceInteractivePrompterNoPrevPoint': ['1PPS + Scribble Refine', '1x/3'],
+                  'OnePointPer2DSliceInteractivePrompterWithPrevPoint': ['1PPS + Scribble Refine*', '1X/3'],
+                  'twoD1PointUnrealisticInteractivePrompterWithPrevPoint': ['1PPS + 1PPS Refine*', '1X/1X'],
+                  'twoD1PointUnrealisticInteractivePrompterNoPrevPoint': ['1PPS + 1PPS Refine', '1X/1X'],
+                  'PointInterpolationInteractivePrompterNoPrevPoint': ['5P Inter + Scribble  Refine', '5/3'],
+                  'PointInterpolationInteractivePrompterWithPrevPoint': ['5P Inter + Scribble  Refine*', '5/3'],
+                  'PointPropagationInteractivePrompterWithPrevPoint': ['P Prop + Scribble Refine*', '7/3'],
+                  'PointPropagationInteractivePrompterNoPrevPoint': ['P Prop + Scribble Refine', '7/3'],
+                  'threeDCroppedInteractivePrompterNoPrevPoint': ['1PPV + 1 PPV Refine', '1/1'],
+                  'threeDCroppedInteractivePrompterWithPrevPoint': ['1PPV + 1 PPV Refine*', '1/1'],
+                  'threeDCroppedFromCenterInteractivePrompterNoPrevPoint': ['1 center PPV +  1 PPV Refine', '1/1'],
+                  'threeDCroppedFromCenterInteractivePrompterWithPrevPoint': ['1 center PPV + 1 PPV Refine*', '1/1'],
+                  'threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint': ['1 center PPV + Scribble Refine', '1/3'],
+                  'threeDCroppedFromCenterAnd2dAlgoInteractivePrompterWithPrevPoint': ['1 center PPV + Scribble Refine*', '1/3'],
+                  'BoxInterpolationInteractivePrompterNoPrevPoint': ['3B Inter + Scribble Refine*', '6/3']
                   }
 
 
