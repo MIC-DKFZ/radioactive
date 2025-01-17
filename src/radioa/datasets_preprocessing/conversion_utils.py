@@ -1,3 +1,4 @@
+import io
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import tempfile
@@ -59,7 +60,7 @@ def maybe_download_mitk():
 def nib_to_nrrd(nib_image: nib.Nifti1Image) -> tuple[np.ndarray, dict]:
     """Converts a nibabel image to an nrrd array."""
     if isinstance(nib_image, nib.Nifti1Image):
-        with TemporaryDirectory() as temp_dir:
+        with TemporaryDirectory(dir="/dev/shm") as temp_dir:
             nib.save(nib_image, temp_dir + "/tmp.nii.gz")
             image = sitk.ReadImage(temp_dir + "/tmp.nii.gz")
             sitk.WriteImage(image, temp_dir + "/tmp.nrrd")
@@ -74,7 +75,7 @@ def nib_to_nrrd(nib_image: nib.Nifti1Image) -> tuple[np.ndarray, dict]:
 
 def nrrd_to_sitk(nrrd_arr, nrrd_header) -> sitk.Image:
     """Converts an nrrd array to an sitk Image."""
-    with TemporaryDirectory() as temp_dir:
+    with TemporaryDirectory(dir="/dev/shm") as temp_dir:
         nrrd.write(temp_dir + "/tmp.nrrd", nrrd_arr, nrrd_header)
         image = sitk.ReadImage(temp_dir + "/tmp.nrrd")
         # Need to make sure image is in memory before deleting
@@ -88,7 +89,7 @@ def load_any_to_nib(image_path: Path | str) -> nib.Nifti1Image:
     """Loads an image in any format and returns a nibabel image."""
     image_path = Path(image_path)
     read_im = sitk.ReadImage(image_path)
-    with TemporaryDirectory() as temp_dir:
+    with TemporaryDirectory(dir="/dev/shm") as temp_dir:
         sitk.WriteImage(read_im, temp_dir + "/temp.nii.gz")
         image = nib.load(temp_dir + "/temp.nii.gz")
         # Need to make sure image is in memory before deleting
@@ -103,7 +104,7 @@ def load_any_to_nib(image_path: Path | str) -> nib.Nifti1Image:
 
 def nrrd_to_nib(nrrd_arr, nrrd_header) -> nib.Nifti1Image:
     """Converts an nrrd array to a nibabel Image."""
-    with TemporaryDirectory() as temp_dir:
+    with TemporaryDirectory(dir="/dev/shm") as temp_dir:
         nrrd.write(temp_dir + "/tmp.nrrd", nrrd_arr, nrrd_header)
         img = sitk.ReadImage(temp_dir + "/tmp.nrrd")
         sitk.WriteImage(img, temp_dir + "/tmp.nii")
@@ -115,7 +116,7 @@ def nrrd_to_nib(nrrd_arr, nrrd_header) -> nib.Nifti1Image:
 
 def sitk_to_nrrd(sitk_img: sitk.Image) -> tuple[np.ndarray, dict]:
     """Converts a sitk image to an nrrd array."""
-    with TemporaryDirectory() as temp_dir:
+    with TemporaryDirectory(dir="/dev/shm") as temp_dir:
         sitk.WriteImage(sitk_img, temp_dir + "/tmp.nrrd")
         nrrd_arr, nrrd_header = nrrd.read(temp_dir + "/tmp.nrrd")
     return nrrd_arr, nrrd_header
@@ -135,7 +136,7 @@ def dicom_to_nrrd(dicom_series_path: Path | str) -> tuple[np.ndarray, dict]:
             dcm_sub_file = list(dicom_series_path.glob("*.dcm"))[0]
         else:
             dcm_sub_file = dicom_series_path
-        with TemporaryDirectory() as temp_dir:
+        with TemporaryDirectory(dir="/dev/shm") as temp_dir:
             os.system(f"cd {mitk_path} && ./MitkFileConverter.sh -i {dcm_sub_file} -o {temp_dir + '/tmp.nrrd'}")
             array, header = nrrd.read(temp_dir + "/tmp.nrrd")
     return array, header

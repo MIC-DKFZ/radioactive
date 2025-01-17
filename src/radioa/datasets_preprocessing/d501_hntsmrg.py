@@ -16,7 +16,6 @@ from radioa.datasets_preprocessing.utils import (
 from radioa.utils.io import get_dataset_path_by_id
 from radioa.utils.paths import get_dataset_path
 import SimpleITK as sitk
-from tempfile import TemporaryDirectory
 
 
 def preprocess(raw_dataset_path: Path):

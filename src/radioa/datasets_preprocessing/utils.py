@@ -384,8 +384,9 @@ def create_instances_from_img(
         out_map = np.zeros_like(instance_bin_maps[0])
         for i, instance_map in enumerate(instance_bin_maps):
             out_map += instance_map * (i + 1)
-    tempdir = tempfile.TemporaryDirectory()
-    nrrd.write(tempdir.name + "/tmp.nrrd", out_map, header)
-    tmp_img = sitk.ReadImage(tempdir.name + "/tmp.nrrd")
-    output_dir.mkdir(parents=True, exist_ok=True)
-    sitk.WriteImage(tmp_img, output_dir / (filename + ext))
+    # tempdir = tempfile.TemporaryDirectory()
+    with tempfile.TemporaryDirectory(dir="/dev/shm") as temp_dir:
+        nrrd.write(temp_dir.name + "/tmp.nrrd", out_map, header)
+        tmp_img = sitk.ReadImage(temp_dir.name + "/tmp.nrrd")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        sitk.WriteImage(tmp_img, output_dir / (filename + ext))

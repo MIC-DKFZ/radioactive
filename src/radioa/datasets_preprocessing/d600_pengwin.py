@@ -163,7 +163,7 @@ def preprocess(raw_data_path: Path):
         target_label = target_label_dir / im.name.replace(".mha", ".nii.gz")
         if not target_label.exists():
             vol = MedVol(str(im))
-            with TemporaryDirectory() as tempdir:
+            with TemporaryDirectory(dir="/dev/shm") as tempdir:
                 vol.save(str(Path(tempdir) / "temp.nii.gz"))
                 img = sitk.ReadImage(str(Path(tempdir) / "temp.nii.gz"))
                 # ------------- We just make instances numerically growing from 1 ------------ #

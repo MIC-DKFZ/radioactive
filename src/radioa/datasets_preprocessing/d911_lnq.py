@@ -40,7 +40,7 @@ def read_dicom_series_with_metadata(dicom_folder, output_file) -> tuple[np.ndarr
         image.SetMetaData(tag, value)
 
     # Save as NIfTI or NRRD, retaining the metadata
-    with TemporaryDirectory() as temp_dir:
+    with TemporaryDirectory(dir="/dev/shm") as temp_dir:
         sitk.WriteImage(image, temp_dir + "/tmp.nrrd")
         nrrd.read(temp_dir + "/tmp.nrrd")
         sitk.WriteImage(image, output_file + ".nrrd")
@@ -72,10 +72,10 @@ def preprocess(raw_download_dir: Path):
             do_cc=True,
             cc_kwargs={"dilation_kernel_radius": 0, "label_connectivity": 3},
         )
-        with TemporaryDirectory() as tempdir:
+        with TemporaryDirectory(dir="/dev/shm") as tempdir:
             innrrd.to_file(Path(tempdir) / f"tmp.nrrd")
             seg = sitk.ReadImage(str(Path(tempdir) / "tmp.nrrd"))
-            nrrd.write(str(Path(tempdir) / "tmp_ct.nrrd"), ct[0], ct[1])
+            nrrd.write(str(Path(tempdir) / "tmp_ct.nrrd"), ct[0], ct[1], compression_level=1)
             temp_ct = sitk.ReadImage(str(Path(tempdir) / "tmp_ct.nrrd"))
             padded_seg = resample_to_match(reference_img=temp_ct, resample_img=seg, is_seg=True)
             sitk.WriteImage(padded_seg, str(labels_dir / f"lnq_{cnt:04d}.nrrd"))
