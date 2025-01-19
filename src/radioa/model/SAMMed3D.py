@@ -292,7 +292,7 @@ class SAMMed3DInferer(Inferer):
         ):  # Check that the prompt lies within the patch - only necessary if using a previously generated patch
             if torch.any(torch.logical_or(coords < 0, coords >= 128)):
                 coords = torch.where(coords < 0, coords + 1, coords)
-                coords = torch.where(coords >= 128, coords - 1, coords
+                coords = torch.where(coords >= 128, coords - 1, coords)
 coords =        if torch.any(torch.logical_or(coords < 0, coords >= 128)):
                     raise RuntimeError("Prompt coordinates do not lie within stored patch!", coords)
 
