@@ -231,8 +231,15 @@ class SAMMed3DInferer(Inferer):
         if (
             self.use_only_first_point
         ):  # use only the first point since the model wasn't trained to receive multiple points in one go
-            batch_points = batch_points[:, :1]
-            batch_labels = batch_labels[:, :1]
+            find_promt = True
+            i = 0
+            while find_promt:
+                find_promt = False
+                batch_points = batch_points[:, i:i+1]
+                batch_labels = batch_labels[:, i:i+1]
+                if not torch.any(torch.logical_or(batch_points < 0, batch_points >= 128)):
+                    find_promt = True
+                    i = 1
 
         return batch_points, batch_labels
 
@@ -287,14 +294,14 @@ class SAMMed3DInferer(Inferer):
 
         prev_low_res_logits = prompt.masks
         coords, labels = self.preprocess_prompt(prompt, cropping_params, padding_params)
+
         if (
             crop_pad_params is not None or cheat
         ):  # Check that the prompt lies within the patch - only necessary if using a previously generated patch
             if torch.any(torch.logical_or(coords < 0, coords >= 128)):
-                coords = torch.where(coords < 0, coords + 1, coords)
-                coords = torch.where(coords >= 128, coords - 1, coords)
-                if torch.any(torch.logical_or(coords < 0, coords >= 128)):
-                    raise RuntimeError("Prompt coordinates do not lie within stored patch!", coords)
+                #shifting by one voxel seems legit -> it happens when we generate multiple promts in the raw image space,
+                #that have a distance of more than 128/2 pixel in the model image spac
+                raise RuntimeError("Prompt coordinates do not lie within stored patch!", coords)
 
         segmentation = np.zeros_like(self.img, dtype=np.uint8)
         for patch_embedding, pos3D in patch_list:
