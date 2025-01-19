@@ -45,7 +45,7 @@ class SAMInferer(Inferer):
         self.device = device
         self.image_embeddings_dict = {}
         self.verbose = True
-        print('init inferer')
+        print("init inferer")
         self.pixel_mean = self.model.pixel_mean
         self.pixel_std = self.model.pixel_std
         self.transform = ResizeLongestSide(self.model.image_encoder.img_size)
@@ -76,7 +76,6 @@ class SAMInferer(Inferer):
         best_mask = low_res_masks[0, max_index]
 
         return best_mask
-
 
     def set_image(self, img_path: Path | str):
         img_path = Path(img_path)
@@ -117,8 +116,8 @@ class SAMInferer(Inferer):
             slice = self.transform.apply_image(slice)
             slice = torch.as_tensor(slice, device=self.device)
             slice = slice.permute(2, 0, 1).contiguous()[
-                    None, :, :, :
-                    ]  # Change to BCHW, make memory storage contiguous.
+                None, :, :, :
+            ]  # Change to BCHW, make memory storage contiguous.
 
             # if self.input_size is None:
             #     self.input_size = tuple(
@@ -135,7 +134,6 @@ class SAMInferer(Inferer):
             slices_processed[slice_idx] = slice
         self.slices_processed = slices_processed
         return slices_processed
-
 
     def transform_to_model_coords_dense(self, nifti: Path | nib.Nifti1Image, is_seg: bool) -> np.ndarray:
         # Model space is always throughplane first (commonly the z-axis)
@@ -245,6 +243,7 @@ class SAMInferer(Inferer):
             self.H,
             self.W,
         )  # Used for the transform class, which is taken from the original SAM code, hence the 2D size
+        # print(self.img.shape)
         mask_dict = prompt.masks if prompt.masks is not None else {}
         preprocessed_prompt_dict = self.preprocess_prompt(prompt)
         slices_to_process = [
@@ -286,7 +285,7 @@ class SAMInferer(Inferer):
 
         # Fill in missing slices using a previous segmentation if desired
         if prev_seg is not None:
-            print('never')
+            print("never")
             segmentation = self.merge_seg_with_prev_seg(segmentation, prev_seg, slices_to_infer)
 
         # Reorient to original orientation and return with metadata

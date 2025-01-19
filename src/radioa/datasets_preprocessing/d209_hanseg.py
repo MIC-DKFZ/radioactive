@@ -274,7 +274,7 @@ def convert_HanSeg(inputfolder: Path, outputfolder: Path):
         moved_ct = move_image(moving_image=ct_img, move_map=registration_map)
         sitk.WriteImage(moved_ct, outputfolder / ct_img_path.name)
         # Apply the registration transformation to the CT image
-        with TemporaryDirectory() as temp_dir:
+        with TemporaryDirectory(dir="/dev/shm") as temp_dir:
             tmp_sitk_img_dirs = {}
             for label_id, gt_path in label_wise_gt_paths.items():
                 lbl_img = sitk.ReadImage(gt_path)

@@ -84,7 +84,7 @@ def preprocess(raw_download_path: Path):
         flair_img.SetSpacing(new_spacing)
         flair_seg_img.SetSpacing(new_spacing)
 
-        with TemporaryDirectory() as tempdir:
+        with TemporaryDirectory(dir="/dev/shm") as tempdir:
             sitk.WriteImage(flair_seg_img, Path(tempdir) / "tmp_file.nii.gz")
             inrrd: InstanceNrrd = InstanceNrrd.from_semantic_img(
                 Path(tempdir) / "tmp_file.nii.gz",

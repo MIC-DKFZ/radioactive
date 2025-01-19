@@ -61,10 +61,10 @@
                     // "pengwin",
             ],
             "env":{
-                "INTRAB_DATA_PATH": "/mnt/cluster-data-all/t006d/intra_bench/datasets",
+                "RADIOA_DATA_PATH": "/mnt/cluster-data-all/t006d/intra_bench/datasets",
                 //"INTRAB_DATA_PATH": "/t722s/home/E132-Projekte/Projects/2023_Rokuss_Tracking/Datasets",
-                "INTRAB_MODEL_PATH": "/mnt/cluster-data-all/t006d/intra_bench/checkpoints",
-                "INTRAB_RESULTS_PATH": "/mnt/cluster-data-all/t006d/intra_bench/results"
+                "RADIOA_MODEL_PATH": "/mnt/cluster-data-all/t006d/intra_bench/checkpoints",
+                "RADIOA_RESULTS_PATH": "/mnt/cluster-data-all/t006d/intra_bench/results"
             }
         },
         {
@@ -85,21 +85,21 @@
             }
         },
         {
-            "name": "Run: MEDSAM",
+            "name": "Run: SAM",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/src/intrab/experiments_runner.py",
+            "program": "${workspaceFolder}/src/radioa/experiments_runner.py",
             "console": "integratedTerminal",
             "justMyCode": false,
             "args": [
                 "-c",
-                "${workspaceFolder}/configs/static_prompt_MEDSAM.yaml",
+                "${workspaceFolder}/configs/static_prompt_SAM_D1.yaml",
                 ],
             "env":{
-                "INTRAB_DATA_PATH": "/mnt/cluster-data-all/t006d/intra_bench/datasets",
+                "RADIOA_DATA_PATH": "/mnt/cluster-data-all/t006d/intra_bench/datasets",
                 //"INTRAB_DATA_PATH": "/t722s/home/E132-Projekte/Projects/2023_Rokuss_Tracking/Datasets",
-                "INTRAB_MODEL_PATH": "/mnt/cluster-data-all/t006d/intra_bench/checkpoints",
-                "INTRAB_RESULTS_PATH": "/mnt/cluster-data-all/t006d/intra_bench/results"
+                "RADIOA_MODEL_PATH": "/mnt/cluster-data-all/t006d/intra_bench/checkpoints",
+                "RADIOA_RESULTS_PATH": "/mnt/cluster-data-all/t006d/intra_bench/results"
             }
         },
         {

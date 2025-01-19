@@ -174,7 +174,7 @@ def nifti_to_nrrd(nifti: nib.Nifti1Image) -> tuple[np.ndarray, dict]:
     """
     Convert a nifti image to nrrd.
     """
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with tempfile.TemporaryDirectory(dir="/dev/shm") as tmpdir:
         # What a mess
         nifti.to_filename(tmpdir + "/tmp.nii.gz")
         instance_sitk = sitk.ReadImage(tmpdir + "/tmp.nii.gz")
