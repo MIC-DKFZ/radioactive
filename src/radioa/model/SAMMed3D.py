@@ -293,7 +293,7 @@ class SAMMed3DInferer(Inferer):
             if torch.any(torch.logical_or(coords < 0, coords >= 128)):
                 coords = torch.where(coords < 0, coords + 1, coords)
                 coords = torch.where(coords >= 128, coords - 1, coords)
-coords =        if torch.any(torch.logical_or(coords < 0, coords >= 128)):
+                if torch.any(torch.logical_or(coords < 0, coords >= 128)):
                     raise RuntimeError("Prompt coordinates do not lie within stored patch!", coords)
 
         segmentation = np.zeros_like(self.img, dtype=np.uint8)
