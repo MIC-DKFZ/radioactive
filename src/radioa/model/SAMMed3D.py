@@ -291,7 +291,10 @@ class SAMMed3DInferer(Inferer):
             crop_pad_params is not None or cheat
         ):  # Check that the prompt lies within the patch - only necessary if using a previously generated patch
             if torch.any(torch.logical_or(coords < 0, coords >= 128)):
-                raise RuntimeError("Prompt coordinates do not lie within stored patch!", coords)
+                coords = torch.where(coords < 0, coords + 1, coords)
+                coords = torch.where(coords >= 128, coords - 1, coords
+coords =        if torch.any(torch.logical_or(coords < 0, coords >= 128)):
+                    raise RuntimeError("Prompt coordinates do not lie within stored patch!", coords)
 
         segmentation = np.zeros_like(self.img, dtype=np.uint8)
         for patch_embedding, pos3D in patch_list:

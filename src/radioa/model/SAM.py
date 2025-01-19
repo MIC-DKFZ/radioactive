@@ -245,7 +245,6 @@ class SAMInferer(Inferer):
             self.H,
             self.W,
         )  # Used for the transform class, which is taken from the original SAM code, hence the 2D size
-        print(self.img.shape)
         mask_dict = prompt.masks if prompt.masks is not None else {}
         preprocessed_prompt_dict = self.preprocess_prompt(prompt)
         slices_to_process = [

@@ -214,7 +214,6 @@ def orig_to_SAR_dense(nifti: Path | nib.Nifti1Image) -> tuple[np.ndarray, Callab
         arr = arr.transpose(2, 1, 0)
         # Create image with original RAS affine (xyz affine)
         arr_nib = nib.Nifti1Image(arr, nifti.affine, nifti.header)
-        print(nifti.affine)
         # Then revert to the actual original spacing we had before any transformations.
         arr_orig_ori = arr_nib.as_reoriented(orientation_transform)
         return arr_orig_ori
