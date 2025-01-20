@@ -233,10 +233,11 @@ class SAMMed3DInferer(Inferer):
         ):  # use only the first point since the model wasn't trained to receive multiple points in one go
             find_promt = True
             i = 0
+            batch_labels = batch_labels[:, :1]
             while find_promt:
                 find_promt = False
                 batch_points = batch_points[:, i:i+1]
-                batch_labels = batch_labels[:, i:i+1]
+                print(batch_points)
                 if not torch.any(torch.logical_or(batch_points < 0, batch_points >= 128)):
                     find_promt = True
                     i = 1
