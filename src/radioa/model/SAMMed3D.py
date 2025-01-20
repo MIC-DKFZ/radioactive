@@ -238,7 +238,7 @@ class SAMMed3DInferer(Inferer):
                 find_promt = False
                 batch_points = batch_points[:, i:i+1]
                 print(batch_points)
-                if not torch.any(torch.logical_or(batch_points < 0, batch_points >= 128)):
+                if torch.any(torch.logical_or(batch_points < 0, batch_points >= 128)):
                     find_promt = True
                     i += 1
 
