@@ -236,11 +236,12 @@ class SAMMed3DInferer(Inferer):
             batch_labels = batch_labels[:, :1]
             while find_promt:
                 find_promt = False
-                batch_points = batch_points[:, i:i+1]
+                res_points = batch_points[:, i:i+1]
                 print(batch_points)
-                if torch.any(torch.logical_or(batch_points < 0, batch_points >= 128)):
+                if torch.any(torch.logical_or(res_points < 0, res_points >= 128)):
                     find_promt = True
                     i += 1
+            batch_points = res_points
 
         return batch_points, batch_labels
 
