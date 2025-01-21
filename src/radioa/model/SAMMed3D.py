@@ -231,16 +231,21 @@ class SAMMed3DInferer(Inferer):
         if (
             self.use_only_first_point
         ):  # use only the first point since the model wasn't trained to receive multiple points in one go
-            find_promt = True
-            i = 0
-            batch_labels = batch_labels[:, :1]
-            while find_promt:
-                find_promt = False
-                res_points = batch_points[:, i:i+1]
-                print(batch_points)
-                if torch.any(torch.logical_or(res_points < 0, res_points >= 128)):
-                    find_promt = True
-                    i += 1
+            valid_mask = torch.all((batch_points >= 0) & (batch_points < 128), dim=2)  # Shape: [1, N]
+            valid_indices = torch.nonzero(valid_mask, as_tuple=True)[1]
+            if valid_indices.numel() > 0:
+                # If any valid triplet exists, select the first one
+                res_points = batch_points[:, valid_indices[0]:valid_indices[0]+1]
+            else:
+                # Compute the average triplet and check if it fulfills the condition
+                avg_triplet = batch_points.float().mean(dim=1, keepdim=True).round().long()
+                if torch.all((avg_triplet >= 0) & (avg_triplet < 128)):
+                    res_points = avg_triplet
+                    print("No valid points within patch found, using the averaged point.")
+                else:
+                    res_points = None
+                    print("No valid points found, and the averaged point does not satisfy the condition.")
+
             batch_points = res_points
 
         return batch_points, batch_labels
