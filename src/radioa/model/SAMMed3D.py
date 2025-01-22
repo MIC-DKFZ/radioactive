@@ -231,6 +231,7 @@ class SAMMed3DInferer(Inferer):
         if (
             self.use_only_first_point
         ):  # use only the first point since the model wasn't trained to receive multiple points in one go
+            batch_labels = batch_labels[:, :1]
             valid_mask = torch.all((batch_points >= 0) & (batch_points < 128), dim=2)  # Shape: [1, N]
             valid_indices = torch.nonzero(valid_mask, as_tuple=True)[1]
             if valid_indices.numel() > 0:
