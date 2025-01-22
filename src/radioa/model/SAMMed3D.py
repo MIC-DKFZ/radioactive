@@ -238,7 +238,7 @@ class SAMMed3DInferer(Inferer):
                 res_points = batch_points[:, valid_indices[0]:valid_indices[0]+1]
             else:
                 # Compute the average triplet and check if it fulfills the condition
-                avg_triplet = batch_points.float().mean(dim=1, keepdim=True).round().long()
+                avg_triplet = batch_points.float().mean(dim=1).round().long()
                 if torch.all((avg_triplet >= 0) & (avg_triplet < 128)):
                     res_points = avg_triplet
                     print("No valid points within patch found, using the averaged point.")
