@@ -78,7 +78,7 @@ prompter_names = {'PointPropagationPrompter': ['5P Prop', '7'],
                   'threeDCroppedFromCenterInteractivePrompterWithPrevPoint': ['1 center PPV + 1 PPV Refine*', '1/1'],
                   'threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint': ['1 center PPV + Scribble Refine', '1/3'],
                   'threeDCroppedFromCenterAnd2dAlgoInteractivePrompterWithPrevPoint': ['1 center PPV + Scribble Refine*', '1/3'],
-                  'BoxInterpolationInteractivePrompterNoPrevPoint': ['3B Inter + Scribble Refine*', '6/3']
+                  'BoxInterpolationInteractivePrompterNoPrevPoint': ['3B Inter + Scribble Refine', '6/3']
                   }
 
 
@@ -109,7 +109,7 @@ if __name__ == '__main__':
                 #static lesion results
                 if not json_file.split('/')[-2].startswith('iter'):
                     res_json = load_json(json_file)
-                    dice_value = res_json['1']['cw_dice_mean']
+                    dice_value = res_json['1']['lw_dice_mean']
                     if dice_value is not None:
                         # Append the relevant data to the list
                         data.append({
@@ -125,7 +125,7 @@ if __name__ == '__main__':
                 #iterative lesion results
                 if json_file.split('/')[-2].startswith('iter'):
                     res_json = load_json(json_file)
-                    dice_value = res_json['1']['cw_dice_mean']
+                    dice_value = res_json['1']['lw_dice_mean']
                     if dice_value is not None:
                         # Append the relevant data to the list
                         data.append({

@@ -154,7 +154,7 @@ if __name__ == '__main__':
     # Add a new column for line styles based on the prompter
     final_df['Line_Style'] = final_df['Prompter'].map(line_styles)
 
-    plt.figure(figsize=(12, 8))
+    plt.figure(figsize=(10, 8))
 
     # Iterate through unique line styles and plot separately
     for line_style, group_data in final_df.groupby('Line_Style'):
@@ -169,12 +169,13 @@ if __name__ == '__main__':
         )
 
     # Add labels and title
-    plt.xlabel('Iteration', size=15)
-    plt.ylim([30, 55])
-    plt.title('3D model Refinement', size=15)
+    plt.xlabel('Iteration', size=20)
+    plt.ylim([0, 62])
+    plt.title('3D model Refinement', size=20)
     plt.gca().set_facecolor('#f0f0f0')
-    plt.ylabel('Average Dice Score', size=10)
+    plt.ylabel('Average Dice Score', size=20)
     plt.xticks(rotation=0, size=15)
+    plt.yticks(size=15)
     plt.legend(loc='upper left')
     plt.tight_layout()
 

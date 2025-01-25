@@ -78,15 +78,15 @@ def calculate_average_and_sort(df: pd.DataFrame, dataset_columns: List[str], pro
 def plot_average_dice(df: pd.DataFrame, selected_models: List[str], title: str, save_path: str,
                       color_palette: List[str], x_labels_order: List[str] = None, show_plot: bool = True) -> None:
     """Plots average Dice score for the given models and optionally displays the plot."""
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(10, 8))
     sns.barplot(data=df, x='Prompter', y='Average', hue='Model', palette=color_palette, order=x_labels_order)
     plt.gca().set_facecolor('#f0f0f0')  # Light grey background
-    plt.title(title, size=30)
+    plt.title(title, size=25)
     plt.xlabel('')
-    plt.ylabel('Average Dice Score', size=25)
-    plt.ylim([0.01, 85])
-    plt.yticks(size=20)
-    plt.xticks(rotation=0, size=25)
+    plt.ylabel('Average Dice Score', size=20)
+    plt.ylim([0, 85])
+    plt.yticks(size=15)
+    plt.xticks(rotation=0, size=15)
     plt.legend(loc='upper left', fontsize=20)
     plt.tight_layout()
     plt.savefig(save_path)
@@ -132,12 +132,12 @@ if __name__ == '__main__':
 
     # Plotting examples
     point_df = sorted_df[sorted_df['Prompter'].isin(point_prompters)]
-    selected_models_2D_points: List[str] = ['MedSam', 'SAM', 'SAM2', 'SamMed 2D']
+    selected_models_2D_points: List[str] = ['SAM', 'SAM2', 'SamMed 2D']
     plot_average_dice(
         point_df[point_df['Model'].isin(selected_models_2D_points)],
         selected_models_2D_points,
         title='Realistic Point Prompts 2D Models',
-        save_path='/home/c306h/PAPER_VISUALS/INTRABENCH/res/static_point_prompts_2D_wobug.png',
+        save_path='/home/c306h/PAPER_VISUALS/INTRABENCH/res/barplot_realistic_points_static_prompter.png',
         color_palette=[models_colors[m] for m in selected_models_2D_points],
         show_plot=True  # Ensure the plot is displayed
     )
@@ -148,7 +148,7 @@ if __name__ == '__main__':
         box_df[box_df['Model'].isin(selected_models_2D_box)],
         selected_models_2D_box,
         title='Realistic Box Prompts 2D Models',
-        save_path='/home/c306h/PAPER_VISUALS/INTRABENCH/res/static_box_prompts_2D_wobug.png',
+        save_path='/home/c306h/PAPER_VISUALS/INTRABENCH/res/barplot_realistic_boxes_static_prompter.png',
         color_palette=[models_colors[m] for m in selected_models_2D_box],
         show_plot=True  # Ensure the plot is displayed
     )

@@ -98,6 +98,8 @@ def run_experiments_organ(
                         prediction_result.predicted_image.to_filename(filepath)
                     # Handle interactive experiments
                     else:
+                        if all((filepath.parent / f"iter_{c}" / base_name).exists() for c in range(6)) and not results_overwrite:
+                            continue
                         prediction_results: list[PromptResult]
                         prediction_results = prompter.predict_image(image_path=img_path)
                         base_path = filepath.parent

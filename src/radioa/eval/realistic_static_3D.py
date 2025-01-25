@@ -7,9 +7,9 @@ from radioa.eval.crawl_all_res import prompter_names, models_colors
 
 # Define grey shades for LaTeX table background
 GREY_SHADES: Dict[str, str] = {
-    'SamMed 3D': '\\rowcolor[gray]{0.95}',
-    'SamMed 3D Turbo': '\\rowcolor[gray]{0.9}',
-    'SegVol': '\\rowcolor[gray]{1}',
+    'SamMed 3D': '\\rowcolor[gray]{1}',
+    'SamMed 3D Turbo': '\\rowcolor[gray]{0.95}',
+    'SegVol': '\\rowcolor[gray]{0.9}',
 }
 
 # ========== Utility Functions ==========
@@ -28,7 +28,7 @@ def generate_latex(df: pd.DataFrame, grey_shades: Dict[str, str]) -> str:
         str: LaTeX table as a string.
     """
     # Define the desired order of Prompters
-    desired_prompters = ["1 center PPV", '1PPV', "2 center PPV", '2PPV', "3 center PPV", '3PPV', "5 center PPV", '5PPV' "10 center PPV", '10PPV', "3D Box"]
+    desired_prompters = ["1 center PPV", '1PPV', "2 center PPV", '2PPV', "3 center PPV", '3PPV', "5 center PPV", '5PPV', "10 center PPV", '10PPV', "3D Box"]
 
     # Filter and reorder Prompters
     df = df[df['Prompter'].isin(desired_prompters)]
@@ -53,9 +53,8 @@ def generate_latex(df: pd.DataFrame, grey_shades: Dict[str, str]) -> str:
     current_model = None
     for _, row in df.iterrows():
         # Add row color if model changes
-        if row['Model'] != current_model:
-            latex_rows.append(grey_shades.get(row['Model'], ''))
-            current_model = row['Model']
+        latex_rows.append(grey_shades.get(row['Model'], ''))
+        current_model = row['Model']
         # Format row values
         row_values = ' & '.join([str(row[col]) if pd.notna(row[col]) else 'NaN' for col in df.columns])
         latex_rows.append(f'{row_values} \\\\')
@@ -81,15 +80,16 @@ def plot_barplot(df, selected_models, title, save_path, models_colors, x_labels,
     """
     # Map model names to their corresponding colors
     color_palette = [models_colors[model] for model in selected_models]
-
+    print(df)
     # Unique x-labels
     x_positions = np.arange(len(x_labels))
     bar_width = 0.25  # Width of each bar
     spacing = 0.05  # Minimal spacing between triplets
 
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(10, 8))
 
     for i, model in enumerate(selected_models):
+        print(model)
         # Filter data for the current model and reorder based on x_labels
         model_data = df[df['Model'] == model]
         model_data = model_data.set_index('Prompter').reindex(x_labels).reset_index()
@@ -100,6 +100,9 @@ def plot_barplot(df, selected_models, title, save_path, models_colors, x_labels,
         # Center the first bar ("3D Box")
         if model == selected_models[0]:  # Only adjust for the first bar
             x_offsets[0] = x_positions[0]  # Center the first group's bar
+        if model == selected_models[0]:  # Only adjust for the first bar
+            for l in range(3,11):
+                x_offsets[l] = x_positions[l]
 
         # Plot the bars for the current model
         plt.bar(
@@ -111,11 +114,11 @@ def plot_barplot(df, selected_models, title, save_path, models_colors, x_labels,
         )
 
     # Add x-axis labels and ticks
-    plt.xticks(x_positions, [label.replace("center ", "") for label in x_labels], fontsize=25)
-    plt.ylabel('Average Dice Score', size=25)
-    plt.title(title, size=30)
+    plt.xticks(x_positions, [label.replace(" center ", "c") for label in x_labels], fontsize=15)
+    plt.ylabel('Average Dice Score', size=20)
+    plt.title(title, size=25)
     plt.ylim([0, 85])
-    plt.yticks(fontsize=20)
+    plt.yticks(fontsize=15)
     plt.gca().set_facecolor('#f0f0f0')  # Light grey background
 
     # Add legend in the upper right
@@ -145,14 +148,33 @@ if __name__ == '__main__':
 
     threeD_prompters: List[str] = [
         prompter_names[p][0] for p in [
-            'Box3DVolumePrompter',
-            'OnePointsFromCenterCropped3DVolumePrompter', 'TwoPointsFromCenterCropped3DVolumePrompter',
-            'ThreePointsFromCenterCropped3DVolumePrompter', 'FivePointsFromCenterCropped3DVolumePrompter',
+            'Box3DVolumePrompter', 'OnePoints3DVolumePrompter', 'OnePointsFromCenterCropped3DVolumePrompter',
+            'TwoPoints3DVolumePrompter', 'TwoPointsFromCenterCropped3DVolumePrompter', 'ThreePoints3DVolumePrompter',
+            'ThreePointsFromCenterCropped3DVolumePrompter','FivePoints3DVolumePrompter','FivePointsFromCenterCropped3DVolumePrompter',
+            'TenPoints3DVolumePrompter',
             'TenPointsFromCenterCropped3DVolumePrompter',
         ]
     ]
 
 
+
+    #SamMED3D does not support multiple prompts
+    models_to_exclude = ["SamMed 3D", "SamMed 3D Turbo"]
+    prompters_to_exclude = [prompter_names[p][0] for p in [
+        "TwoPoints3DVolumePrompter",
+        "ThreePoints3DVolumePrompter",
+        "FivePoints3DVolumePrompter",
+        "TenPoints3DVolumePrompter",
+        "TwoPointsFromCenterCropped3DVolumePrompter",
+        "ThreePointsFromCenterCropped3DVolumePrompter",
+        "FivePointsFromCenterCropped3DVolumePrompter",
+        "TenPointsFromCenterCropped3DVolumePrompter",
+    ]]
+
+    # Filter the DataFrame
+    df = df[
+        ~df.apply(lambda row: row["Model"] in models_to_exclude and row["Prompter"] in prompters_to_exclude, axis=1)
+    ]
     # Prepare and sort data
     prepared_df: pd.DataFrame = prepare_prompter_data(df, realistic_prompters)
     dataset_columns: List[str] = [col for col in prepared_df.columns if col.startswith('D')]
@@ -171,7 +193,7 @@ if __name__ == '__main__':
         df=threeD_df[threeD_df['Model'].isin(selected_models_3D)],
         selected_models=selected_models_3D,
         title='3D Models',
-        save_path='/home/c306h/PAPER_VISUALS/INTRABENCH/res/static_3D_correct_colors.png',
+        save_path='/home/c306h/PAPER_VISUALS/INTRABENCH/res/barplot_realistic_3D_static_prompter.png',
         models_colors=models_colors,  # Ensure this contains the correct mapping
         x_labels=threeD_prompters,
         show_plot=True

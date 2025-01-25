@@ -110,7 +110,7 @@ if __name__ == '__main__':
     print(latex_table)
     # Define the desired order for the x-axis labels
     x_labels_order = ['1PPS', '2PPS', '3PPS', '5PPS', '10PPS', '2$\pm$PPS', '3$\pm$PPS', '5$\pm$PPS', '10$\pm$PPS']
-
+    plt.figure(figsize=(10, 8))
     # Map the prompter names to their order
     df = deepcopy(df_sort)
     df['Prompter'] = pd.Categorical(df_sort['Prompter'], categories=x_labels_order, ordered=True)
@@ -176,17 +176,16 @@ if __name__ == '__main__':
     Sam = mlines.Line2D([], [], color=models_colors['SAM'], marker='s', linestyle='None', markersize=10, label='SAM')
     Sam2 = mlines.Line2D([], [], color=models_colors['SAM2'], marker='s', linestyle='None', markersize=10, label='SAM2')
     SamMed2D = mlines.Line2D([], [], color=models_colors['SamMed 2D'], marker='s', linestyle='None', markersize=10, label='SamMed 2D')
-
     plt.gca().set_facecolor('#f0f0f0')
-    plt.legend(handles=[MedSam, Sam, Sam2, SamMed2D], loc='upper right', fontsize=15)  # Single legend call
-    plt.title('BOX & Point Prompts Per Slice (PPS & BPS)', size=15)
-    plt.ylabel('Average Dice Score', size=10)
+    plt.legend(handles=[MedSam, Sam, Sam2, SamMed2D], loc='upper right', fontsize=20)  # Single legend call
+    plt.title('BOX & Point Prompts Per Slice (PPS & BPS)', size=20)
+    plt.ylabel('Average Dice Score', size=20)
     plt.xlabel('')
-    plt.xticks(rotation=0, size=10)
-    plt.yticks(size=10)
+    plt.xticks(rotation=0, size=15)
+    plt.yticks(size=15)
     plt.ylim([0, 85])
     plt.tight_layout()
 
     # Display the plot
-    plt.savefig('/home/c306h/PAPER_VISUALS/INTRABENCH/res/lineplot_static_prompter_with_stars.png')
+    plt.savefig('/home/c306h/PAPER_VISUALS/INTRABENCH/res/all_static_unrealistic_prompter.png')
     plt.show()

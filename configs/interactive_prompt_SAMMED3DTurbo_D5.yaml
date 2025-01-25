@@ -21,21 +21,20 @@ prompting:
   type: "interactive"
   prompt_styles:
     - OnePointPer2DSliceInteractivePrompterNoPrevPoint
-    - OnePointPer2DSliceInteractivePrompterWithPrevPoint
+    #- OnePointPer2DSliceInteractivePrompterWithPrevPoint
     - PointInterpolationInteractivePrompterNoPrevPoint
-    - PointInterpolationInteractivePrompterWithPrevPoint
+    #- PointInterpolationInteractivePrompterWithPrevPoint
     - BoxInterpolationInteractivePrompterNoPrevPoint
     - PointPropagationInteractivePrompterNoPrevPoint
-    - PointPropagationInteractivePrompterWithPrevPoint
+    #- PointPropagationInteractivePrompterWithPrevPoint
     - threeDCroppedInteractivePrompterNoPrevPoint
-    - threeDCroppedInteractivePrompterWithPrevPoint
+    #- threeDCroppedInteractivePrompterWithPrevPoint
     - threeDCroppedFromCenterInteractivePrompterNoPrevPoint
-    - threeDCroppedFromCenterInteractivePrompterWithPrevPoint
+    #- threeDCroppedFromCenterInteractivePrompterWithPrevPoint
     - threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint
-    - threeDCroppedFromCenterAnd2dAlgoInteractivePrompterWithPrevPoint
+    #- threeDCroppedFromCenterAnd2dAlgoInteractivePrompterWithPrevPoint
     - twoD1PointUnrealisticInteractivePrompterNoPrevPoint
-    - twoD1PointUnrealisticInteractivePrompterWithPrevPoint
-
+    #- twoD1PointUnrealisticInteractivePrompterWithPrevPoint
 # List of dataset that will be compared in the next run of the benchmark.
 datasets:
   # - identifier: 201  # FLAIR MS instances

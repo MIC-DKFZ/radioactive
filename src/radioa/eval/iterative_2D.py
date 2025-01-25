@@ -29,7 +29,7 @@ def generate_latex(df: pd.DataFrame, grey_shades: Dict[str, str]) -> str:
     # Define the desired order of Prompters
     desired_prompters = ['1PPS + 1PPS Refine', '1PPS + 1PPS Refine*',
                          '1PPS + Scribble Refine', '1PPS + Scribble Refine*',
-                         '3B Inter + Scribble Refine*', '5P Inter + Scribble  Refine']
+                         '3B Inter + Scribble Refine', '5P Inter + Scribble  Refine']
 
     # Filter and reorder Prompters
     df = df[df['Prompter'].isin(desired_prompters)]
@@ -47,16 +47,15 @@ def generate_latex(df: pd.DataFrame, grey_shades: Dict[str, str]) -> str:
     df = df[cols]
 
     # Generate LaTeX table
-    latex_rows = ['\\begin{tabular}{lllllrrrrrrrrrr}', '\\toprule']
-    latex_rows.append('Prompter & Model & Interactions & Iteration &' + ' & '.join(df.columns[3:]) + ' \\\\')
+    latex_rows = ['\\begin{tabular}{llllrrrrrrrrrrr}', '\\toprule']
+    latex_rows.append('Model & Promter & Interactions & Iteration &' + ' & '.join(df.columns[4:]) + ' \\\\')
     latex_rows.append('\\midrule')
 
     current_model = None
     for _, row in df.iterrows():
         # Add row color if model changes
-        if row['Model'] != current_model:
-            latex_rows.append(grey_shades.get(row['Model'], ''))
-            current_model = row['Model']
+        latex_rows.append(grey_shades.get(row['Model'], ''))
+        current_model = row['Model']
         # Format row values
         row_values = ' & '.join([str(row[col]) if pd.notna(row[col]) else 'NaN' for col in df.columns])
         latex_rows.append(f'{row_values} \\\\')
@@ -158,7 +157,7 @@ if __name__ == '__main__':
     # Add a new column for line styles based on the prompter
     final_df['Line_Style'] = final_df['Prompter'].map(line_styles)
 
-    plt.figure(figsize=(12, 8))
+    plt.figure(figsize=(10, 8))
 
     # Iterate through unique line styles and plot separately
     for line_style, group_data in final_df.groupby('Line_Style'):
@@ -168,19 +167,23 @@ if __name__ == '__main__':
             y='Average',
             hue='Model_Prompter',
             palette=palette,
-            linestyle=line_style,  # Set the line style here
+            linestyle=line_style,
+            markersize=10,
+            linewidth=3,
             marker="o"
         )
 
     # Add labels and title
-    plt.xlabel('Iteration', size=15)
-    plt.ylim([0, 55])
-    plt.title('3D model Refinement', size=15)
+    plt.xlabel('Iteration', size=20)
+    plt.ylim([0, 62])
+    plt.title('3D model Refinement', fontsize=20)
     plt.gca().set_facecolor('#f0f0f0')
-    plt.ylabel('Average Dice Score', size=10)
+    plt.ylabel('Average Dice Score', size=20)
     plt.xticks(rotation=0, size=15)
-    plt.legend(loc='upper left')
+    plt.yticks(size=15)
+    plt.legend(loc='upper left', fontsize=14)
     plt.tight_layout()
 
     # Show the plot
+    plt.savefig('/home/c306h/PAPER_VISUALS/INTRABENCH/res/interactiveline2D.png')
     plt.show()

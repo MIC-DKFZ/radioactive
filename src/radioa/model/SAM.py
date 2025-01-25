@@ -285,7 +285,6 @@ class SAMInferer(Inferer):
 
         # Fill in missing slices using a previous segmentation if desired
         if prev_seg is not None:
-            print("never")
             segmentation = self.merge_seg_with_prev_seg(segmentation, prev_seg, slices_to_infer)
 
         # Reorient to original orientation and return with metadata
