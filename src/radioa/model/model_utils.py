@@ -60,6 +60,7 @@ from radioa.prompts.interactive_prompter import (
     twoD1PointUnrealisticInteractivePrompterNoPrevPoint,
     interactive_prompt_styles,
     twoD1PointUnrealisticInteractivePrompterWithPrevPoint,
+    BoxInterpolationInteractivePrompterWithPrevBox
 )
 
 from radioa.utils.paths import get_model_path
@@ -293,6 +294,17 @@ def get_wanted_supported_prompters(
             if "BoxInterpolationInteractivePrompterNoPrevPoint" in wanted_prompt_styles:
                 prompters.append(
                     BoxInterpolationInteractivePrompterNoPrevPoint(
+                        inferer,
+                        seed,
+                        pro_conf.twoD_interactive_n_cc,
+                        pro_conf.interactive_dof_bound,
+                        pro_conf.interactive_perf_bound,
+                        pro_conf.interactive_max_iter,
+                    )
+                )
+            if "BoxInterpolationInteractivePrompterWithPrevBox" in wanted_prompt_styles:
+                prompters.append(
+                    BoxInterpolationInteractivePrompterWithPrevBox(
                         inferer,
                         seed,
                         pro_conf.twoD_interactive_n_cc,
