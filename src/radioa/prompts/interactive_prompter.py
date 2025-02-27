@@ -789,7 +789,34 @@ class BoxInterpolationInteractivePrompterNoPrevPoint(twoDInteractivePrompter):
         prompt_model = self.inferer.transform_promptstep_to_model_coords(prompt_orig)
         return prompt_model
 
+class BoxInterpolationInteractivePrompterWithPrevBox(twoDInteractivePrompter):
+    def __init__(
+            self,
+            inferer: Inferer,
+            seed: int = 11121,
+            n_ccs_positive_interaction: int = 1,
+            dof_bound: int | None = None,
+            perf_bound: float | None = None,
+            max_iter: int | None = None,
+    ):
+        super().__init__(inferer, seed, n_ccs_positive_interaction, dof_bound, perf_bound, max_iter)
+        self.n_slice_box_interpolation = 3
+        self.always_pass_prev_prompts = True
 
+    def get_initial_prompt_step(self) -> PromptStep:
+        """
+        Simulates the user clicking in the connected component's center of mass `n_slice_point_interpolation` times.
+        Slices are selected equidistantly between min and max slices with foreground (if not contiguous defaults to closest neighbors).
+        Then the points are interpolated between the slices centers and prompted to the model.
+
+        :return: The PromptStep from the interpolation of the points.
+        """
+        max_possible_clicks = min(self.n_slice_box_interpolation, len(self.get_slices_to_infer()))
+        seed_prompt_RAS = get_seed_boxes(self.groundtruth_SAR, max_possible_clicks)
+        prompt_RAS = box_interpolation(seed_prompt_RAS)
+        prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
+        prompt_model = self.inferer.transform_promptstep_to_model_coords(prompt_orig)
+        return prompt_model
 class PointPropagationInteractivePrompterNoPrevPoint(twoDInteractivePrompter):
     def __init__(
         self,
