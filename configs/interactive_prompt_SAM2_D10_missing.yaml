@@ -50,9 +50,9 @@ datasets:
   # - identifier: 600  # Pengwin CT Bones
   #   type: "instance"
   #   excluded_classes: [0]
-  - identifier: 651  # SegRap CT Organs at Risk
-    type: "organ"
-    excluded_classes: [0]
+#  - identifier: 651  # SegRap CT Organs at Risk
+#    type: "organ"
+#    excluded_classes: [0]
   # - identifier: 911  # LNQ Metastatic Lymph Nodes
   #   type: "instance"
   #   excluded_classes: [0]
@@ -65,9 +65,9 @@ datasets:
   # - identifier: 920  # HCC Tace CT Liver segmentation
   #   type: "organ"  # Choose from 'organ' or 'instance'; When instance we average over all instances, otherwise across organs.
   #   excluded_classes: [0] # List of classes to exclude from the dataset -- 0 is generally background
-  # - identifier: 921  # HCC TACE Liver instances
-  #   type: "instance"
-  #   excluded_classes: [0]
+   - identifier: 921  # HCC TACE Liver instances
+     type: "instance"
+     excluded_classes: [0]
   # - identifier: 930  # RIDER Lung CT
   #   type: "instance"
   #   excluded_classes: [0]

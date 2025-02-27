@@ -47,12 +47,12 @@ datasets:
   # - identifier: 501  # HNTS-MRG MR Primary Tumors
   #   type: "instance"
   #   excluded_classes: [0]
-  # - identifier: 600  # Pengwin CT Bones
-  #   type: "instance"
-  #   excluded_classes: [0]
-  - identifier: 651  # SegRap CT Organs at Risk
-    type: "organ"
-    excluded_classes: [0]
+   - identifier: 600  # Pengwin CT Bones
+     type: "instance"
+     excluded_classes: [0]
+#  - identifier: 651  # SegRap CT Organs at Risk
+#    type: "organ"
+#    excluded_classes: [0]
   # - identifier: 911  # LNQ Metastatic Lymph Nodes
   #   type: "instance"
   #   excluded_classes: [0]
