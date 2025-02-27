@@ -71,6 +71,7 @@ from radioa.model.MedSAM import MedSAMInferer
 from radioa.model.SAMMed3D import SAMMed3DInferer
 from radioa.model.segvol import SegVolInferer
 from radioa.model.SAM2 import SAM2Inferer
+from radioa.model.ScribblePrompt import ScribblePromptInferer
 
 model_registry = Literal[
     "sam",
@@ -80,6 +81,7 @@ model_registry = Literal[
     "sammed3d_turbo",
     "medsam",
     "segvol",
+    "scribbleprompter"
 ]
 
 inferer_registry: dict[model_registry, Type[Inferer]] = {
@@ -90,6 +92,7 @@ inferer_registry: dict[model_registry, Type[Inferer]] = {
     "sammed3d_turbo": SAMMed3DInferer,
     "segvol": SegVolInferer,
     "sam2": SAM2Inferer,
+    "scribbleprompter": ScribblePromptInferer
 }
 
 
@@ -101,6 +104,7 @@ checkpoint_registry: dict[model_registry, Path] = {
     "sammed3d": get_model_path() / "sam_med3d.pth",
     "sammed3d_turbo": get_model_path() / "sam_med3d_turbo.pth",
     "sam2": "",
+    "scribbleprompter": ""
 }
 
 
