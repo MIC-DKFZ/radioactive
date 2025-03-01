@@ -64,10 +64,13 @@ class ScribblePromptInferer(Inferer):
             points[0], # (B, n, 2)
             points[1], # (B, n)
             None,    # (B, 2, H, W)
-            box,          # (B, n, 4)
+            box,          # (B, n, 4) -> should be xmin ymin xmax ymax
             mask,   # (B, 1, H, W)
         )
 
+        # print(box, box.shape, image.shape)
+        # import batchviewer
+        # batchviewer.view_batch(image[None,None],new_mask, width=300, height=300)
         # import napari
         # viewer = napari.Viewer()
         # viewer.add_image(image.cpu().numpy(), name="Image")
@@ -243,9 +246,9 @@ class ScribblePromptInferer(Inferer):
             self.slice_lowres_outputs[slice_idx] = slice_raw_outputs
 
         low_res_logits = {k: torch.sigmoid(v).squeeze().cpu().numpy() for k, v in self.slice_lowres_outputs.items()}
-
         segmentation = self.postprocess_slices(self.slice_lowres_outputs, return_logits)
-
+        # import batchviewer
+        # batchviewer.view_batch(segmentation, width=300, height=300)
         # import napari
         # viewer = napari.Viewer()
         # viewer.add_image(self.img, name='img')

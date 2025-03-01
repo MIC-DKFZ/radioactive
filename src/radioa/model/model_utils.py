@@ -41,6 +41,8 @@ from radioa.prompts.prompter import (
     TenPoints3DVolumePrompter,
     TwoPointsFromCenterCropped3DVolumePrompter,
     static_prompt_styles,
+    ThreeBoxInterpolationPrompter_nonperfect5,
+    ThreeBoxInterpolationPrompter_nonperfect3
 )
 
 from radioa.prompts.interactive_prompter import (
@@ -239,6 +241,20 @@ def get_wanted_supported_prompters(
             if "TenBoxInterpolationPrompter" in wanted_prompt_styles:
                 prompters.append(
                     TenBoxInterpolationPrompter(
+                        inferer,
+                        seed=seed,
+                    )
+                )
+            if 'ThreeBoxInterpolationPrompter_nonperfect5' in wanted_prompt_styles:
+                prompters.append(
+                    ThreeBoxInterpolationPrompter_nonperfect5(
+                        inferer,
+                        seed=seed,
+                    )
+                )
+            if 'ThreeBoxInterpolationPrompter_nonperfect3' in wanted_prompt_styles:
+                prompters.append(
+                    ThreeBoxInterpolationPrompter_nonperfect3(
                         inferer,
                         seed=seed,
                     )

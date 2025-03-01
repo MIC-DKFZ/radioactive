@@ -319,14 +319,58 @@ class BoxInterpolationPrompter(Prompter, ABC):
         prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
         return prompt_orig
 
-
-class ThreeBoxInterpolationPrompter(BoxInterpolationPrompter):
+class ThreeBoxInterpolationPrompter_nonperfect5(BoxInterpolationPrompter):
     n_slice_box_interpolation: int = 3
+    pixel_max_shift: int = 5
 
+    def get_prompt(self) -> PromptStep:
+        max_possible_clicks = min(self.n_slice_box_interpolation, len(self.get_slices_to_infer()))
+        seed_prompt_RAS = get_seed_boxes(self.groundtruth_SAR, max_possible_clicks)
 
+        # Get image dimensions (assumes groundtruth_SAR has shape [depth, height, width])
+        _, img_height, img_width = self.groundtruth_SAR.shape
+
+        noisy_boxes = {}
+
+        for slice_idx, (x_min, y_min, x_max, y_max) in seed_prompt_RAS.boxes.items():
+            # Generate random noise in range [-5, 5]
+            noise = np.random.randint(-self.pixel_max_shift, self.pixel_max_shift +1, size=4)
+
+            # Apply noise
+            x_min_noisy = x_min + noise[0]
+            y_min_noisy = y_min + noise[1]
+            x_max_noisy = x_max + noise[2]
+            y_max_noisy = y_max + noise[3]
+
+            # Ensure box remains within image boundaries
+            x_min_noisy = np.clip(x_min_noisy, 0, img_width - 1)
+            y_min_noisy = np.clip(y_min_noisy, 0, img_height - 1)
+            x_max_noisy = np.clip(x_max_noisy, 0, img_width - 1)
+            y_max_noisy = np.clip(y_max_noisy, 0, img_height - 1)
+
+            # Ensure x_min < x_max and y_min < y_max
+            if x_min_noisy >= x_max_noisy:
+                x_min_noisy, x_max_noisy = max(0, x_min_noisy - 1), min(img_width - 1, x_max_noisy + 1)
+            if y_min_noisy >= y_max_noisy:
+                y_min_noisy, y_max_noisy = max(0, y_min_noisy - 1), min(img_height - 1, y_max_noisy + 1)
+
+            noisy_boxes[slice_idx] = (x_min_noisy, y_min_noisy, x_max_noisy, y_max_noisy)
+
+        # Create a new PromptStep with noisy boxes
+        seed_prompt_RAS_noisy = PromptStep(box_prompts=noisy_boxes)
+
+        prompt_RAS = box_interpolation(seed_prompt_RAS_noisy)
+        prompt_orig = self.transform_prompt_to_original_coords(prompt_RAS)
+        return prompt_orig
+
+class ThreeBoxInterpolationPrompter_nonperfect3(ThreeBoxInterpolationPrompter_nonperfect5):
+    n_slice_box_interpolation: int = 3
+    pixel_max_shift: int = 3
 class FiveBoxInterpolationPrompter(BoxInterpolationPrompter):
     n_slice_box_interpolation: int = 5
 
+class ThreeBoxInterpolationPrompter(BoxInterpolationPrompter):
+    n_slice_box_interpolation: int = 3
 
 class TenBoxInterpolationPrompter(BoxInterpolationPrompter):
     n_slice_box_interpolation: int = 10
@@ -472,6 +516,8 @@ static_prompt_styles = Literal[
     "FivePointInterpolationPrompter",
     "TenPointInterpolationPrompter",
     "PointPropagationPrompter",
+    'ThreeBoxInterpolationPrompter_nonperfect3',
+    'ThreeBoxInterpolationPrompter_nonperfect5',
     # ------------------------------- 2D Box prompters ------------------------------ #
     "BoxPer2DSlicePrompter",
     "BoxPer2dSliceFrom3DBoxPrompter",

@@ -12,7 +12,8 @@ models_colors = {
     "MedSam": "#7f7f7f",  #
     "SamMed 3D": "#d8a6a6",  # "#d9f0a3",
     "SamMed 3D Turbo": "#a00000",  # "#78c679",
-    "SegVol": "#59a89c",  #  "#006837",
+    "SegVol": "#59a89c",
+    "ScribblePrompt" :"#ff8c00" #  "#006837",
 }
 short_d_names = {
     'Dataset201_MS_Flair_instances': 'D1',
@@ -28,7 +29,8 @@ short_d_names = {
     'Dataset651_segrap': 'D10',
 
 }
-short_m_names = {'medsam': 'MedSam', 'sammed3d': 'SamMed 3D', 'sammed2d': 'SamMed 2D', 'sam': 'SAM', 'sammed3d_turbo': 'SamMed 3D Turbo', 'sam2': 'SAM2', 'segvol': 'SegVol'}
+short_m_names = {'medsam': 'MedSam', 'sammed3d': 'SamMed 3D', 'sammed2d': 'SamMed 2D', 'sam': 'SAM',
+                 'sammed3d_turbo': 'SamMed 3D Turbo', 'sam2': 'SAM2', 'segvol': 'SegVol', "scribbleprompter":"ScribblePrompt"}
 
 prompter_names = {'PointPropagationPrompter': ['5P Prop', '7'],
                   'Alternating5PointsPer2DSlicePrompter': ['5$\pm$PPS', '5X'],
@@ -78,7 +80,8 @@ prompter_names = {'PointPropagationPrompter': ['5P Prop', '7'],
                   'threeDCroppedFromCenterInteractivePrompterWithPrevPoint': ['1 center PPV + 1 PPV Refine*', '1/1'],
                   'threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint': ['1 center PPV + Scribble Refine', '1/3'],
                   'threeDCroppedFromCenterAnd2dAlgoInteractivePrompterWithPrevPoint': ['1 center PPV + Scribble Refine*', '1/3'],
-                  'BoxInterpolationInteractivePrompterNoPrevPoint': ['3B Inter + Scribble Refine', '6/3']
+                  'BoxInterpolationInteractivePrompterNoPrevPoint': ['3B Inter + Scribble Refine', '6/3'],
+                  'BoxInterpolationInteractivePrompterWithPrevBox': ['3B Inter + Scribble Refine', '6/3']
                   }
 
 

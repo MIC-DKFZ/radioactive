@@ -37,6 +37,8 @@ prompting:
     - "FiveBoxInterpolationPrompter"
     - "TenBoxInterpolationPrompter"
     - "BoxPropagationPrompter"
+    - "ThreeBoxInterpolationPrompter_nonperfect3"
+    - "ThreeBoxInterpolationPrompter_nonperfect5"
     # ----------------------------------- 3D Point ---------------------------------- #
     - "OnePoints3DVolumePrompter"
     - "TwoPoints3DVolumePrompter"
