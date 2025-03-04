@@ -7,9 +7,9 @@ from radioa.eval.crawl_all_res import prompter_names, models_colors
 
 # Define grey shades for LaTeX table background
 GREY_SHADES: Dict[str, str] = {
-    'SamMed 3D': '\\rowcolor[gray]{1}',
+    'SamMed 3D': '\\rowcolor[gray]{0.9}',
     'SamMed 3D Turbo': '\\rowcolor[gray]{0.95}',
-    'SegVol': '\\rowcolor[gray]{0.9}',
+    'SegVol': '\\rowcolor[gray]{1}',
 }
 
 # ========== Utility Functions ==========
@@ -33,7 +33,10 @@ def generate_latex(df: pd.DataFrame, grey_shades: Dict[str, str]) -> str:
     # Filter and reorder Prompters
     df = df[df['Prompter'].isin(desired_prompters)]
     df['Prompter'] = pd.Categorical(df['Prompter'], categories=desired_prompters, ordered=True)
-    df = df.sort_values(by=['Prompter', 'Model'])
+
+    model_order = ['SegVol','SamMed 3D Turbo', 'SamMed 3D']
+    df['Model_Order'] = df['Model'].map({m: i for i, m in enumerate(model_order)})
+    df = df.sort_values(by=['Prompter', 'Model_Order']).drop(columns=['Model_Order'])
 
     # Move D10 to be after D9 and Average to the end
     cols = list(df.columns)
@@ -116,13 +119,15 @@ def plot_barplot(df, selected_models, title, save_path, models_colors, x_labels,
     # Add x-axis labels and ticks
     plt.xticks(x_positions, [label.replace(" center ", "c") for label in x_labels], fontsize=15)
     plt.ylabel('Average Dice Score', size=20)
-    plt.title(title, size=25)
+    plt.title(title, size=20)
     plt.ylim([0, 85])
     plt.yticks(fontsize=15)
     plt.gca().set_facecolor('#f0f0f0')  # Light grey background
-
+    sns.set_theme(style="whitegrid")
+    plt.gca().set_axisbelow(True)
+    plt.grid(True, color='white')
     # Add legend in the upper right
-    plt.legend(loc='upper right', fontsize=20)
+    plt.legend(loc='upper right', fontsize=17)
     plt.tight_layout()
 
     # Save and show plot

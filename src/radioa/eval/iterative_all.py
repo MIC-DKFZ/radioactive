@@ -4,66 +4,9 @@ import matplotlib.pyplot as plt
 from typing import List, Dict
 from radioa.eval.crawl_all_res import prompter_names, models_colors
 
-# Define grey shades for LaTeX table background
-GREY_SHADES: Dict[str, str] = {
-    'SAM': '\\rowcolor[gray]{1}',
-    'SAM2': '\\rowcolor[gray]{0.95}',
-    'SamMed 2D': '\\rowcolor[gray]{0.9}',
-    'ScribblePrompt': '\\rowcolor[gray]{0.85}',
-    'MedSam': '\\rowcolor[gray]{0.8}',
-}
+
 
 # ========== Utility Functions ==========
-def generate_latex(df: pd.DataFrame, grey_shades: Dict[str, str]) -> str:
-    """
-    Generates a LaTeX table sorted by Prompter, with alternating grey shades for models,
-    column D10 shifted to appear after D9, and Average column moved to the end.
-    Only includes specified Prompters in a defined order.
-
-    Args:
-        df (pd.DataFrame): Input DataFrame.
-        grey_shades (Dict[str, str]): Mapping of models to their corresponding LaTeX row color.
-
-    Returns:
-        str: LaTeX table as a string.
-    """
-    # Define the desired order of Prompters
-    desired_prompters = ['1PPS + 1PPS Refine', '1PPS + 1PPS Refine*',
-                         '1PPS + Scribble Refine', '1PPS + Scribble Refine*',
-                         '3P Inter + Scribble Refine*', '3B Inter + Scribble Refine*']
-
-    # Filter and reorder Prompters
-    df = df[df['Prompter'].isin(desired_prompters)]
-    df['Prompter'] = pd.Categorical(df['Prompter'], categories=desired_prompters, ordered=True)
-    df = df.sort_values(by=['Prompter', 'Model', 'Iteration'])
-
-    # Move D10 to be after D9 and Average to the end
-    cols = list(df.columns)
-    d10_index = cols.index('D10')
-    d9_index = cols.index('D9')
-    average_index = cols.index('Average')
-
-    cols.insert(d9_index + 1, cols.pop(d10_index))  # Move D10 after D9
-    cols.append(cols.pop(average_index-1))
-    df = df[cols]
-
-    # Generate LaTeX table
-    latex_rows = ['\\begin{tabular}{llllrrrrrrrrrrr}', '\\toprule']
-    latex_rows.append('Model & Promter & Interactions & Iteration &' + ' & '.join(df.columns[4:]) + ' \\\\')
-    latex_rows.append('\\midrule')
-
-    current_model = None
-    for _, row in df.iterrows():
-        # Add row color if model changes
-        latex_rows.append(grey_shades.get(row['Model'], ''))
-        current_model = row['Model']
-        # Format row values
-        row_values = ' & '.join([str(row[col]) if pd.notna(row[col]) else 'NaN' for col in df.columns])
-        latex_rows.append(f'{row_values} \\\\')
-
-    latex_rows.append('\\bottomrule')
-    latex_rows.append('\\end{tabular}')
-    return '\n'.join(latex_rows)
 
 def prepare_prompter_data(df: pd.DataFrame, realistic_prompters: List[str]) -> pd.DataFrame:
     """Prepares data for realistic prompters."""
@@ -90,15 +33,17 @@ if __name__ == '__main__':
             'BoxInterpolationInteractivePrompterNoPrevPoint',
             'PointPropagationInteractivePrompterNoPrevPoint', 'PointPropagationInteractivePrompterWithPrevPoint',
             'PointInterpolationInteractivePrompterWithPrevPoint', 'PointInterpolationInteractivePrompterNoPrevPoint',
-            'BoxInterpolationInteractivePrompterWithPrevBox'
+            'BoxInterpolationInteractivePrompterWithPrevBox',   'threeDCroppedFromCenterInteractivePrompterNoPrevPoint',
+            'threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint',
         ]
     ]
 
     final_prompters: List[str] = [
         prompter_names[p][0] for p in [
             'twoD1PointUnrealisticInteractivePrompterWithPrevPoint',
-             'OnePointPer2DSliceInteractivePrompterWithPrevPoint',
-            'BoxInterpolationInteractivePrompterWithPrevBox',
+            'OnePointPer2DSliceInteractivePrompterWithPrevPoint',
+            'BoxInterpolationInteractivePrompterWithPrevBox', 'threeDCroppedFromCenterInteractivePrompterNoPrevPoint',
+            'threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint',
         ]
     ]
 
@@ -107,11 +52,6 @@ if __name__ == '__main__':
     prepared_df: pd.DataFrame = prepare_prompter_data(df, realistic_prompters)
     dataset_columns: List[str] = [col for col in prepared_df.columns if col.startswith('D')]
     sorted_df: pd.DataFrame = calculate_average_and_sort(prepared_df, dataset_columns, realistic_prompters)
-
-    # Generate LaTeX output
-    latex_table: str = generate_latex(sorted_df, GREY_SHADES)
-    print(latex_table)
-
 
     final_df = sorted_df[sorted_df['Prompter'].isin(final_prompters)]
 
@@ -137,13 +77,15 @@ if __name__ == '__main__':
     line_styles = {
         '1PPS + 1PPS Refine*': 'solid',
         '1PPS + Scribble Refine*': 'dashed',
-        '3B Inter + Scribble Refine*': 'dotted'
+        '3B Inter + Scribble Refine*': 'dotted',
+        '1 center PPV + Scribble Refine': 'dashed',
+        '1 center PPV + 1 PPV Refine': 'solid'
     }
 
     # Add a new column for line styles based on the prompter
     final_df['Line_Style'] = final_df['Prompter'].map(line_styles)
 
-    plt.figure(figsize=(10, 8))
+    plt.figure(figsize=(20, 8))
 
     # Iterate through unique line styles and plot separately
     for line_style, group_data in final_df.groupby('Line_Style'):
@@ -161,18 +103,50 @@ if __name__ == '__main__':
 
     # Add labels and title
     plt.xlabel('Iteration', size=15)
-    plt.ylim([0, 100])
-    plt.title('2D model Refinement', fontsize=20)
+    plt.ylim([0, 85])
+    plt.title('Iterative Model Refinement', fontsize=20)
     plt.gca().set_facecolor('#f0f0f0')
     plt.ylabel('Average Dice Score', size=15)
     plt.xticks(rotation=0, size=15)
     plt.yticks(size=15)
-    plt.legend(loc='upper left', fontsize=17)
+
+    # Get the current legend handles and labels
+    handles, old_labels = plt.gca().get_legend_handles_labels()
+
+    # Define the new order of labels
+    label_order = [
+        "SAM:\n1PPS + Scribble Refine*",
+        "SAM:\n1PPS + 1PPS Refine*",
+        "SAM2:\n3B Inter + Scribble Refine*",
+        "SAM2:\n1PPS + Scribble Refine*",
+        "SAM2:\n1PPS + 1PPS Refine*",
+        "SamMed 2D:\n1PPS + Scribble Refine*",
+        "SamMed 2D:\n1PPS + 1PPS Refine*",
+        "ScribblePrompt:\n1PPS + Scribble Refine*",
+        "ScribblePrompt:\n1PPS + 1PPS Refine*",
+        "SamMed 3D:\n1 center PPV + Scribble Refine",
+        "SamMed 3D:\n1 center PPV + 1 PPV Refine",
+        "SamMed 3D Turbo:\n1 center PPV + Scribble Refine",
+        "SamMed 3D Turbo:\n1 center PPV + 1 PPV Refine"
+    ]
+
+    # Map labels to handles
+    label_to_handle = dict(zip(old_labels, handles))
+
+    # Reorder handles according to the new label order
+    new_handles = [label_to_handle[label.replace("\n", " ")] for label in label_order]
+
+    # Set the new legend with wider handles
+    plt.legend(new_handles, label_order, loc='upper left', bbox_to_anchor=(1, 1),
+               fontsize=12, labelspacing=0.74, handletextpad=1.5,
+               handlelength=3, handleheight=2)  # Increase handle size
+
+
     plt.tight_layout()
     sns.set_theme(style="whitegrid")
     plt.gca().set_axisbelow(True)
     plt.grid(True, color='white')
 
     # Show the plot
-    plt.savefig('/home/c306h/PAPER_VISUALS/INTRABENCH/res/interactiveline2D.png')
+    plt.savefig('/home/c306h/PAPER_VISUALS/INTRABENCH/res/interactivelineall.png')
     plt.show()

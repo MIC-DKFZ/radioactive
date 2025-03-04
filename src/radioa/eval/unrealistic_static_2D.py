@@ -11,7 +11,8 @@ GREY_SHADES: Dict[str, str] = {
     'SAM': '\\rowcolor[gray]{1}',
     'SAM2': '\\rowcolor[gray]{0.95}',
     'SamMed 2D': '\\rowcolor[gray]{0.9}',
-    'MedSam': '\\rowcolor[gray]{0.85}',
+    'ScribblePrompt': '\\rowcolor[gray]{0.85}',
+    'MedSam': '\\rowcolor[gray]{0.8}',
 }
 
 # ========== Utility Functions ==========
@@ -34,7 +35,9 @@ def generate_latex(df: pd.DataFrame, grey_shades: Dict[str, str]) -> str:
     # Filter and reorder Prompters
     df = df[df['Prompter'].isin(desired_prompters)]
     df['Prompter'] = pd.Categorical(df['Prompter'], categories=desired_prompters, ordered=True)
-    df = df.sort_values(by=['Prompter', 'Model'])
+    model_order = ['SAM', 'SAM2', 'SamMed 2D', 'ScribblePrompt', 'MedSam']
+    df['Model_Order'] = df['Model'].map({m: i for i, m in enumerate(model_order)})
+    df = df.sort_values(by=['Prompter', 'Model_Order']).drop(columns=['Model_Order'])
 
     # Move D10 to be after D9 and Average to the end
     cols = list(df.columns)
@@ -99,7 +102,7 @@ if __name__ == '__main__':
         prompter_names[p][0]: c + 1 for c,p in enumerate([
             'Alternating2PointsPer2DSlicePrompter', 'Alternating3PointsPer2DSlicePrompter','Alternating5PointsPer2DSlicePrompter',
             'Alternating10PointsPer2DSlicePrompter',])}
-    models = ['MedSam', 'SAM', 'SAM2', 'SamMed 2D']
+    models = ['MedSam', 'SAM', 'SAM2', 'SamMed 2D', 'ScribblePrompt']
 
 
     prepared_df: pd.DataFrame = prepare_prompter_data(df, realistic_prompters)
@@ -176,14 +179,18 @@ if __name__ == '__main__':
     Sam = mlines.Line2D([], [], color=models_colors['SAM'], marker='s', linestyle='None', markersize=10, label='SAM')
     Sam2 = mlines.Line2D([], [], color=models_colors['SAM2'], marker='s', linestyle='None', markersize=10, label='SAM2')
     SamMed2D = mlines.Line2D([], [], color=models_colors['SamMed 2D'], marker='s', linestyle='None', markersize=10, label='SamMed 2D')
+    ScribblePrompt = mlines.Line2D([], [], color=models_colors['ScribblePrompt'], marker='s', linestyle='None', markersize=10, label='ScribblePrompt')
     plt.gca().set_facecolor('#f0f0f0')
-    plt.legend(handles=[MedSam, Sam, Sam2, SamMed2D], loc='upper right', fontsize=20)  # Single legend call
+    plt.legend(handles=[ScribblePrompt, MedSam, Sam, Sam2, SamMed2D], loc='upper center', fontsize=17)  # Single legend call
     plt.title('BOX & Point Prompts Per Slice (PPS & BPS)', size=20)
     plt.ylabel('Average Dice Score', size=20)
     plt.xlabel('')
     plt.xticks(rotation=0, size=15)
     plt.yticks(size=15)
     plt.ylim([0, 85])
+    sns.set_theme(style="whitegrid")
+    plt.gca().set_axisbelow(True)
+    plt.grid(True, color='white')
     plt.tight_layout()
 
     # Display the plot

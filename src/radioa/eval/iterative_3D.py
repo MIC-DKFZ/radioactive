@@ -6,10 +6,8 @@ from radioa.eval.crawl_all_res import prompter_names, models_colors
 
 # Define grey shades for LaTeX table background
 GREY_SHADES: Dict[str, str] = {
-    'MedSam': '\\rowcolor[gray]{1}',
-    'SAM': '\\rowcolor[gray]{0.95}',
-    'SAM2': '\\rowcolor[gray]{0.9}',
-    'SamMed 2D': '\\rowcolor[gray]{0.85}',
+    'SamMed 3D': '\\rowcolor[gray]{1}',
+    'SamMed 3D Turbo': '\\rowcolor[gray]{0.95}',
 }
 
 # ========== Utility Functions ==========
@@ -27,8 +25,8 @@ def generate_latex(df: pd.DataFrame, grey_shades: Dict[str, str]) -> str:
         str: LaTeX table as a string.
     """
     # Define the desired order of Prompters
-    desired_prompters = ['1 center PPV + 1 PPV Refine', '1 center PPV + 1 PPV Refine*',
-                         '1 center PPV + Scribble Refine', '1 center PPV + Scribble Refine*']
+    desired_prompters = ['1 center PPV + 1 PPV Refine',
+                         '1 center PPV + Scribble Refine',]
 
     # Filter and reorder Prompters
     df = df[df['Prompter'].isin(desired_prompters)]
@@ -47,15 +45,13 @@ def generate_latex(df: pd.DataFrame, grey_shades: Dict[str, str]) -> str:
 
     # Generate LaTeX table
     latex_rows = ['\\begin{tabular}{lllllrrrrrrrrrr}', '\\toprule']
-    latex_rows.append('Prompter & Model & Interactions & Iteration &' + ' & '.join(df.columns[3:]) + ' \\\\')
+    latex_rows.append('Prompter & Model & Interactions & Iteration &' + ' & '.join(df.columns[4:]) + ' \\\\')
     latex_rows.append('\\midrule')
 
     current_model = None
     for _, row in df.iterrows():
         # Add row color if model changes
-        if row['Model'] != current_model:
-            latex_rows.append(grey_shades.get(row['Model'], ''))
-            current_model = row['Model']
+        latex_rows.append(grey_shades.get(row['Model'], ''))
         # Format row values
         row_values = ' & '.join([str(row[col]) if pd.notna(row[col]) else 'NaN' for col in df.columns])
         latex_rows.append(f'{row_values} \\\\')
@@ -102,8 +98,8 @@ if __name__ == '__main__':
     # Define prompter categories
     realistic_prompters: List[str] = [
         prompter_names[p][0] for p in [
-            'threeDCroppedFromCenterInteractivePrompterNoPrevPoint', 'threeDCroppedFromCenterInteractivePrompterWithPrevPoint',
-            'threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint', 'threeDCroppedFromCenterAnd2dAlgoInteractivePrompterWithPrevPoint'
+            'threeDCroppedFromCenterInteractivePrompterNoPrevPoint',
+            'threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint',
         ]
     ]
 
@@ -127,9 +123,6 @@ if __name__ == '__main__':
 
     final_df = sorted_df[sorted_df['Prompter'].isin(final_prompters)]
 
-
-
-
     # Combine 'Model' and 'Prompter' into a new column for unique lines
     final_df['Model_Prompter'] = final_df['Model'] + ": " + final_df['Prompter']
 
@@ -147,7 +140,7 @@ if __name__ == '__main__':
 
     # Plot using the custom palette
     line_styles = {
-        '1 center PPV +  1 PPV Refine': 'solid',
+        '1 center PPV + 1 PPV Refine': 'solid',
         '1 center PPV + Scribble Refine': 'dashed'
     }
 
