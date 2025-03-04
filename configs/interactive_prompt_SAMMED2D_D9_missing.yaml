@@ -6,7 +6,7 @@ models:
   # - "samnorm"
 #- "sam2"
   # - "sam2norm"
-  # - "sammed2d"
+   - "sammed2d"
   # - "sammed2dnorm"
   # - "medsam"
   # - "medsamnorm"
