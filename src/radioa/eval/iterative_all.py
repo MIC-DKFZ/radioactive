@@ -66,6 +66,7 @@ if __name__ == '__main__':
     unique_prompters = final_df['Prompter'].unique()
 
     # Build a custom palette for each model-prompter combination
+
     palette = {}
     for model in unique_models:
         for prompter in unique_prompters:
@@ -85,7 +86,7 @@ if __name__ == '__main__':
     # Add a new column for line styles based on the prompter
     final_df['Line_Style'] = final_df['Prompter'].map(line_styles)
 
-    plt.figure(figsize=(20, 8))
+    plt.figure(figsize=(10, 8))
 
     # Iterate through unique line styles and plot separately
     for line_style, group_data in final_df.groupby('Line_Style'):
@@ -115,11 +116,13 @@ if __name__ == '__main__':
 
     # Define the new order of labels
     label_order = [
+        "SAM:\n3B Inter + Scribble Refine*",
         "SAM:\n1PPS + Scribble Refine*",
         "SAM:\n1PPS + 1PPS Refine*",
         "SAM2:\n3B Inter + Scribble Refine*",
         "SAM2:\n1PPS + Scribble Refine*",
         "SAM2:\n1PPS + 1PPS Refine*",
+        "SamMed 2D:\n3B Inter + Scribble Refine*",
         "SamMed 2D:\n1PPS + Scribble Refine*",
         "SamMed 2D:\n1PPS + 1PPS Refine*",
         "ScribblePrompt:\n1PPS + Scribble Refine*",
@@ -140,7 +143,7 @@ if __name__ == '__main__':
     plt.legend(new_handles, label_order, loc='upper left', bbox_to_anchor=(1, 1),
                fontsize=12, labelspacing=0.74, handletextpad=1.5,
                handlelength=3, handleheight=2)  # Increase handle size
-
+    plt.legend().remove()
 
     plt.tight_layout()
     sns.set_theme(style="whitegrid")
@@ -148,5 +151,5 @@ if __name__ == '__main__':
     plt.grid(True, color='white')
 
     # Show the plot
-    plt.savefig('/home/c306h/PAPER_VISUALS/INTRABENCH/res/interactivelineall.png')
+    plt.savefig('/home/c306h/PAPER_VISUALS/INTRABENCH/res/interactivelineall_wolegende.pdf')
     plt.show()

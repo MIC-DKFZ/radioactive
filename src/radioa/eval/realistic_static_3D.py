@@ -77,18 +77,17 @@ def calculate_average_and_sort(df: pd.DataFrame, dataset_columns: List[str], pro
     df['Prompter_Order'] = df['Prompter'].map({p: i for i, p in enumerate(prompter_order)})
     return df.sort_values(by=['Prompter_Order', 'Model', 'Interactions']).drop(columns=['Prompter_Order']).reset_index(drop=True)
 
+
 def plot_barplot(df, selected_models, title, save_path, models_colors, x_labels, show_plot=True):
     """
     Plots average Dice score with precise control of bar spacing, centering the first bar without duplication.
     """
     # Map model names to their corresponding colors
     color_palette = [models_colors[model] for model in selected_models]
-    print(df)
     # Unique x-labels
     x_positions = np.arange(len(x_labels))
     bar_width = 0.25  # Width of each bar
     spacing = 0.05  # Minimal spacing between triplets
-
     plt.figure(figsize=(10, 8))
 
     for i, model in enumerate(selected_models):
@@ -117,11 +116,11 @@ def plot_barplot(df, selected_models, title, save_path, models_colors, x_labels,
         )
 
     # Add x-axis labels and ticks
-    plt.xticks(x_positions, [label.replace(" center ", "c") for label in x_labels], fontsize=15)
-    plt.ylabel('Average Dice Score', size=20)
-    plt.title(title, size=20)
+    plt.xticks(x_positions, [label.replace(" center ", "c") for label in x_labels], fontsize=20)
+    plt.ylabel('Average Dice Score', size=25)
+    plt.title(title, size=25)
     plt.ylim([0, 85])
-    plt.yticks(fontsize=15)
+    plt.yticks(fontsize=20)
     plt.gca().set_facecolor('#f0f0f0')  # Light grey background
     sns.set_theme(style="whitegrid")
     plt.gca().set_axisbelow(True)
@@ -191,14 +190,21 @@ if __name__ == '__main__':
 
     # Plotting examples
 
+
     threeD_df = sorted_df[sorted_df['Prompter'].isin(threeD_prompters)]
+
+    Prompt_Order = ['3D Box','1PPV', '2PPV', '3PPV', '5PPV', '10PPV', '1cPPV', '2cPPV', '3cPPV', '5cPPV', '10cPPV',]
+    threeD_df['Prompt_Order'] = df['Model'].map({m: i for i, m in enumerate(Prompt_Order)})
+    threeD_df = threeD_df.sort_values(by=['Prompter', 'Prompt_Order']).drop(columns=['Prompt_Order'])
+
+
     selected_models_3D: List[str] = ['SegVol', 'SamMed 3D', 'SamMed 3D Turbo',]
 
     plot_barplot(
         df=threeD_df[threeD_df['Model'].isin(selected_models_3D)],
         selected_models=selected_models_3D,
         title='3D Models',
-        save_path='/home/c306h/PAPER_VISUALS/INTRABENCH/res/barplot_realistic_3D_static_prompter.png',
+        save_path='/home/c306h/PAPER_VISUALS/INTRABENCH/res/barplot_realistic_3D_static_prompter.pdf',
         models_colors=models_colors,  # Ensure this contains the correct mapping
         x_labels=threeD_prompters,
         show_plot=True

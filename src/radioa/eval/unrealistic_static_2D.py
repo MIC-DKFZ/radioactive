@@ -194,5 +194,5 @@ if __name__ == '__main__':
     plt.tight_layout()
 
     # Display the plot
-    plt.savefig('/home/c306h/PAPER_VISUALS/INTRABENCH/res/all_static_unrealistic_prompter.png')
+    plt.savefig('/home/c306h/PAPER_VISUALS/INTRABENCH/res/all_static_unrealistic_prompter.pdf')
     plt.show()

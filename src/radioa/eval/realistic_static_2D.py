@@ -90,12 +90,12 @@ def plot_average_dice(df: pd.DataFrame, selected_models: List[str], title: str, 
     plt.figure(figsize=(10, 8))
     sns.barplot(data=df, x='Prompter', y='Average', hue='Model', palette=color_palette, order=x_labels_order)
     plt.gca().set_facecolor('#f0f0f0')  # Light grey background
-    plt.title(title, size=20)
+    plt.title(title, size=25)
     plt.xlabel('')
-    plt.ylabel('Average Dice Score', size=20)
+    plt.ylabel('Average Dice Score', size=25)
     plt.ylim([0, 85])
-    plt.yticks(size=15)
-    plt.xticks(rotation=0, size=15)
+    plt.yticks(size=20)
+    plt.xticks(rotation=0, size=20)
     sns.set_theme(style="whitegrid")
     plt.gca().set_axisbelow(True)
     plt.grid(True, color='white')
@@ -170,7 +170,7 @@ if __name__ == '__main__':
         point_df[point_df['Model'].isin(selected_models_2D_points)],
         selected_models_2D_points,
         title='Realistic Point Prompts 2D Models',
-        save_path='/home/c306h/PAPER_VISUALS/INTRABENCH/res/barplot_realistic_points_static_prompter.png',
+        save_path='/home/c306h/PAPER_VISUALS/INTRABENCH/res/barplot_realistic_points_static_prompter.pdf',
         color_palette=[models_colors[m] for m in selected_models_2D_points],
         show_plot=True  # Ensure the plot is displayed
     )
@@ -183,7 +183,7 @@ if __name__ == '__main__':
         box_df[box_df['Model'].isin(selected_models_2D_box)],
         selected_models_2D_box,
         title='Realistic Box Prompts 2D Models',
-        save_path='/home/c306h/PAPER_VISUALS/INTRABENCH/res/barplot_realistic_boxes_static_prompter.png',
+        save_path='/home/c306h/PAPER_VISUALS/INTRABENCH/res/barplot_realistic_boxes_static_prompter.pdf',
         color_palette=[models_colors[m] for m in selected_models_2D_box],
         show_plot=True  # Ensure the plot is displayed
     )
