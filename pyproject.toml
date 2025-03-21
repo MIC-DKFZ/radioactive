@@ -1,0 +1,83 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "radioa"
+version = "0.0"
+authors = [
+    {name = "Tassilo Wald", email = "tassilo.wald@dkfz-heidelberg.de"},
+    {name = "Constantin Ulrich", email = "constantin.ulrich@dkfz-heidelberg.de"},
+    {name = "Emily Tempus", email = "timothy.tempus@dkfz-heidelberg.de"}
+    ]
+description = "RadioActive - The Radiological Interactive Benchmark provides a easy-to-use framework to evaluate current State-of-the-Art medical interactive segmentation models."
+dependencies = [
+    'huggingface-hub',
+    'albumentations',
+    'simsimd',
+    'ipython',
+    'matplotlib',
+    'scipy',
+    'numpy',
+    'torch',
+    'jupyter',
+    'nibabel',
+    'napari',
+    'pandas',
+    'pillow',
+    'pyyaml',
+    'scikit-image',
+    'scikit-learn',
+    'SimpleITK==2.3.1',
+    'tqdm',
+    'loguru',
+    'transformers',
+    'torchio',
+    'monai',
+    'torchvision',
+    'segment_anything',
+    'pre-commit',
+    'nbstripout',
+    'einops',
+    'gdown',
+    'tcia_utils',
+    'pydicom',
+    'SimpleITK-SimpleElastix',
+    'natsort',
+    'pandas',
+    'idc-index',
+    'toinstance @ git+https://github.com/TaWald/InstanceNrrd.git',
+    'nneval @ git+https://github.com/TaWald/MedEval',
+    'SAM-2 @ git+https://github.com/facebookresearch/sam2.git',
+#    'scribbleprompt @ git+https://github.com/halleewong/ScribblePrompt.git'
+]
+
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: GNU GENERAL PUBLIC LICENSE",
+]
+
+[tool.black]
+line-length = 118
+target-version = ['py310', 'py311', 'py312']
+# required-version = "23.3.0"
+
+# [tool.setuptools.packages.find]
+# where = ["intrab"]
+# namespaces = false
+
+[project.urls]
+"Homepage" = "https://git.dkfz.de/mic/personal/group2/timothyt/universal-models"
+
+[tool.pytest.ini_options]
+python_functions = ["test_", "it_", "and_", "but_", "they_"]
+python_files = ["test_*.py",]
+testpaths = ["tests",]
+
+
+# [project.scripts]
+# nneval_semantic_eval = "nneval.evluate_semantic_entrypoint:semantic_evaluation_entrypoint"
+# nneval_instance_eval = "nneval.evaluate_instance_entrypoint:instance_evaluation_entrypoint"
+# nneval_create_instances = "nneval.generate_instances_entrypoint:create_instances_entrypoint"
