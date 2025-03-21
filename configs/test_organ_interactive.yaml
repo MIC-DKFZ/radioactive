@@ -1,0 +1,44 @@
+# Holds all information needed to run experiments.
+seeds:
+  - 11121
+models:
+  # - "sam"
+  - "sammed2d"
+  # - "medsam"
+  # - "sammed3d"
+  # - "sammed3d_turbo"
+  # - "segvol"
+
+debug: True
+
+prompting:
+  type: "interactive"
+  prompt_styles:
+    # - OnePointPer2DSliceInteractivePrompterNoPrevPoint
+    # - OnePointPer2DSliceInteractivePrompterWithPrevPrompt
+    # - PointInterpolationInteractivePrompterNoPrevPoint
+    # - PointInterpolationInteractivePrompterWithPrevPoint
+    # - PointPropagationInteractivePrompterNoPrevPoint
+    # - PointPropagationInteractivePrompterWithPrevPoint
+
+
+    # - OnePointsFromCenterCropped3DVolumePrompter
+    # - TenPointsFromCenterCropped3DVolumePrompter
+    # - threeDCroppedInteractivePrompterNoPrevPoint
+    # - threeDCroppedInteractivePrompterWithPrevPoint
+    # - threeDCroppedFromCenterInteractivePrompterNoPrevPoint
+    # - threeDCroppedFromCenterInteractivePrompterWithPrevPoint
+    # - threeDCroppedFromCenterAnd2dAlgoInteractivePrompterNoPrevPoint
+    # - threeDCroppedFromCenterAnd2dAlgoInteractivePrompterWithPrevPoint
+    - twoD1PointUnrealisticInteractivePrompterNoPrevPoint
+    - twoD1PointUnrealisticInteractivePrompterWithPrevPoint
+
+
+# List of dataset that will be compared in the next run of the benchmark.
+datasets:
+  # - identifier: 350
+  #   type: "organ"  # Choose from 'organ' or 'instance'; When instance we average over all instances, otherwise across organs.
+  #   excluded_classes: [0] # List of classes to exclude from the dataset -- 0 is generally background
+  - identifier: 930  # RIDER Lung CT
+    type: "instance"
+    excluded_classes: [0]

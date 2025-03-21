@@ -1,93 +1,72 @@
-# RadioActive
+![RadioActive](assets/images/radioactive.png)
+---
+The **Radio**logical Inter**active** Benchchmark allows open-set interactive 2D or 3D segmentation methods to evaluate themselves fairly against other methods on the field of radiological images. **Radioactive** currently includes _6 interactive segmentation methods_, spans _ten datasets_ (including CT and MRI) with _various anatomical and pathological targets_.
 
-
-
-## Getting started
-
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
-
-```
-cd existing_repo
-git remote add origin https://git.dkfz.de/mic/personal/group2/timothyt/radioactive.git
-git branch -M main
-git push -uf origin main
-```
-
-## Integrate with your tools
-
-- [ ] [Set up project integrations](https://git.dkfz.de/mic/personal/group2/timothyt/radioactive/-/settings/integrations)
-
-## Collaborate with your team
-
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+Through this benchmark, we provide users with transparent results on what the best existing methods are and provide developers an extendable framework, allowing them to easily compare their newly developed models or prompting schemes against currently available methods.
 
 ## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+1. Activate virtualenv of choice (with e.g. python 3.12)
+2. Download RadioActive repository (clone or download and extract manually)
+3. `cd radioactive && pip install -e .`
+  (This will take a while to resolve dependencies -- A more constrained requirements file will be provided in the future)
+4. Done.
+
+### Setting Environment Variables
+To use the benchmark, three environment variables need to be set:
+- `RADIOA_DATA_PATH` - Datasets will be downloaded into this and preprocessed in it.
+- `RADIOA_MODEL_PATH` - Model checkpoints will be stored here
+- `RADIOA_RESULTS_PATH` - Predictions and evaluation resulst will be located here.
+- `RADIOA_MITK_PATH` - (Optional) The path for the MITK executable, if not set the benchmark will auto-download and use the downloaded binaries of MITK instead.
 
 ## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+To use the benchmark three steps need to be conducted:
+### 1. Downloading the datasets
+The datasets used in the benchmark can be downloaded using the following command:
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+```python
+python ./src/radioa/datasets_preprocessing/download_all_datasets.py
+# or only download a subset of datasets
+python ./src/radioa/datasets_preprocessing/download_all_datasets.py --datasets ms_flair hanseg # can be multiple
+```
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+Regarding selective downloads one can choose from:
+  `["segrap", "hanseg", "ms_flair", "hntsmrg", "hcc_tace", "adrenal_acc", "rider_lung", "colorectal", "lnq", "pengwin"]`
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+### 2. Preprocessing the dataset
+The dataset is often provided in a raw format, e.g. DICOMs which are not directly usable and can be a pain to deal with. To simplify things we provide preprocessing schemes that convert these directly to easier useable formats. The preprocessing can be done using the following commands.
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+```python
+python ./src/radioa/datasets_preprocessing/preprocess_datasets.py --datasets ms_flair hanseg  # can be multiple
+```
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+or again any choice of datasets from the list below:
+`ms_flair, hanseg, hntsmrg, pengwin, segrap, lnq, colorectal, adrenal_acc, hcc_tace, rider_lung`
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+### 3. Downloading checkpoints
+Currently the majority of models require manual checkpoint downloading.
+Auto-downloading of checkpoints is a planned feature that will be included before the final release (so auto-download works only for SAM2)
+Required checkpoints are:
+- `medsam_vit_b.pth`  [MedSam](https://drive.google.com/drive/folders/1ETWmi4AiniJeWOt6HAsYgTjYv_fkgzoN)
+- `sam_med3d_turbo.pth` [samMed3D-Turbo](https://drive.google.com/file/d/1MuqYRQKIZb4YPtEraK8zTKKpp-dUQIR9/view?usp=sharing)
+- `sam_med3d.pth` [samMed3D](https://drive.google.com/file/d/1PFeUjlFMAppllS9x1kAWyCYUJM9re2Ub/view)
+- `sam_vit_h_4b8939.pth` [SAM](https://github.com/facebookresearch/segment-anything?tab=readme-ov-file#model-checkpoints)
+- `sam-med2d_b.pth` [SAMMED2D](https://drive.google.com/file/d/1ARiB5RkSsWmAB_8mqWnwDF8ZKTtFwsjl/view)
+- `SegVol_v1.pth` [SegVol](https://drive.google.com/drive/folders/1TEJtgctH534Ko5r4i79usJvqmXVuLf54)
 
-## License
-For open source projects, say how it is licensed.
+Only the checkpoints for the models that are going to be used need to be downloaded.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+### 4. Running the benchmark
+The benchmark for the `ms_flair` dataset and the `SAM` model can be run using the following command.
+
+```python
+python ./src/radioa/experiments_runner.py --config ./configs/static_prompt_SAMNORM_D1.yaml
+```
+
+Other configs can also be selected, but this can serve as an exemplary command to understand the benchmarking process.
+
+### 5. Inspecting results
+Predictions and results are dependent on each Dataset, Model, and Prompter combination.
+All predictions are stored for each of these combinations for each case. These predictions are best to be inspected through MITK due to the possibility of predicted instance overlap.
+Additionally the evaluation results are provided for each instance, semantic class or class in respective `.csv` or `.json` files in these prediction directories.
+Automatic evaluation can be disabled in the config files if one wants to conduct only inspection or calculate other metrics.
+
