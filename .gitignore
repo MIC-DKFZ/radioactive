@@ -7,6 +7,7 @@ __pycache__/
 src/radioa/testing.ipynb
 submission_script.py
 .vscode/
+.vscode
 .idea
 configs/interactivity_testing.yaml
 configs/static_lesion_test.yaml
