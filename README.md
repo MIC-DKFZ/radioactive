@@ -70,3 +70,4 @@ Predictions and results are dependent on each Dataset, Model, and Prompter combi
 All predictions are stored for each of these combinations for each case. These predictions are best to be inspected through MITK due to the possibility of predicted instance overlap.
 Additionally the evaluation results are provided for each instance, semantic class or class in respective `.csv` or `.json` files in these prediction directories.
 Automatic evaluation can be disabled in the config files if one wants to conduct only inspection or calculate other metrics.
+
