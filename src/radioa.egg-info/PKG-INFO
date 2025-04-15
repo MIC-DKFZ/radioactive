@@ -1,9 +1,55 @@
+Metadata-Version: 2.4
+Name: radioa
+Version: 0.0
+Summary: RadioActive - The Radiological Interactive Benchmark provides a easy-to-use framework to evaluate current State-of-the-Art medical interactive segmentation models.
+Author-email: Tassilo Wald <tassilo.wald@dkfz-heidelberg.de>, Constantin Ulrich <constantin.ulrich@dkfz-heidelberg.de>, Emily Tempus <timothy.tempus@dkfz-heidelberg.de>
+Project-URL: Homepage, https://git.dkfz.de/mic/personal/group2/timothyt/universal-models
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: GNU GENERAL PUBLIC LICENSE
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: huggingface-hub
+Requires-Dist: albumentations
+Requires-Dist: simsimd
+Requires-Dist: ipython
+Requires-Dist: matplotlib
+Requires-Dist: scipy
+Requires-Dist: numpy
+Requires-Dist: torch
+Requires-Dist: jupyter
+Requires-Dist: nibabel
+Requires-Dist: napari
+Requires-Dist: pandas
+Requires-Dist: pillow
+Requires-Dist: pyyaml
+Requires-Dist: scikit-image
+Requires-Dist: scikit-learn
+Requires-Dist: SimpleITK==2.3.1
+Requires-Dist: tqdm
+Requires-Dist: loguru
+Requires-Dist: transformers
+Requires-Dist: torchio
+Requires-Dist: monai
+Requires-Dist: torchvision
+Requires-Dist: segment_anything
+Requires-Dist: pre-commit
+Requires-Dist: nbstripout
+Requires-Dist: einops
+Requires-Dist: gdown
+Requires-Dist: tcia_utils
+Requires-Dist: pydicom
+Requires-Dist: SimpleITK-SimpleElastix
+Requires-Dist: natsort
+Requires-Dist: pandas
+Requires-Dist: idc-index
+Requires-Dist: toinstance@ git+https://github.com/TaWald/InstanceNrrd.git
+Requires-Dist: nneval@ git+https://github.com/TaWald/MedEval
+Requires-Dist: SAM-2@ git+https://github.com/facebookresearch/sam2.git
+Dynamic: license-file
 
 ![RadioActive](assets/images/radioactive.png)
-# Radiological Interactive Benchchmark - RadioActive
-Copyright German Cancer Research Center (DKFZ) and contributors. Please make sure that your usage of this code is in compliance with its license.
-
-
+---
 The **Radio**logical Inter**active** Benchchmark allows open-set interactive 2D or 3D segmentation methods to evaluate themselves fairly against other methods on the field of radiological images. **Radioactive** currently includes _6 interactive segmentation methods_, spans _ten datasets_ (including CT and MRI) with _various anatomical and pathological targets_.
 
 Through this benchmark, we provide users with transparent results on what the best existing methods are and provide developers an extendable framework, allowing them to easily compare their newly developed models or prompting schemes against currently available methods.

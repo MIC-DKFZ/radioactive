@@ -1,0 +1,56 @@
+# Holds all information needed to run experiments.
+seeds:
+  - 11121
+models:
+  - "sam"
+  - "sammed2d"
+  - "medsam"
+  # - "sammed3d"
+  # - "sammed3d_turbo"
+  # - "segvol"
+
+debug: True
+
+prompting:
+  type: "static"
+  prompt_styles:
+  # ----------------------------------- 2D Point ---------------------------------- #
+    - "OneFGPointsPer2DSlicePrompter"
+    - "TwoFGPointsPer2DSlicePrompter"
+    - "ThreeFGPointsPer2DSlicePrompter"
+    - "FiveFGPointsPer2DSlicePrompter"
+    - "TenFGPointsPer2DSlicePrompter"
+    - "CenterPointPrompter"
+    - "Alternating2PointsPer2DSlicePrompter"
+    - "Alternating3PointsPer2DSlicePrompter"
+    - "Alternating5PointsPer2DSlicePrompter"
+    - "Alternating10PointsPer2DSlicePrompter"
+    - "ThreePointInterpolationPrompter"
+    - "FivePointInterpolationPrompter"
+    - "TenPointInterpolationPrompter"
+    - "PointPropagationPrompter"
+    # ------------------------------------ 2D Box ----------------------------------- #
+    - "BoxPer2DSlicePrompter"
+    - "BoxPer2dSliceFrom3DBoxPrompter"
+    - "ThreeBoxInterpolationPrompter"
+    - "FiveBoxInterpolationPrompter"
+    - "TenBoxInterpolationPrompter"
+    - "BoxPropagationPrompter"
+    # ----------------------------------- 3D Point ---------------------------------- #
+    - "OnePoints3DVolumePrompter"
+    - "TwoPoints3DVolumePrompter"
+    - "ThreePoints3DVolumePrompter"
+    - "FivePoints3DVolumePrompter"
+    - "TenPoints3DVolumePrompter"
+    - "OnePointsFromCenterCropped3DVolumePrompter"
+    - "TwoPointsFromCenterCropped3DVolumePrompter"
+    - "ThreePointsFromCenterCropped3DVolumePrompter"
+    - "FivePointsFromCenterCropped3DVolumePrompter"
+    - "TenPointsFromCenterCropped3DVolumePrompter"
+    # ------------------------------------ 3D Box ----------------------------------- #
+    - "Box3DVolumePrompter"
+
+datasets:
+  - identifier: 201
+    type: "instance"  # Choose from 'organ' or 'instance'; When instance we average over all instances, otherwise across organs.
+    excluded_classes: [0] # List of classes to exclude from the dataset -- 0 is generally background
