@@ -1,6 +1,9 @@
 
 ![RadioActive](assets/images/radioactive.png)
----
+# Radiological Interactive Benchchmark - RadioActive
+Copyright German Cancer Research Center (DKFZ) and contributors. Please make sure that your usage of this code is in compliance with its license.
+
+
 The **Radio**logical Inter**active** Benchchmark allows open-set interactive 2D or 3D segmentation methods to evaluate themselves fairly against other methods on the field of radiological images. **Radioactive** currently includes _6 interactive segmentation methods_, spans _ten datasets_ (including CT and MRI) with _various anatomical and pathological targets_.
 
 Through this benchmark, we provide users with transparent results on what the best existing methods are and provide developers an extendable framework, allowing them to easily compare their newly developed models or prompting schemes against currently available methods.
