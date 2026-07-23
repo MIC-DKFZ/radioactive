@@ -159,7 +159,7 @@ tokenizers==0.19.1
 tomli @ file:///work/perseverance-python-buildout/croot/tomli_1698805555176/work
 tomli_w @ file:///opt/conda/conda-bld/tomli-w_1644927790098/work
 toolz @ file:///work/perseverance-python-buildout/croot/toolz_1698846367152/work
-torch==2.2.2
+torch==2.13.0
 torchaudio==2.3.0
 torchio==0.19.7
 torchvision==0.17.2

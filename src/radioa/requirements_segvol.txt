@@ -154,7 +154,7 @@ threadpoolctl==3.5.0
 tifffile==2024.5.22
 tokenizers==0.12.1
 tomli==2.0.1
-torch==1.13.1
+torch==2.13.0
 torchaudio==2.2.2+cu118
 torchio==0.19.7
 torchvision==0.14.1
