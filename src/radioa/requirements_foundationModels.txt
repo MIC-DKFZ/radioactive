@@ -137,7 +137,7 @@ scikit-image @ file:///croot/scikit-image_1718285223463/work
 scikit-learn==1.5.0
 scipy @ file:///croot/scipy_1717521478074/work/dist/scipy-1.13.1-cp312-cp312-linux_x86_64.whl#sha256=60385538899130902c9656b29351f2b57595535828ce62d6c5880454d696954d
 segment_anything @ git+https://github.com/facebookresearch/segment-anything.git@6fdee8f2727f4506cfbbe553e23b895e27956588
-setuptools==69.5.1
+setuptools==83.0.0
 shellingham==1.5.4
 SimpleITK==2.3.1
 six @ file:///home/conda/feedstock_root/build_artifacts/six_1620240208055/work
