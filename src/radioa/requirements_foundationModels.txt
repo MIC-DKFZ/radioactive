@@ -166,7 +166,7 @@ torchvision==0.17.2
 tornado @ file:///work/perseverance-python-buildout/croot/tornado_1698866362018/work
 tqdm @ file:///croot/tqdm_1716395931952/work
 traitlets @ file:///home/conda/feedstock_root/build_artifacts/traitlets_1713535121073/work
-transformers==5.5.0
+transformers==5.10.1
 typer==0.12.3
 typing_extensions @ file:///home/conda/feedstock_root/build_artifacts/typing_extensions_1717802530399/work
 tzdata @ file:///croot/python-tzdata_1690578112552/work
