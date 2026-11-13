@@ -98,7 +98,7 @@ nvidia-nvjitlink-cu12==12.1.105
 nvidia-nvtx-cu12==12.1.105
 opencv-python-headless==4.10.0.84
 openslide-python==1.1.2
-opentelemetry-api==1.25.0
+opentelemetry-api==1.45.2
 opentelemetry-sdk==1.25.0
 opentelemetry-semantic-conventions==0.46b0
 packaging==24.1
