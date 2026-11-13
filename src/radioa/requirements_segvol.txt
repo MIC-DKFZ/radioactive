@@ -34,7 +34,7 @@ gdown==5.2.0
 gitdb==4.0.11
 GitPython==3.2.1
 graphene==3.3
-graphql-core==3.2.3
+graphql-core==3.2.12
 graphql-relay==3.2.0
 greenlet==3.0.3
 grpcio==1.64.1
