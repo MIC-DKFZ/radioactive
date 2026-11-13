@@ -33,7 +33,7 @@ fasteners @ file:///tmp/build/80754af9/fasteners_1623953468841/work
 filelock==3.15.1
 flexcache @ file:///home/conda/feedstock_root/build_artifacts/flexcache_1718124134876/work
 flexparser @ file:///home/conda/feedstock_root/build_artifacts/flexparser_1718131279545/work
-fonttools==4.53.0
+fonttools==4.60.2
 freetype-py @ file:///Users/ktietz/demo/mc3/conda-bld/freetype-py_1629367757594/work
 fsspec==2026.6.0
 HeapDict @ file:///Users/ktietz/demo/mc3/conda-bld/heapdict_1630598515714/work
