@@ -35,7 +35,7 @@ flexcache @ file:///home/conda/feedstock_root/build_artifacts/flexcache_17181241
 flexparser @ file:///home/conda/feedstock_root/build_artifacts/flexparser_1718131279545/work
 fonttools==4.53.0
 freetype-py @ file:///Users/ktietz/demo/mc3/conda-bld/freetype-py_1629367757594/work
-fsspec==2024.6.0
+fsspec==2026.6.0
 HeapDict @ file:///Users/ktietz/demo/mc3/conda-bld/heapdict_1630598515714/work
 hsluv @ file:///work/perseverance-python-buildout/croot/hsluv_1698868931777/work
 huggingface-hub==0.24.1
