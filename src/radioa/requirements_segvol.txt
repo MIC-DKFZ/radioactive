@@ -25,7 +25,7 @@ einops==0.6.1
 entrypoints @ file:///home/conda/feedstock_root/build_artifacts/entrypoints_1643888246732/work
 exceptiongroup @ file:///home/conda/feedstock_root/build_artifacts/exceptiongroup_1704921103267/work
 executing @ file:///home/conda/feedstock_root/build_artifacts/executing_1698579936712/work
-filelock==3.13.1
+filelock==4.2.1
 fire==0.6.0
 Flask==3.0.3
 fonttools==4.60.2

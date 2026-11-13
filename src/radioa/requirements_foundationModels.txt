@@ -30,7 +30,7 @@ docutils @ file:///work/perseverance-python-buildout/croot/docutils_169884650964
 exceptiongroup @ file:///home/conda/feedstock_root/build_artifacts/exceptiongroup_1704921103267/work
 executing @ file:///home/conda/feedstock_root/build_artifacts/executing_1698579936712/work
 fasteners @ file:///tmp/build/80754af9/fasteners_1623953468841/work
-filelock==3.15.1
+filelock==4.2.1
 flexcache @ file:///home/conda/feedstock_root/build_artifacts/flexcache_1718124134876/work
 flexparser @ file:///home/conda/feedstock_root/build_artifacts/flexparser_1718131279545/work
 fonttools==4.60.2
