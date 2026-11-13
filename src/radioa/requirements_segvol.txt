@@ -116,7 +116,7 @@ pure-eval @ file:///home/conda/feedstock_root/build_artifacts/pure_eval_16428759
 pyarrow==23.0.1
 pydantic==2.7.4
 pydantic_core==2.18.4
-Pygments==2.18.0
+Pygments==2.20.0
 pynrrd==1.0.0
 pyparsing==3.1.2
 PySocks==1.7.1
