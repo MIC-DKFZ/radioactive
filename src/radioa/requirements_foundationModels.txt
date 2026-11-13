@@ -173,7 +173,7 @@ tzdata @ file:///croot/python-tzdata_1690578112552/work
 urllib3 @ file:///croot/urllib3_1715635851070/work
 vispy @ file:///home/conda/feedstock_root/build_artifacts/vispy_1715910101238/work
 wcwidth @ file:///home/conda/feedstock_root/build_artifacts/wcwidth_1704731205417/work
-wheel==0.43.0
+wheel==0.46.2
 widgetsnbextension==4.0.11
 wrapt==1.16.0
 zarr @ file:///work/perseverance-python-buildout/croot/zarr_1712351597869/work
